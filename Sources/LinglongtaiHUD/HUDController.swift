@@ -115,6 +115,10 @@ final class HUDController: NSObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.positionOnNotchedScreen() }
             .store(in: &cancellables)
+        store.$mediumWingWidth.removeDuplicates().dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.positionOnNotchedScreen() }
+            .store(in: &cancellables)
     }
 
     private func configureContextMenu() {
@@ -157,7 +161,8 @@ final class HUDController: NSObject {
             screen: screen,
             heightAdjustment: store.notchOffset,
             widthAdjustment: store.notchWidthAdjustment,
-            activityWidth: store.activityWidth
+            activityWidth: store.activityWidth,
+            mediumWingWidth: store.mediumWingWidth
         )
         let left = screen.auxiliaryTopLeftArea ?? .zero
         let right = screen.auxiliaryTopRightArea ?? .zero

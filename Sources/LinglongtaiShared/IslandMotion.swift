@@ -28,10 +28,15 @@ public struct IslandMetrics: Equatable, Sendable {
     public var activityWidth: Double {
         didSet { activityWidth = Self.clampedActivityWidth(activityWidth) }
     }
+    /// When set, the medium surface is sized from the strings it renders instead
+    /// of the fixed medium budget. `nil` keeps the historical fixed width, which
+    /// is what the existing revision checks still assert.
+    public var mediumWingWidth: Double?
 
     public init(notchWidth: Double = 184, notchHeight: Double = 32, hasPhysicalNotch: Bool = true,
                 safeTop: Double? = nil, activityWidth: Double = 228,
-                physicalWidth: Double? = nil, physicalHeight: Double? = nil) {
+                physicalWidth: Double? = nil, physicalHeight: Double? = nil,
+                mediumWingWidth: Double? = nil) {
         self.notchWidth = notchWidth
         self.notchHeight = notchHeight
         self.physicalWidth = physicalWidth ?? notchWidth
@@ -39,6 +44,7 @@ public struct IslandMetrics: Equatable, Sendable {
         self.hasPhysicalNotch = hasPhysicalNotch
         self.safeTop = max(notchHeight, self.physicalHeight, safeTop ?? notchHeight)
         self.activityWidth = Self.clampedActivityWidth(activityWidth)
+        self.mediumWingWidth = mediumWingWidth
     }
 
     private static func clampedActivityWidth(_ width: Double) -> Double {
@@ -55,6 +61,13 @@ public struct IslandMetrics: Equatable, Sendable {
             let width = max(notchWidth + wings, centerExclusionWidth + 24 + 64)
             return CGSize(width: width, height: notchHeight)
         case .medium:
+            // Content-driven sizing: the fixed budget below was calibrated for
+            // the longest status string, so short ones paid for space nobody
+            // used. Both wings stay equal — the camera keeps them symmetric.
+            if let wing = mediumWingWidth {
+                let inset = IslandWingLayout.visibleInset + 8
+                return CGSize(width: centerExclusionWidth + 2 * (inset + wing), height: notchHeight)
+            }
             let width = max(notchWidth + activityWidth, centerExclusionWidth + 32 + 156)
             return CGSize(width: width, height: notchHeight)
         case .heavy: return CGSize(width: 680, height: safeTop + 416)

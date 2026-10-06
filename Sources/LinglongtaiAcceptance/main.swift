@@ -243,6 +243,7 @@ struct LinglongtaiAcceptance {
         runButlerRevisionChecks { name, condition in check(name, condition) }
         runReleaseRevisionChecks { name, condition in check(name, condition) }
         runWingLayoutRevisionChecks { name, condition in check(name, condition) }
+        runContentWidthRevisionChecks { name, condition in check(name, condition) }
         runLabelMotionChecks { name, condition in check(name, condition) }
 
         print("\n\(checks) acceptance checks passed")

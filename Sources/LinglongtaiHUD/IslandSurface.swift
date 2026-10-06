@@ -12,11 +12,13 @@ struct IslandLayout: Equatable {
     var physicalHeight: CGFloat = 32
     var hasPhysicalNotch = true
     var activityWidth: Double = 228
+    /// Wing width requested by the current content; nil keeps medium fixed.
+    var mediumWingWidth: Double?
 
     init() {}
 
     init(screen: NSScreen, heightAdjustment: CGFloat, widthAdjustment: CGFloat = 0,
-         activityWidth: Double = 228) {
+         activityWidth: Double = 228, mediumWingWidth: Double? = nil) {
         let left = screen.auxiliaryTopLeftArea ?? .zero
         let right = screen.auxiliaryTopRightArea ?? .zero
         hasPhysicalNotch = screen.safeAreaInsets.top > 0 && !left.isEmpty && !right.isEmpty
@@ -25,12 +27,14 @@ struct IslandLayout: Equatable {
         notchWidth = max(120, physicalWidth + widthAdjustment)
         notchHeight = max(12, physicalHeight + heightAdjustment)
         self.activityWidth = IslandMetrics(activityWidth: activityWidth).activityWidth
+        self.mediumWingWidth = mediumWingWidth
     }
 
     var metrics: IslandMetrics {
         IslandMetrics(notchWidth: notchWidth, notchHeight: notchHeight,
                       hasPhysicalNotch: hasPhysicalNotch, safeTop: safeTop, activityWidth: activityWidth,
-                      physicalWidth: physicalWidth, physicalHeight: physicalHeight)
+                      physicalWidth: physicalWidth, physicalHeight: physicalHeight,
+                      mediumWingWidth: mediumWingWidth)
     }
 
     var safeTop: CGFloat { max(physicalHeight, notchHeight) }

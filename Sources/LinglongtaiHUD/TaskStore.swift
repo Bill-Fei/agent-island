@@ -288,6 +288,55 @@ final class TaskStore: ObservableObject {
         waitingCount > 0 ? "\(waitingCount)" : liveTasks.isEmpty ? "" : "\(liveTasks.count)"
     }
 
+    // MARK: - Content-driven medium width
+
+    /// Wing width asked for by the strings the medium surface renders today.
+    /// `nil` leaves the historical fixed width untouched.
+    @Published private(set) var mediumWingWidth: Double? = nil
+    /// Growing applies at once; shrinking waits, because status strings cycle
+    /// ("3项进行中" → "运行中" → "3项进行中") and the outline must not breathe.
+    private var pendingNarrowWidth: Double? = nil
+    private var pendingNarrowSince: Date? = nil
+    private static let narrowHold: TimeInterval = 1.5
+
+    /// The status side gains a capsule when it renders "批准…" or a waiting pill.
+    private var mediumStatusReserve: Double {
+        guard let task = activeTask else { return 0 }
+        let decorated = failedApprovals.contains(task.id)
+            || approvalRequest(for: task) != nil
+            || approvalFeedback(for: task) != nil
+            || waitingCount > 0
+        return decorated ? 16 : 0
+    }
+
+    private func refreshContentWidth() {
+        let name = calibrationPreview == nil ? primaryAgentName : "尺寸预览"
+        let iconSize = min(24, max(0, 32 + notchOffset - 4))
+        let content = IslandContentWidth.medium(agentName: name, statusText: mediumStatusText,
+                                               iconSize: iconSize, statusReserve: mediumStatusReserve)
+        let target = content.wingWidth()
+        guard let current = mediumWingWidth else {
+            mediumWingWidth = target
+            return
+        }
+        if target >= current {
+            mediumWingWidth = target
+            pendingNarrowWidth = nil
+            pendingNarrowSince = nil
+            return
+        }
+        if pendingNarrowWidth != target {
+            pendingNarrowWidth = target
+            pendingNarrowSince = now()
+            return
+        }
+        if let since = pendingNarrowSince, now().timeIntervalSince(since) >= Self.narrowHold {
+            mediumWingWidth = target
+            pendingNarrowWidth = nil
+            pendingNarrowSince = nil
+        }
+    }
+
     func samplePointer(inside: Bool, at time: TimeInterval) {
         guard !contextMenuIsOpen else { return }
         guard reviewingApproval == nil else { return }
@@ -776,6 +825,7 @@ final class TaskStore: ObservableObject {
     }
 
     func refreshPresentation() {
+        refreshContentWidth()
         // A menu can extend outside the island: retain its anchor until closed.
         if contextMenuIsOpen {
             if presentation != .heavy { presentation = .heavy }
