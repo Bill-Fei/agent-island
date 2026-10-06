@@ -28,6 +28,18 @@ Agent 灵动岛（LinglongtaiHUD）——跑在 macOS 刘海区的本地 Agent �
 
 只有 L3 才触发完整检查。历史上因为所有改动都走 L3，迭代节奏被拖慢，这条是本文件存在的主要原因。
 
+## 豆包数据源（已接入，不要重复实现）
+
+豆包**没有** Hook、没有 CLI 事件、没有审批通道。它走的是一条完全独立的路径：只读它自己写在本地的 Agent 模式轨迹。
+
+- 实现在 `Sources/LinglongtaiShared/DoubaoTrajectory.swift`（解析 + 状态推导）与 `DoubaoTracker`（去重轮询）。
+- 接线在 `TaskStore.consumeDoubaoTrajectories()`，走 3 秒节流的主轮询。
+- `HookEventMapper` 对 `.doubao` 依然必须返回 nil —— 那条断言是对的，不要"修"掉它。豆包不经过 hook 通道。
+- 只读取 `role` 和 `function.name`。对话内容、工具输入输出、路径一律不读、不存、不落日志。
+- 轨迹行内没有时间戳，新鲜度只能靠文件 mtime；因此"长时间无更新"必须报**未知**，绝不能报完成。
+- 阈值是实测经验值（收养 10 分钟 / 未知 4 分钟 / 放弃 20 分钟），改之前先看真实轮次的静默时长。
+- 单向只读：**不能在岛上批准豆包的请求**，这条限制不要试图绕过。
+
 ## 协作边界
 
 本目录同时可能有另一个 Agent 会话（WorkBuddy）在改动同一棵树。

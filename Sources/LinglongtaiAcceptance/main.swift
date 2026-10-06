@@ -223,6 +223,9 @@ struct LinglongtaiAcceptance {
             }
             check("three providers sharing a session never share a task identity", ids.count == 3)
             let valid = try payload("UserPromptSubmit")
+            // Doubao has no hook at all, so the hook channel must still refuse it.
+            // Its Agent-mode state arrives through DoubaoTrajectory instead, which
+            // is a separate, strictly read-only path — see DoubaoRevisionChecks.
             check("Doubao and custom providers cannot fabricate hook task status",
                   HookEventMapper.map(provider: .doubao, payload: valid, now: now) == nil &&
                   HookEventMapper.map(provider: .custom, payload: valid, now: now) == nil)
@@ -244,6 +247,7 @@ struct LinglongtaiAcceptance {
         runReleaseRevisionChecks { name, condition in check(name, condition) }
         runWingLayoutRevisionChecks { name, condition in check(name, condition) }
         runContentWidthRevisionChecks { name, condition in check(name, condition) }
+        runDoubaoRevisionChecks { name, condition in check(name, condition) }
         runLabelMotionChecks { name, condition in check(name, condition) }
 
         print("\n\(checks) acceptance checks passed")

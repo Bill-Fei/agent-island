@@ -19,9 +19,9 @@ public enum HookEventMapper {
         } else {
             turn = nil
         }
-        let sessionID = "s_" + digest(namespace: "session-v2", components: [provider.rawValue, session])
-        let turnID = turn.map { "t_" + digest(namespace: "turn-v2", components: [sessionID, $0]) }
-        let legacyID = uuid(bytes: Array(SHA256.hash(data: Data((provider.rawValue + ":" + session).utf8)).prefix(16)))
+        let sessionID = "s_" + IdentityDigest.digest(namespace: "session-v2", components: [provider.rawValue, session])
+        let turnID = turn.map { "t_" + IdentityDigest.digest(namespace: "turn-v2", components: [sessionID, $0]) }
+        let legacyID = IdentityDigest.uuid(bytes: Array(SHA256.hash(data: Data((provider.rawValue + ":" + session).utf8)).prefix(16)))
         let id = turnID.map { taskID(sessionID: sessionID, turnID: $0) } ?? legacyID
         var type = "upsert"
         let status: AgentTaskStatus?
@@ -51,35 +51,21 @@ public enum HookEventMapper {
         if ["PreToolUse", "PostToolUse", "PostToolUseFailure"].contains(name) {
             event.toolLabel = ToolStep.label(for: input["tool_name"] as? String)
             if let toolID = (input["tool_use_id"] ?? input["call_id"]) as? String, validIdentifier(toolID) {
-                event.toolStepID = "tool_" + digest(namespace: "tool-v1", components: [sessionID, turnID ?? "", toolID])
+                event.toolStepID = "tool_" + IdentityDigest.digest(namespace: "tool-v1", components: [sessionID, turnID ?? "", toolID])
             }
         }
         return event
     }
 
     static func localTurnID(sessionID: String, nonce: UUID) -> String {
-        "l_" + digest(namespace: "local-turn-v2", components: [sessionID, nonce.uuidString])
+        "l_" + IdentityDigest.digest(namespace: "local-turn-v2", components: [sessionID, nonce.uuidString])
     }
 
     static func taskID(sessionID: String, turnID: String) -> UUID {
-        uuid(bytes: Array(SHA256.hash(data: identityData(namespace: "task-v2", components: [sessionID, turnID])).prefix(16)))
+        IdentityDigest.uuid(namespace: "task-v2", components: [sessionID, turnID])
     }
 
     private static func validIdentifier(_ value: String) -> Bool {
         !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && value.utf8.count <= 256
-    }
-
-    private static func digest(namespace: String, components: [String]) -> String {
-        SHA256.hash(data: identityData(namespace: namespace, components: components))
-            .map { String(format: "%02x", $0) }.joined()
-    }
-
-    private static func identityData(namespace: String, components: [String]) -> Data {
-        Data(([namespace] + components).map { "\($0.utf8.count):\($0)" }.joined().utf8)
-    }
-
-    private static func uuid(bytes: [UInt8]) -> UUID {
-        UUID(uuid: (bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
-                    bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]))
     }
 }
