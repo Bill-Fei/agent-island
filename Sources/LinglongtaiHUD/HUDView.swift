@@ -4,7 +4,6 @@ import SwiftUI
 struct HUDRootView: View {
     @ObservedObject var store: TaskStore
     @ObservedObject var surface: IslandSurface
-    @ObservedObject private var presence = AgentPresence.shared
 
     var body: some View {
         let frame = surface.frame
@@ -12,19 +11,23 @@ struct HUDRootView: View {
         ZStack(alignment: .top) {
             shape.fill(.black).opacity(frame.shellOpacity)
             ZStack(alignment: .top) {
-                compactView
+                HUDActivityContent(store: store, surface: surface, layout: surface.layout, presentation: .compact,
+                                   animationActive: store.presentation == .compact && frame.compactOpacity >= 0.99)
                     .frame(width: animatedWingLayout.contentWidth,
                            height: surface.layout.notchHeight)
                     .opacity(frame.compactOpacity)
                     .allowsHitTesting(store.presentation == .compact && frame.compactOpacity >= 0.95)
                     .accessibilityHidden(store.presentation != .compact)
-                mediumView
+                HUDActivityContent(store: store, surface: surface, layout: surface.layout, presentation: .medium,
+                                   animationActive: store.presentation == .medium && frame.mediumOpacity >= 0.99)
                     .frame(width: animatedWingLayout.contentWidth,
                            height: surface.layout.notchHeight)
                     .opacity(frame.mediumOpacity)
                     .allowsHitTesting(store.presentation == .medium && frame.mediumOpacity >= 0.95)
                     .accessibilityHidden(store.presentation != .medium)
-                expandedView
+                // Only geometry observes the animation clock. History and
+                // details react to task changes, not every spring sample.
+                HUDExpandedContent(store: store)
                     .frame(width: IslandLayout.heavyContentSize.width, height: IslandLayout.heavyContentSize.height)
                     .scaleEffect(frame.heavyScale, anchor: .top)
                     .padding(.top, surface.layout.safeTop + 6)
@@ -46,47 +49,78 @@ struct HUDRootView: View {
         .preferredColorScheme(.dark)
     }
 
-    private func wingLayout(for presentation: IslandPresentation) -> IslandWingLayout {
-        IslandWingLayout(surfaceWidth: surface.layout.size(for: presentation).width,
-                         centerExclusionWidth: surface.layout.centerExclusionWidth,
-                         shoulderInset: min(presentation == .medium ? 8 : 6, surface.layout.notchHeight / 2))
-    }
-
     private var animatedWingLayout: IslandWingLayout {
         IslandWingLayout(surfaceWidth: surface.frame.width,
                          centerExclusionWidth: surface.layout.centerExclusionWidth,
                          shoulderInset: min(surface.frame.shoulder, surface.frame.height / 2))
     }
+}
+
+/// The per-frame work is limited to fitting already-built wing content.
+private struct HUDActivityWing<Content: View>: View {
+    @ObservedObject var surface: IslandSurface
+    let presentation: IslandPresentation
+    let alignment: Alignment
+    let content: Content
+
+    var body: some View {
+        let frame = surface.frame
+        let layout = surface.layout
+        let current = IslandWingLayout(surfaceWidth: frame.width, centerExclusionWidth: layout.centerExclusionWidth,
+                                       shoulderInset: min(frame.shoulder, frame.height / 2))
+        let destination = IslandWingLayout(surfaceWidth: layout.size(for: presentation).width,
+                                          centerExclusionWidth: layout.centerExclusionWidth,
+                                          shoulderInset: min(presentation == .medium ? 8 : 6, layout.notchHeight / 2))
+        let naturalWidth = max(presentation == .compact ? 32 : 1, destination.wingWidth)
+        let scale = current.fitScale(contentWidth: naturalWidth, contentHeight: layout.notchHeight,
+                                     requestedScale: presentation == .compact ? frame.compactScale : frame.mediumScale,
+                                     availableHeight: frame.height)
+        content
+            .frame(width: naturalWidth, height: layout.notchHeight, alignment: alignment)
+            .scaleEffect(scale, anchor: alignment == .leading ? .leading : .trailing)
+            .frame(width: current.wingWidth, height: layout.notchHeight, alignment: alignment)
+            .clipped()
+    }
+}
+
+private struct HUDActivityContent: View {
+    @ObservedObject var store: TaskStore
+    let surface: IslandSurface
+    let layout: IslandLayout
+    let presentation: IslandPresentation
+    let animationActive: Bool
+
+    var body: some View {
+        if presentation == .compact { compactView } else { mediumView }
+    }
+
+    private func wingLayout(for presentation: IslandPresentation) -> IslandWingLayout {
+        IslandWingLayout(surfaceWidth: layout.size(for: presentation).width,
+                         centerExclusionWidth: layout.centerExclusionWidth,
+                         shoulderInset: min(presentation == .medium ? 8 : 6, layout.notchHeight / 2))
+    }
 
     private func activityWing<Content: View>(for presentation: IslandPresentation,
                                             alignment: Alignment,
                                             @ViewBuilder content: () -> Content) -> some View {
-        let current = animatedWingLayout
-        let naturalWidth = max(presentation == .compact ? 32 : 1, wingLayout(for: presentation).wingWidth)
-        let scale = current.fitScale(contentWidth: naturalWidth, contentHeight: surface.layout.notchHeight,
-                                     requestedScale: presentation == .compact ? surface.frame.compactScale : surface.frame.mediumScale,
-                                     availableHeight: surface.frame.height)
-        return content()
-            .frame(width: naturalWidth, height: surface.layout.notchHeight, alignment: alignment)
-            .scaleEffect(scale, anchor: alignment == .leading ? .leading : .trailing)
-            .frame(width: current.wingWidth, height: surface.layout.notchHeight, alignment: alignment)
-            .clipped()
+        HUDActivityWing(surface: surface, presentation: presentation, alignment: alignment, content: content())
     }
 
     private var compactView: some View {
-        let layout = animatedWingLayout
         let markSize = min(24, max(8, surface.layout.notchHeight - 4))
         let indicator = CompactTaskIndicator(symbol: compactSymbol,
                                              count: store.compactCountText,
                                              needsAttention: store.waitingCount > 0,
                                              height: min(22, max(8, surface.layout.notchHeight - 4)),
-                                             executing: store.activeTaskIsExecuting)
+                                             executing: store.activeTaskIsExecuting,
+                                             visible: animationActive)
         return HStack(spacing: 0) {
             Button(action: store.toggleExpanded) {
                 activityWing(for: .compact, alignment: .leading) {
-                    CompactAgentMark(task: store.activeTask, size: markSize)
+                    IslandAgentStack(tasks: store.islandIconTasks, size: markSize,
+                                     availableWidth: wingLayout(for: .compact).wingWidth)
                         .modifier(AgentActivityEffect(executing: store.activeTaskIsExecuting,
-                                                      visible: store.presentation == .compact && surface.frame.compactOpacity >= 0.99))
+                                                      visible: animationActive))
                 }.contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -134,20 +168,21 @@ struct HUDRootView: View {
     }
 
     private var mediumView: some View {
-        let layout = animatedWingLayout
         let iconSize = min(24, surface.layout.notchHeight - 4)
-        let labelWidth = max(0, wingLayout(for: .medium).wingWidth - iconSize - 6)
+        let iconWidth = IslandAgentStack.width(size: iconSize, count: store.islandIconTasks.count,
+                                              availableWidth: wingLayout(for: .medium).wingWidth)
+        let labelWidth = max(0, wingLayout(for: .medium).wingWidth - iconWidth - 6)
         return HStack(spacing: 0) {
             Button(action: store.toggleExpanded) {
                 activityWing(for: .medium, alignment: .leading) {
                     HStack(spacing: 6) {
-                        AgentAvatar(task: store.activeTask, size: iconSize)
+                        IslandAgentStack(tasks: store.islandIconTasks, size: iconSize, availableWidth: iconWidth)
                             .modifier(AgentActivityEffect(executing: store.activeTaskIsExecuting,
-                                                          visible: store.presentation == .medium && surface.frame.mediumOpacity >= 0.99))
+                                                          visible: animationActive))
                             .fixedSize()
                         IslandAgentLabel(text: store.calibrationPreview == nil ? store.primaryAgentName : "尺寸预览",
                                          width: labelWidth,
-                                         active: store.presentation == .medium && surface.frame.mediumOpacity >= 0.99)
+                                         active: animationActive)
                             .id(store.activeTask?.id)
                     }
                 }.contentShape(Rectangle())
@@ -189,7 +224,7 @@ struct HUDRootView: View {
     private func detailButton(title: String, tint: Color) -> some View {
         Button(action: store.toggleExpanded) {
             IslandAgentLabel(text: title, width: wingLayout(for: .medium).wingWidth,
-                             active: store.presentation == .medium && surface.frame.mediumOpacity >= 0.99,
+                             active: animationActive,
                              isStatus: true, tint: tint)
                 .id(store.activeTask?.id)
                 .frame(maxWidth: .infinity, minHeight: surface.layout.notchHeight, alignment: .trailing)
@@ -199,7 +234,13 @@ struct HUDRootView: View {
         .accessibilityLabel("\(title)，展开任务详情")
     }
 
-    private var expandedView: some View {
+}
+
+private struct HUDExpandedContent: View {
+    @ObservedObject var store: TaskStore
+    @ObservedObject private var presence = AgentPresence.shared
+
+    var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
                 LiveOrb(size: 22)
@@ -242,24 +283,26 @@ struct HUDRootView: View {
     }
 
     private var taskList: some View {
-        VStack(alignment: .leading, spacing: 11) {
+        let tasks = store.sortedTasks
+        let selectedID = store.selectedTask?.id
+        return VStack(alignment: .leading, spacing: 11) {
             HStack {
-                Text("任务流")
+                Text("最近 24 小时")
                     .font(.system(size: 11, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.46))
                 Spacer()
-                Text("待确认优先").font(.system(size: 10)).foregroundStyle(.secondary)
+                Text("进行中优先").font(.system(size: 10)).foregroundStyle(.secondary)
             }
             .padding(.horizontal, 18)
 
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 7) {
-                    if store.sortedTasks.isEmpty {
-                        Text("当前没有进行中的会话").font(.system(size: 12))
+                LazyVStack(spacing: 7) {
+                    if tasks.isEmpty {
+                        Text("最近 24 小时暂无会话记录").font(.system(size: 12))
                             .foregroundStyle(.secondary).padding(.vertical, 24)
                     }
-                    ForEach(store.sortedTasks) { task in
-                        TaskRow(task: task, isSelected: store.selectedTask?.id == task.id,
+                    ForEach(tasks) { task in
+                        TaskRow(task: task, isSelected: selectedID == task.id,
                                 isStale: store.displayedStatus(for: task) == "等待状态更新",
                                 needsAttention: store.needsUserAttention(task)) {
                             store.select(task)
@@ -461,34 +504,50 @@ private struct TaskRow: View {
     let needsAttention: Bool
     let onSelect: () -> Void
 
+    private var isEnded: Bool { [.completed, .failed, .cancelled].contains(task.status) }
+    private var stateText: String {
+        if isStale { return "等待更新" }
+        if needsAttention { return "待确认" }
+        switch task.status {
+        case .running: return "进行中"
+        case .queued: return "排队中"
+        case .waiting: return "等待中"
+        case .completed: return "已完成"
+        case .failed: return "失败"
+        case .cancelled: return "已停止"
+        }
+    }
+
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: 10) {
                 AgentAvatar(task: task, size: 28)
+                    .opacity(isEnded ? 0.55 : 1)
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 5) {
                         Text(task.agent)
                             .font(.system(size: 11, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(.white.opacity(isEnded ? 0.6 : 1))
                         if needsAttention {
                             Image(systemName: "hand.raised.fill")
                                 .font(.system(size: 9, weight: .bold))
                                 .foregroundStyle(.orange)
                         }
                     }
-                    Text(isStale ? "等待状态更新" : task.title)
+                    Text(task.title)
                         .font(.system(size: 10, weight: .regular, design: .rounded))
                         .foregroundStyle(.white.opacity(0.48))
                         .lineLimit(1)
                 }
                 Spacer(minLength: 4)
-                Image(systemName: isStale || (task.status == .waiting && !needsAttention) ? "clock" : task.status.symbolName)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(isStale || (task.status == .waiting && !needsAttention) ? Color.secondary : task.status.tint)
+                Label(stateText, systemImage: isStale || (task.status == .waiting && !needsAttention) ? "clock" : task.status.symbolName)
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(isEnded || isStale || (task.status == .waiting && !needsAttention) ? Color.secondary : task.status.tint)
+                    .fixedSize()
             }
             .padding(.horizontal, 9)
             .padding(.vertical, 9)
-            .background(isSelected ? Color.white.opacity(0.11) : Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(isSelected ? Color.white.opacity(0.11) : Color.white.opacity(isEnded ? 0.015 : 0.045), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(isSelected ? Color.white.opacity(0.14) : .clear, lineWidth: 1)

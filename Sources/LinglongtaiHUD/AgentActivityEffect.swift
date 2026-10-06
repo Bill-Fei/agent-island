@@ -17,12 +17,6 @@ struct AgentActivityEffect: ViewModifier {
             let breath = executing && !reduceMotion ? AgentActivityMotion.breath(elapsed: elapsed) : 0
             content
                 .opacity(executing && !reduceMotion ? 0.82 + 0.18 * breath : 1)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.22 * breath), lineWidth: 0.75)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                }
         }
         .onAppear { clock.setRunning(running) }
         .onChange(of: running) { clock.setRunning($0) }

@@ -1,7 +1,7 @@
 import LinglongtaiShared
 import SwiftUI
 
-/// A quiet, consistent mount for the actual installed application icon.
+/// The installed application icon without an added mount or border.
 /// Brand artwork is never recolored or replaced by an invented color orb.
 struct CompactAgentMark: View {
     let task: AgentTask?
@@ -9,14 +9,8 @@ struct CompactAgentMark: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: size * 0.3, style: .continuous)
-                .fill(Color.white.opacity(0.065))
-                .overlay {
-                    RoundedRectangle(cornerRadius: size * 0.3, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.09), lineWidth: 0.5)
-                }
             if let task, task.profile.kind != .custom {
-                AgentIcon(kind: task.profile.kind, size: max(6, size - 2))
+                AgentIcon(kind: task.profile.kind, size: size)
             } else if let task {
                 Text(String(task.agent.prefix(1)).uppercased())
                     .font(.system(size: size * 0.46, weight: .semibold, design: .rounded))
@@ -32,13 +26,41 @@ struct CompactAgentMark: View {
     }
 }
 
-/// A state indicator, not a progress meter: no invented percentage or animation.
+/// The current task sits in front; further tasks peek out toward the camera.
+struct IslandAgentStack: View {
+    let tasks: [AgentTask]
+    let size: CGFloat
+    let availableWidth: CGFloat
+
+    static func width(size: CGFloat, count: Int, availableWidth: CGFloat) -> CGFloat {
+        min(availableWidth, size + CGFloat(max(0, count - 1)) * size * 0.34)
+    }
+
+    var body: some View {
+        let width = Self.width(size: size, count: tasks.count, availableWidth: availableWidth)
+        let step = max(0, width - size) / CGFloat(max(1, tasks.count - 1))
+        ZStack(alignment: .leading) {
+            if tasks.isEmpty { CompactAgentMark(task: nil, size: size) }
+            ForEach(Array(tasks.enumerated()), id: \.element.id) { index, task in
+                CompactAgentMark(task: task, size: size)
+                    .scaleEffect(index == 0 ? 1 : 0.88)
+                    .offset(x: CGFloat(index) * step)
+                    .zIndex(Double(tasks.count - index))
+            }
+        }
+        .frame(width: width, height: size, alignment: .leading)
+        .accessibilityHidden(true)
+    }
+}
+
+/// An indeterminate activity signal; never a fabricated completion percentage.
 struct CompactTaskIndicator: View {
     let symbol: String
     let count: String
     let needsAttention: Bool
     let height: CGFloat
     var executing: Bool = false
+    var visible: Bool = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -49,8 +71,8 @@ struct CompactTaskIndicator: View {
 
     var body: some View {
         HStack(spacing: 3) {
-            if executing && !reduceMotion {
-                CompactActivityGlyph(height: height)
+            if executing && !needsAttention && !reduceMotion {
+                CompactActivityGlyph(height: height, active: visible)
             } else {
                 Image(systemName: symbol)
                     .font(.system(size: min(9, height * 0.48), weight: .semibold))
@@ -75,20 +97,27 @@ struct CompactTaskIndicator: View {
 
 private struct CompactActivityGlyph: View {
     let height: CGFloat
+    let active: Bool
+    @StateObject private var clock = IslandMotionClock()
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
-            HStack(alignment: .center, spacing: 1.5) {
+        let width = min(9, height * 0.48)
+        let glyphHeight = min(12, height * 0.56)
+        return TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !clock.running)) { context in
+            let elapsed = clock.running ? context.date.timeIntervalSince(clock.startedAt) : clock.frozenElapsed
+            HStack(alignment: .center, spacing: width / 6) {
                 ForEach(0..<3, id: \.self) { index in
                     Capsule(style: .continuous)
-                        .frame(width: 2, height: max(3, height * 0.24 * CGFloat(AgentActivityMotion.barScale(
-                            elapsed: context.date.timeIntervalSinceReferenceDate,
+                        .frame(width: width * 2 / 9, height: glyphHeight * CGFloat(AgentActivityMotion.barScale(
+                            elapsed: elapsed,
                             index: index
-                        ))))
+                        )))
                 }
             }
-            .frame(width: min(10, height * 0.48), height: height * 0.56)
+            .frame(width: width, height: glyphHeight)
             .accessibilityHidden(true)
         }
+        .onAppear { clock.setRunning(active) }
+        .onChange(of: active) { clock.setRunning($0) }
     }
 }

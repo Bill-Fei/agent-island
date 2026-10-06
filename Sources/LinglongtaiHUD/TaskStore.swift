@@ -159,8 +159,8 @@ final class TaskStore: ObservableObject {
 
     var sortedTasks: [AgentTask] {
         displayTasks.sorted { lhs, rhs in
-            let leftRank = needsUserAttention(lhs) ? 0 : 1
-            let rightRank = needsUserAttention(rhs) ? 0 : 1
+            let leftRank = needsUserAttention(lhs) ? 0 : ([.queued, .running, .waiting].contains(lhs.status) ? 1 : 2)
+            let rightRank = needsUserAttention(rhs) ? 0 : ([.queued, .running, .waiting].contains(rhs.status) ? 1 : 2)
             if leftRank != rightRank { return leftRank < rightRank }
             if lhs.updatedAt == rhs.updatedAt { return lhs.id.uuidString < rhs.id.uuidString }
             return lhs.updatedAt > rhs.updatedAt
@@ -174,7 +174,6 @@ final class TaskStore: ObservableObject {
         let candidates = demoPreviewActive ? previewTasks : tasks
         return candidates.filter {
             ($0.source.isLive || demoPreviewActive || isAcceptancePreview) &&
-            [.queued, .running, .waiting].contains($0.status) &&
             now().timeIntervalSince($0.updatedAt) <= 86_400 &&
             now().timeIntervalSince($0.updatedAt) >= -5
         }
@@ -272,6 +271,13 @@ final class TaskStore: ObservableObject {
         calibrationPreview == nil && AgentActivityMotion.isExecuting(activeTask, now: now())
     }
 
+    /// Preserve task identity, including simultaneous tasks from the same app.
+    /// Finished history never creates an ambient icon or increments live counts.
+    var islandIconTasks: [AgentTask] {
+        guard let front = activeTask else { return [] }
+        return [front] + liveTasks.filter { $0.id != front.id }.prefix(3)
+    }
+
     var mediumStatusText: String {
         if calibrationPreview != nil { return "尺寸预览" }
         if waitingCount > 0 { return "\(waitingCount)项待确认" }
@@ -312,6 +318,7 @@ final class TaskStore: ObservableObject {
     private func refreshContentWidth() {
         let name = calibrationPreview == nil ? primaryAgentName : "尺寸预览"
         let iconSize = min(24, max(0, 32 + notchOffset - 4))
+            * (1 + Double(max(0, islandIconTasks.count - 1)) * 0.34)
         let content = IslandContentWidth.medium(agentName: name, statusText: mediumStatusText,
                                                iconSize: iconSize, statusReserve: mediumStatusReserve)
         let target = content.wingWidth()

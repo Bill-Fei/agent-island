@@ -64,7 +64,7 @@ enum TaskStoreAcceptance {
             }
             let beforePreview = store.tasks
             store.loadDemoTasks()
-            check("preview is separated and follows active-only filtering", store.tasks == beforePreview && store.sortedTasks.count == 3)
+            check("preview is separated and includes recent finished history", store.tasks == beforePreview && store.sortedTasks.count == 4)
             store.clearFinished()
             store.endDemoPreview()
             check("preview cleanup cannot change real tasks", store.tasks == beforePreview)
@@ -255,11 +255,12 @@ enum TaskStoreAcceptance {
             try emit(AgentEvent(type: "upsert", id: id, agent: "Codex", status: status, createdAt: date.addingTimeInterval(-age)))
         }
         store.consumeEvents()
-        check("waiting first then activity irrespective of queued/running", store.sortedTasks.map(\.id) == [waiting, queued, running])
-        check("terminal tasks retained on disk but not in default list", store.tasks.count == 5 && store.sortedTasks.count == 3)
+        check("active rows precede recent finished history", store.sortedTasks.map(\.id) == [waiting, queued, running, failed, completed])
+        check("recent terminal tasks remain in hover list but not live counts", store.tasks.count == 5 && store.sortedTasks.count == 5 && store.liveTasks.count == 3)
         store.selectedTaskID = completed
-        check("hidden selection falls back to visible pending task", store.selectedTask?.id == waiting)
-        date.addTimeInterval(86_391)
+        check("completed history remains selectable without displacing pending ambient task", store.selectedTask?.id == completed && store.activeTask?.id == waiting)
+        check("icon stack leads with displayed task and excludes finished history", store.islandIconTasks.map(\.id) == [waiting, queued, running])
+        date.addTimeInterval(86_401)
         store.refreshPresentation()
         check("24h silence hides without completing or deleting", store.sortedTasks.isEmpty && store.tasks.count == 5 && store.tasks.first { $0.id == running }?.status == .running)
         check("24h silence removes counters and ambient presentation", store.waitingCount == 0 && store.liveTasks.isEmpty && store.presentation == .collapsed)
@@ -274,6 +275,32 @@ enum TaskStoreAcceptance {
         check("only greater than 24h becomes hidden", store.sortedTasks.isEmpty)
         let reload = TaskStore(now: { date })
         check("reload applies activity rule without altering terminal history", reload.tasks == store.tasks && reload.sortedTasks.isEmpty)
+        store.clearAllTasks()
+
+        let first = UUID(), second = UUID(), third = UUID()
+        for (id, agent) in [(first, "Codex"), (second, "Codex"), (third, "WorkBuddy")] {
+            try emit(AgentEvent(type: "upsert", id: id, agent: agent, status: .running, createdAt: date))
+        }
+        store.consumeEvents()
+        date.addTimeInterval(11)
+        store.select(store.tasks.first { $0.id == first }!)
+        check("simultaneous tasks retain separate icons even for same provider", store.islandIconTasks.count == 3 && store.islandIconTasks.first?.id == first)
+        store.select(store.tasks.first { $0.id == third }!)
+        check("selecting a running task moves its icon to the front", store.islandIconTasks.first?.id == third && store.primaryAgentName == "WorkBuddy")
+        try emit(AgentEvent(type: "upsert", id: third, status: .completed, createdAt: date))
+        store.consumeEvents()
+        date.addTimeInterval(11)
+        store.refreshPresentation()
+        check("finished task stays in list but leaves ambient icon stack", store.sortedTasks.count == 3 && store.islandIconTasks.count == 2 && !store.islandIconTasks.contains { $0.id == third })
+        for id in [first, second] { try emit(AgentEvent(type: "upsert", id: id, status: .completed, createdAt: date)) }
+        store.consumeEvents()
+        date.addTimeInterval(11)
+        store.refreshPresentation()
+        check("all-finished recent history does not keep island open", store.sortedTasks.count == 3 && store.liveTasks.isEmpty && store.islandIconTasks.isEmpty && store.presentation == .collapsed)
+        check("recent finished history survives app restart", TaskStore(now: { date }).sortedTasks.count == 3)
+        date.addTimeInterval(86_400)
+        store.refreshPresentation()
+        check("finished history ages out without deleting saved tasks", store.sortedTasks.isEmpty && store.tasks.count == 3)
         store.clearAllTasks()
     }
 
@@ -310,8 +337,8 @@ enum TaskStoreAcceptance {
         let ended = UUID()
         try emit(AgentEvent(type: "upsert", id: ended, agent: "Codex", status: .completed, createdAt: date, sourceEvent: "Stop"))
         store.consumeEvents()
-        check("release store: a new completion may notify but never becomes a persistent list row",
-              store.tasks.contains { $0.id == ended } && !store.sortedTasks.contains { $0.id == ended })
+        check("release store: a new completion remains selectable as recent history",
+              store.tasks.contains { $0.id == ended } && store.sortedTasks.contains { $0.id == ended } && !store.liveTasks.contains { $0.id == ended })
         date.addTimeInterval(86_401)
         store.refreshPresentation()
         check("release store: all silent sources age out together without being falsely marked complete",
