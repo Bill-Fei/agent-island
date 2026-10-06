@@ -239,11 +239,12 @@ private struct HUDActivityContent: View {
 private struct HUDExpandedContent: View {
     @ObservedObject var store: TaskStore
     @ObservedObject private var presence = AgentPresence.shared
+    @ObservedObject private var conversationTitles = ConversationTitleStore.shared
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                LiveOrb(size: 22)
+                LinglongtaiBrandMark(size: 24, active: store.activeTaskIsExecuting)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Agent 灵动岛")
                         .font(.system(size: 15, weight: .bold, design: .rounded))
@@ -295,26 +296,46 @@ private struct HUDExpandedContent: View {
             }
             .padding(.horizontal, 18)
 
-            ScrollView(.vertical, showsIndicators: false) {
-                LazyVStack(spacing: 7) {
-                    if tasks.isEmpty {
-                        Text("最近 24 小时暂无会话记录").font(.system(size: 12))
-                            .foregroundStyle(.secondary).padding(.vertical, 24)
-                    }
-                    ForEach(tasks) { task in
-                        TaskRow(task: task, isSelected: selectedID == task.id,
-                                isStale: store.displayedStatus(for: task) == "等待状态更新",
-                                needsAttention: store.needsUserAttention(task)) {
-                            store.select(task)
+            ScrollViewReader { scroll in
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: 0) {
+                        Color.clear.frame(height: 0).id("task-list-top")
+                        LazyVStack(spacing: 7) {
+                            if tasks.isEmpty {
+                                Text("最近 24 小时暂无会话记录").font(.system(size: 12))
+                                    .foregroundStyle(.secondary).padding(.vertical, 24)
+                            }
+                            ForEach(tasks) { task in
+                                TaskRow(task: task, title: conversationTitles.title(for: task), isSelected: selectedID == task.id,
+                                        isStale: store.displayedStatus(for: task) == "等待状态更新",
+                                        needsAttention: store.needsUserAttention(task)) {
+                                    store.select(task)
+                                }
+                            }
                         }
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 12)
                     }
                 }
-                .padding(.horizontal, 12)
-                .padding(.bottom, 12)
+                .onChange(of: store.presentation) { presentation in
+                    guard presentation == .heavy else { return }
+                    resetTaskListToTop(scroll)
+                }
+                .onAppear {
+                    if store.presentation == .heavy { resetTaskListToTop(scroll) }
+                }
             }
         }
         .padding(.top, 14)
         .background(Color.white.opacity(0.035))
+    }
+
+    private func resetTaskListToTop(_ scroll: ScrollViewProxy) {
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            scroll.scrollTo("task-list-top", anchor: .top)
+        }
     }
 
     private var detailPane: some View {
@@ -334,7 +355,7 @@ private struct HUDExpandedContent: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    Text(task.title)
+                    Text(conversationTitles.title(for: task))
                         .font(.system(size: 20, weight: .semibold, design: .rounded))
                         .foregroundStyle(.white)
                         .lineLimit(2)
@@ -499,6 +520,7 @@ private struct StatusBadge: View {
 
 private struct TaskRow: View {
     let task: AgentTask
+    let title: String
     let isSelected: Bool
     let isStale: Bool
     let needsAttention: Bool
@@ -534,10 +556,11 @@ private struct TaskRow: View {
                                 .foregroundStyle(.orange)
                         }
                     }
-                    Text(task.title)
+                    Text(title)
                         .font(.system(size: 10, weight: .regular, design: .rounded))
                         .foregroundStyle(.white.opacity(0.48))
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .help(title)
                 }
                 Spacer(minLength: 4)
                 Label(stateText, systemImage: isStale || (task.status == .waiting && !needsAttention) ? "clock" : task.status.symbolName)
