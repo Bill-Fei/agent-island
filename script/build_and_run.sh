@@ -2,13 +2,17 @@
 set -euo pipefail
 
 MODE="${1:-run}"
+# APP_NAME 是 SwiftPM product 名、可执行文件名，也是 pkill / pgrep 用的进程名。
+# 改它会让 pkill -x 杀不掉旧进程，不要动它。
 APP_NAME="LinglongtaiHUD"
+# APP_BUNDLE_NAME 只决定 .app 目录名，也就是用户在 Finder / Spotlight / 启动台看到的名字。
+APP_BUNDLE_NAME="Agent 灵动岛"
 BUNDLE_ID="com.billfei.linglongtai.hud"
 MIN_SYSTEM_VERSION="13.0"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
-APP_BUNDLE="$DIST_DIR/$APP_NAME.app"
+APP_BUNDLE="$DIST_DIR/$APP_BUNDLE_NAME.app"
 APP_CONTENTS="$APP_BUNDLE/Contents"
 APP_MACOS="$APP_CONTENTS/MacOS"
 APP_BINARY="$APP_MACOS/$APP_NAME"
@@ -73,7 +77,7 @@ cat >"$INFO_PLIST" <<PLIST
   <key>CFBundleShortVersionString</key>
   <string>0.3</string>
   <key>CFBundleVersion</key>
-  <string>20261006.6</string>
+  <string>20261006.7</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>LSMinimumSystemVersion</key>
