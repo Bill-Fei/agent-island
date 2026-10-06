@@ -14,7 +14,9 @@ final class TaskStore: ObservableObject {
         case stop
     }
 
-    @Published var tasks: [AgentTask] = []
+    @Published var tasks: [AgentTask] = [] {
+        didSet { invalidateTaskCache() }
+    }
     @Published private(set) var presentation: Presentation = .collapsed
     private var interaction = IslandInteraction()
     @Published var selectedTaskID: UUID?
@@ -26,13 +28,13 @@ final class TaskStore: ObservableObject {
     @Published var activityWidth: Double
     @Published private(set) var demoPreviewActive = false
     @Published private(set) var connections: [String: Date] = [:]
-    @Published private(set) var freshnessTick = 0
     @Published private(set) var reviewingApproval: ApprovalRelay.Request?
     @Published private(set) var submittedApprovals: [UUID: Date] = [:]
     @Published private(set) var failedApprovals: Set<UUID> = []
     private(set) var contextMenuIsOpen = false
 
     func approvalRequest(for task: AgentTask) -> ApprovalRelay.Request? {
+        guard ApprovalRelay.islandApprovalEnabled else { return nil }
         guard let current = tasks.first(where: { $0.id == task.id }),
               current.approvalRequestID == task.approvalRequestID,
               current.updatedAt == task.updatedAt,
@@ -54,9 +56,7 @@ final class TaskStore: ObservableObject {
         if approvalRequest(for: task) != nil { return "请求单次批准 · 请核对本次工具操作" }
         if displayedStatus(for: task) == "等待状态更新" { return "等待真实活动更新" }
         if task.status == .waiting && task.sourceEvent == "PermissionRequest" {
-            return task.approvalRequestID == nil
-                ? "应用正在核对工具权限，尚未确认需要你操作"
-                : "岛内批准入口已结束，等待原应用更新权限结果"
+            return "应用正在核对工具权限，灵动岛不接管审批"
         }
         if task.sourceEvent == "PreToolUse",
            let step = task.toolSteps.filter({ $0.state == .running }).max(by: { $0.updatedAt < $1.updatedAt }) {
@@ -92,10 +92,25 @@ final class TaskStore: ObservableObject {
         failedApprovals.remove(request.taskID)
         closeApproval()
     }
-    private var previewTasks: [AgentTask] = []
+    private var previewTasks: [AgentTask] = [] {
+        didSet { invalidateTaskCache() }
+    }
+
+    // These values are read from several view branches. Cache them between
+    // meaningful store changes so a 120 Hz surface tick never sorts the full
+    // history repeatedly just to decide what the ambient island should show.
+    private var visibleTasksCache: [AgentTask]?
+    private var sortedTasksCache: [AgentTask]?
+    private var liveTasksCache: [AgentTask]?
+    private var waitingCountCache: Int?
+    private var taskCacheExpiresAt = Date.distantPast
 
     private var eventOffset: UInt64 = 0
     private var eventTimer: Timer?
+    private var doubaoTracker = DoubaoTracker()
+    private var lastDoubaoPoll = Date.distantPast
+    private var doubaoPollInFlight = false
+    private static let doubaoPollInterval: TimeInterval = 3
     private var eventPulseUntil = Date.distantPast
     private var mediumUntil = Date.distantPast
     private var highlightedTaskID: UUID?
@@ -149,8 +164,8 @@ final class TaskStore: ObservableObject {
         let timer = Timer(timeInterval: 0.8, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.consumeEvents()
+                self?.consumeDoubaoTrajectories()
                 self?.refreshPresentation()
-                self?.freshnessTick += 1
             }
         }
         RunLoop.main.add(timer, forMode: .common)
@@ -158,25 +173,35 @@ final class TaskStore: ObservableObject {
     }
 
     var sortedTasks: [AgentTask] {
-        displayTasks.sorted { lhs, rhs in
+        refreshTaskCacheIfNeeded()
+        if let sortedTasksCache { return sortedTasksCache }
+        let sorted = displayTasks.sorted { lhs, rhs in
             let leftRank = needsUserAttention(lhs) ? 0 : ([.queued, .running, .waiting].contains(lhs.status) ? 1 : 2)
             let rightRank = needsUserAttention(rhs) ? 0 : ([.queued, .running, .waiting].contains(rhs.status) ? 1 : 2)
             if leftRank != rightRank { return leftRank < rightRank }
             if lhs.updatedAt == rhs.updatedAt { return lhs.id.uuidString < rhs.id.uuidString }
             return lhs.updatedAt > rhs.updatedAt
         }
+        sortedTasksCache = sorted
+        return sorted
     }
 
     /// Only event-backed rows are allowed to drive the live HUD in normal
     /// mode. Unknown/legacy rows remain on disk for recovery but cannot be
     /// mistaken for current provider progress.
     private var displayTasks: [AgentTask] {
+        refreshTaskCacheIfNeeded()
+        if let visibleTasksCache { return visibleTasksCache }
         let candidates = demoPreviewActive ? previewTasks : tasks
-        return candidates.filter {
+        let reference = now()
+        let visible = candidates.filter {
             ($0.source.isLive || demoPreviewActive || isAcceptancePreview) &&
-            now().timeIntervalSince($0.updatedAt) <= 86_400 &&
-            now().timeIntervalSince($0.updatedAt) >= -5
+            reference.timeIntervalSince($0.updatedAt) <= 86_400 &&
+            reference.timeIntervalSince($0.updatedAt) >= -5
         }
+        visibleTasksCache = visible
+        taskCacheExpiresAt = nextTaskCacheBoundary(for: candidates, after: reference)
+        return visible
     }
 
     var selectedTask: AgentTask? {
@@ -185,11 +210,61 @@ final class TaskStore: ObservableObject {
     }
 
     var liveTasks: [AgentTask] {
-        sortedTasks.filter { $0.source.isLive && [.queued, .running, .waiting].contains($0.status) }
+        if let liveTasksCache { return liveTasksCache }
+        let live = sortedTasks.filter { $0.source.isLive && [.queued, .running, .waiting].contains($0.status) }
+        liveTasksCache = live
+        return live
+    }
+
+    /// A task can remain visible for a long time without a provider callback,
+    /// but that is not evidence that it is still executing. Ambient animation
+    /// must follow a fresh real task when one exists; stale rows stay available
+    /// for history and the details view.
+    private var freshLiveTasks: [AgentTask] {
+        liveTasks.filter { isFresh($0) }
     }
 
     var waitingCount: Int {
-        displayTasks.filter { needsUserAttention($0) }.count
+        if let waitingCountCache { return waitingCountCache }
+        let count = displayTasks.filter { needsUserAttention($0) }.count
+        waitingCountCache = count
+        return count
+    }
+
+    private func invalidateTaskCache() {
+        visibleTasksCache = nil
+        sortedTasksCache = nil
+        liveTasksCache = nil
+        waitingCountCache = nil
+        taskCacheExpiresAt = .distantPast
+    }
+
+    /// Time-dependent presentation rules only change at task boundaries:
+    /// visibility at 24 hours / -5 seconds and attention freshness at 120
+    /// seconds. Keep the derived arrays stable between those boundaries so
+    /// the hover display clock never sorts the full history on every tick.
+    private func refreshTaskCacheIfNeeded() {
+        guard now() >= taskCacheExpiresAt else { return }
+        invalidateTaskCache()
+    }
+
+    private func nextTaskCacheBoundary(for candidates: [AgentTask], after reference: Date) -> Date {
+        let boundaries = candidates.flatMap { task in
+            [
+                task.updatedAt.addingTimeInterval(-5),
+                task.updatedAt.addingTimeInterval(120),
+                task.updatedAt.addingTimeInterval(86_400)
+            ]
+        }.filter { $0 >= reference }
+        if let boundary = boundaries.min() {
+            // Keep the exact 24-hour boundary visible (the filter uses <=),
+            // then invalidate on the next clock sample instead of allowing a
+            // one-second fallback cache window to hide the transition.
+            return boundary == reference ? reference.addingTimeInterval(0.000_001) : boundary
+        }
+        // There is always a short-lived validity window even for an empty
+        // store, so a clock change or newly-created task cannot stay cached.
+        return reference.addingTimeInterval(1)
     }
 
     /// PermissionRequest starts a permission check, which may be handled by
@@ -218,7 +293,6 @@ final class TaskStore: ObservableObject {
     }
 
     func statusSummary(for kind: AgentKind) -> String {
-        if kind == .doubao { return "仅应用状态" }
         guard let task = liveTasks.first(where: { $0.profile.kind == kind }) else {
             if latestKnownLiveTask(for: kind) != nil { return "当前无进行中的会话" }
             return connections[kind.rawValue] == nil ? "等待首次任务回调" : "已收到连接 · 等待任务"
@@ -236,7 +310,8 @@ final class TaskStore: ObservableObject {
     }
 
     func connectionLabel(for kind: AgentKind) -> String {
-        if kind == .doubao { return "仅应用状态" }
+        // Doubao has no hook to call back from; its state arrives by trajectory.
+        if kind == .doubao { return "读本地轨迹" }
         return connections[kind.rawValue] == nil ? "未收到回调" : "收到过回调"
     }
 
@@ -244,6 +319,7 @@ final class TaskStore: ObservableObject {
         if task.sourceEvent == "AmbiguousTurn" { return "等待状态更新" }
         if task.source.isLive && !isFresh(task) && [.queued, .running, .waiting].contains(task.status) { return "等待状态更新" }
         if task.status == .waiting && !needsUserAttention(task) {
+            if task.sourceEvent == "PermissionRequest" { return "权限检查中" }
             if let id = task.approvalRequestID, submittedApprovals[id] != nil { return "等待回执" }
             return task.approvalRequestID == nil ? "权限检查中" : "等待权限结果"
         }
@@ -257,7 +333,20 @@ final class TaskStore: ObservableObject {
         if let selectedTask, (selectedTask.source.isLive || demoPreviewActive || isAcceptancePreview),
            (demoPreviewActive || isAcceptancePreview || [.queued, .running, .waiting].contains(selectedTask.status)),
            [.queued, .running, .waiting].contains(selectedTask.status) {
+            // Keep a live selection stable while it is fresh. Once it becomes
+            // stale, do not let it mask another task that is actively sending
+            // real events; the island's executing glyph should describe that
+            // fresh task instead of a silent historical row.
+            if demoPreviewActive || isAcceptancePreview || isFresh(selectedTask) {
+                return selectedTask
+            }
+            if let fresh = freshLiveTasks.first(where: { $0.status == .running }) ?? freshLiveTasks.first {
+                return fresh
+            }
             return selectedTask
+        }
+        if let current = freshLiveTasks.first(where: { $0.status == .running }) ?? freshLiveTasks.first {
+            return current
         }
         if let current = liveTasks.first { return current }
         return demoPreviewActive || isAcceptancePreview ? selectedTask : nil
@@ -602,6 +691,8 @@ final class TaskStore: ObservableObject {
     }
 
     func consumeEvents() {
+        if let fileSize = try? LinglongtaiPaths.events.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+           eventOffset == UInt64(fileSize) { return }
         guard let data = try? Data(contentsOf: LinglongtaiPaths.events) else { return }
         if eventOffset > UInt64(data.count) { eventOffset = 0 }
         guard Int(eventOffset) < data.count,
@@ -612,15 +703,38 @@ final class TaskStore: ObservableObject {
 
         let previousOffset = eventOffset
         eventOffset = UInt64(safeEnd)
-        var didChange = false
         for line in text.split(whereSeparator: { $0.isNewline }) {
             guard let eventData = line.data(using: .utf8),
                   let event = try? JSONDecoder().decode(AgentEvent.self, from: eventData) else { continue }
-            didChange = apply(event) || didChange
+            _ = apply(event)
         }
         if !saveTasks() { eventOffset = previousOffset }
-        if didChange { refreshPresentation() }
         refreshPresentation()
+    }
+
+    /// Doubao exposes no hook, so its Agent-mode trajectory is polled instead.
+    /// Acceptance runs are in-memory only and never read the personal directory.
+    private func consumeDoubaoTrajectories() {
+        guard !isAcceptancePreview, !demoPreviewActive, !doubaoPollInFlight else { return }
+        let current = now()
+        guard current.timeIntervalSince(lastDoubaoPoll) >= Self.doubaoPollInterval else { return }
+        lastDoubaoPoll = current
+        doubaoPollInFlight = true
+        let tracker = doubaoTracker
+        Task { @MainActor [weak self] in
+            let result = await Task.detached(priority: .utility) {
+                var tracker = tracker
+                let events = tracker.poll(now: current)
+                return (tracker, events)
+            }.value
+            guard let self else { return }
+            self.doubaoTracker = result.0
+            self.doubaoPollInFlight = false
+            guard !result.1.isEmpty else { return }
+            var didChange = false
+            for event in result.1 { didChange = self.apply(event) || didChange }
+            if didChange { self.saveTasks(); self.refreshPresentation() }
+        }
     }
 
     @discardableResult
