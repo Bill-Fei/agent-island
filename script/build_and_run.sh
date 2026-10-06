@@ -57,9 +57,10 @@ fi
 if [[ -f "$APP_BINARY" ]]; then
   cp "$APP_BINARY" "$DIST_DIR/$APP_NAME.previous"
 fi
-mkdir -p "$APP_MACOS"
+mkdir -p "$APP_MACOS" "$APP_CONTENTS/Resources"
 cp "$BUILD_BINARY" "$APP_BINARY"
 chmod +x "$APP_BINARY"
+cp "$ROOT_DIR/Resources/AppIcon.icns" "$APP_CONTENTS/Resources/AppIcon.icns"
 
 cat >"$INFO_PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -78,6 +79,8 @@ cat >"$INFO_PLIST" <<PLIST
   <string>0.3</string>
   <key>CFBundleVersion</key>
   <string>20261006.7</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>LSMinimumSystemVersion</key>
