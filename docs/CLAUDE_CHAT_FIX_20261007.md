@@ -24,7 +24,7 @@ The previous delivery confirmed compilation, not the real Chat-to-island lifecyc
 
 - `bash script/check_sandbox.sh`: PASS. Full source compile; 507 shared checks, 197 TaskStore checks, 3 background-store checks, 514 Hook bridge checks, 20 permission-observer checks, and native setup fixtures. Temporary test data only; these are not provider end-to-end evidence.
 - `./script/build_and_run.sh --package-validated`: PASS. Packaged the checked executable into `dist/Agent 灵动岛.app`; did not launch it or replace the running process.
-- Independent source review raised conversation identity, text privacy, AX transport-error, and restart turn-identity issues; all were addressed before final review.
+- Independent source review: PASS with no blocking findings after conversation identity, text privacy, AX transport-error, and restart turn-identity issues were addressed. This is source review, not real Chat end-to-end acceptance.
 - Launch approval review timed out twice. Desktop inspection then reported a locked Mac. No security settings, credentials, Hook configurations, or Claude messages were changed.
 
 ## Acceptance Boundary

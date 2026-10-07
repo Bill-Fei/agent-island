@@ -198,12 +198,12 @@ struct AppSettingsView: View {
             }
             Text("Codex / Claude Code / WorkBuddy 仅观察真实 Hook；权限检查不等于需要你确认。明确待确认时请打开原应用处理，当前版本不在岛上批准、停止或重试。Claude 接入指 Claude Code，不覆盖普通 Claude Chat；打开应用也不保证定位到原会话。豆包只读 Agent 轨迹，普通聊天不可见；长时间无更新显示未知或停止跟踪，不代表完成或中断。收到过回调不等于连接持续健康。")
                 .font(.system(size: 11)).foregroundStyle(.secondary)
-        }
-    }
-
             Text(store.claudeChatDiagnostic)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.secondary)
+        }
+    }
+
     private var dataSection: some View {
         SettingsCard(title: "本地任务数据", subtitle: "事件与任务只保存在这台 Mac 上") {
             HStack(spacing: 10) {
