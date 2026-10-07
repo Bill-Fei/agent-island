@@ -201,6 +201,9 @@ struct AppSettingsView: View {
         }
     }
 
+            Text(store.claudeChatDiagnostic)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
     private var dataSection: some View {
         SettingsCard(title: "本地任务数据", subtitle: "事件与任务只保存在这台 Mac 上") {
             HStack(spacing: 10) {
