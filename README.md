@@ -1,6 +1,6 @@
 # Agent 灵动岛 / Agent Dynamic Island
 
-你的 Agent 管家。运行在 macOS 刘海区域的本地动态状态层：空闲时归入物理刘海，事件到达时保持刘海高度并横向展开，连续悬停 0.2 秒查看详情。状态来自真实事件，不推测进度。支持选择性安装单次批准桥接；不支持的请求回原应用处理。
+你的 Agent 管家。运行在 macOS 刘海区域的本地动态状态层：空闲时归入物理刘海，事件到达时保持刘海高度并横向展开，连续悬停 0.2 秒查看详情。状态来自真实事件，不推测进度。当前只观察状态，待确认操作回原应用处理，不在岛上批准、停止或重试。
 
 内置四个一级 Agent 身份：
 
@@ -34,11 +34,11 @@ swift build --build-system swiftbuild --product linglongtai-acceptance
 
 如果本机 Command Line Tools 与 Swift 编译器版本不一致，SwiftPM 会在编译阶段停止；此时需要在 Xcode / Command Line Tools 中选择同一套版本后重新运行上面的命令。启动后可从菜单栏灵动岛图标打开「灵动岛设置…」。
 
-应用会构建到 `dist/LinglongtaiHUD.app`，启动后显示顶部灵动岛，并在菜单栏保留一个灵动岛入口。首次启动默认不注入演示任务；可以从菜单栏打开「灵动岛设置…」，在「本地任务数据」中载入演示任务。
+应用会构建到 `dist/Agent 灵动岛.app`，启动后显示顶部灵动岛，并在菜单栏保留一个灵动岛入口。首次启动默认不注入演示任务；可以从菜单栏打开「灵动岛设置…」，在「本地任务数据」中载入演示任务。
 
 ## 本地 Agent 接入
 
-现已提供 Codex、Claude Code、WorkBuddy 的真实生命周期 Hook。豆包暂时仅显示应用运行状态。接入只记录开始、等待、执行、结束和失败等元数据，不保存输入内容、工具内容、聊天文件路径或凭据，不推测百分比。
+现已提供 Codex、Claude Code、WorkBuddy 的生命周期 Hook；Claude Code 不等于 Claude Chat。豆包只读本地 Agent 模式轨迹，普通聊天不可见。接入只记录开始、等待、执行、结束和失败等元数据，不保存输入内容、工具内容、聊天文件路径或凭据，不推测百分比。“收到过回调”只证明历史接入，不保证当前连接健康。打开应用不保证定位到原会话。
 
 ```bash
 swift build --build-system swiftbuild --product linglongtaictl
@@ -105,6 +105,8 @@ python3 script/install_hooks.py --binary .build/out/Products/Debug/linglongtaict
 协议依据：[Claude Code 官方 Hooks 文档](https://code.claude.com/docs/en/hooks#permissionrequest-decision-control)；本机 Codex `permission-request.command.output` 内置 Schema；本机 WorkBuddy 2.115.0 `executePermissionRequestHooks` / `executeToolWithHooks` 代码。兼容性不能泛化所有历史版本。
 
 ## 当前边界
+
+当前能力与待验证项以 [0.3.1 发布准备](docs/RELEASE_READINESS.md) 为准。下列日期条目为历史记录；旧“批准桥 / 审批接管 / 安装批准 Hook”描述已失效，当前 observer-only 不向原应用回传任何批准决定。
 
 - `20261006.7`：左侧无额外边框；多任务图标叠放，当前展示任务在最前。Hover保留最近24小时的进行中与已结束记录，状态文字及弱化样式区分；历史不计运行数量、不让空闲岛常驻。相关Store回归与构建通过，小态实机可见；完整列表视觉验收受锁屏中断。
 - `20261006.6`：补上处理中小态右侧动态指示。真实 running 时显示三段错峰呼吸条，不代表百分比；等待、批准、过期、完成、失败与减少动态效果时保持静态 SF Symbol。固定在右侧小翼内，不改变刘海宽度或相机避让区。

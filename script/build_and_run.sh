@@ -12,11 +12,27 @@ MIN_SYSTEM_VERSION="13.0"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
+if [[ "$MODE" == "--release-package" || "$MODE" == "--release-verify" ]]; then
+  DIST_DIR="$ROOT_DIR/dist/Release"
+fi
 APP_BUNDLE="$DIST_DIR/$APP_BUNDLE_NAME.app"
 APP_CONTENTS="$APP_BUNDLE/Contents"
 APP_MACOS="$APP_CONTENTS/MacOS"
 APP_BINARY="$APP_MACOS/$APP_NAME"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
+ISLAND_VERSION="$(tr -d '\n' < "$ROOT_DIR/VERSION")"
+if [[ ! "$ISLAND_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "VERSION must contain a semantic version" >&2
+  exit 2
+fi
+ISLAND_BUILD_ID="$(date +%Y%m%d%H%M%S)"
+ISLAND_SOURCE_REVISION="$(git -C "$ROOT_DIR" rev-parse --short HEAD)"
+if [[ -n "$(git -C "$ROOT_DIR" status --porcelain --untracked-files=normal)" ]]; then
+  ISLAND_SOURCE_REVISION="$ISLAND_SOURCE_REVISION-dirty"
+fi
+ISLAND_SOURCE_HASH="$(cd "$ROOT_DIR" && shasum -a 256 Package.swift VERSION Sources/*/*.swift | shasum -a 256 | awk '{print $1}')"
+ISLAND_CONFIGURATION=debug
+if [[ "$MODE" == "--release-package" || "$MODE" == "--release-verify" ]]; then ISLAND_CONFIGURATION=release; fi
 
 APP_ARGS=()
 if [[ "$MODE" == "--qa-empty" || "$MODE" == "--qa-demo" ]]; then
@@ -46,12 +62,19 @@ if [[ "$MODE" == "--package-validated" ]]; then
     fi
   done
 else
-swift build --build-system swiftbuild --product "$APP_NAME"
-BUILD_BINARY="$(swift build --build-system swiftbuild --show-bin-path)/$APP_NAME"
+swift build --build-system swiftbuild -c "$ISLAND_CONFIGURATION"
+ISLAND_BIN_DIR="$(swift build --build-system swiftbuild -c "$ISLAND_CONFIGURATION" --show-bin-path)"
+BUILD_BINARY="$ISLAND_BIN_DIR/$APP_NAME"
+fi
+
+ISLAND_BUILT_SOURCE_HASH="$(cd "$ROOT_DIR" && shasum -a 256 Package.swift VERSION Sources/*/*.swift | shasum -a 256 | awk '{print $1}')"
+if [[ "$ISLAND_BUILT_SOURCE_HASH" != "$ISLAND_SOURCE_HASH" ]]; then
+  echo "Source changed during compilation; leave running app intact and rebuild before packaging." >&2
+  exit 2
 fi
 
 # Only stop the old app after a successful build. Retain a recoverable last build.
-if [[ "$MODE" != "--package-only" && "$MODE" != "--package-validated" ]]; then
+if [[ "$MODE" != "--package-only" && "$MODE" != "--package-validated" && "$MODE" != "--release-package" ]]; then
   pkill -x "$APP_NAME" >/dev/null 2>&1 || true
 fi
 if [[ -f "$APP_BINARY" ]]; then
@@ -61,6 +84,13 @@ mkdir -p "$APP_MACOS" "$APP_CONTENTS/Resources"
 cp "$BUILD_BINARY" "$APP_BINARY"
 chmod +x "$APP_BINARY"
 cp "$ROOT_DIR/Resources/AppIcon.icns" "$APP_CONTENTS/Resources/AppIcon.icns"
+mkdir -p "$APP_CONTENTS/Helpers" "$APP_CONTENTS/Resources/Integration"
+if [[ "$MODE" == "--package-validated" ]]; then
+  cp "$VALIDATED_DIR/linglongtaictl" "$APP_CONTENTS/Helpers/linglongtaictl"
+else
+  cp "$ISLAND_BIN_DIR/linglongtaictl" "$APP_CONTENTS/Helpers/linglongtaictl"
+fi
+cp "$ROOT_DIR/script/install_hooks.py" "$APP_CONTENTS/Resources/Integration/install_hooks.py"
 
 cat >"$INFO_PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -76,9 +106,15 @@ cat >"$INFO_PLIST" <<PLIST
   <key>CFBundleDisplayName</key>
   <string>Agent 灵动岛</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.3</string>
+  <string>$ISLAND_VERSION</string>
   <key>CFBundleVersion</key>
-  <string>20261006.7</string>
+  <string>$ISLAND_BUILD_ID</string>
+  <key>IslandSourceRevision</key>
+  <string>$ISLAND_SOURCE_REVISION</string>
+  <key>IslandSourceSHA256</key>
+  <string>$ISLAND_SOURCE_HASH</string>
+  <key>IslandBuildConfiguration</key>
+  <string>$ISLAND_CONFIGURATION</string>
   <key>CFBundleIconFile</key>
   <string>AppIcon</string>
   <key>CFBundlePackageType</key>
@@ -95,6 +131,12 @@ cat >"$INFO_PLIST" <<PLIST
 </plist>
 PLIST
 
+# Local ad-hoc signatures keep copied resources/helpers consistent. This uses
+# no certificate, grants no entitlements and is not Developer ID distribution.
+codesign --force --sign - "$APP_CONTENTS/Helpers/linglongtaictl"
+codesign --force --sign - "$APP_BINARY"
+codesign --force --sign - "$APP_BUNDLE"
+
 open_app() {
   if ((${#APP_ARGS[@]})); then
     /usr/bin/open -n "$APP_BUNDLE" --args "${APP_ARGS[@]}"
@@ -104,7 +146,7 @@ open_app() {
 }
 
 case "$MODE" in
-  --package-only|--package-validated)
+  --package-only|--package-validated|--release-package)
     echo "Packaged: $APP_BUNDLE (not launched; running app unchanged)"
     ;;
   run)
@@ -121,7 +163,7 @@ case "$MODE" in
     open_app
     /usr/bin/log stream --info --style compact --predicate "subsystem == \"$BUNDLE_ID\""
     ;;
-  --verify|verify)
+  --verify|verify|--release-verify)
     open_app
     sleep 1
     pgrep -x "$APP_NAME" >/dev/null
@@ -136,7 +178,7 @@ case "$MODE" in
     open_app
     ;;
   *)
-    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify|--package-only|--package-validated]" >&2
+    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify|--package-only|--package-validated|--release-package|--release-verify]" >&2
     exit 2
     ;;
 esac
