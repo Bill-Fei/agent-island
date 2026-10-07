@@ -117,6 +117,8 @@ final class TaskStore: ObservableObject {
     private var checkpointGeneration: UInt64 = 0
     private let checkpointQueue = DispatchQueue(label: "com.billfei.linglongtai.checkpoint", qos: .utility)
     private var doubaoTracker = DoubaoTracker()
+    private var claudeChatObserver: ClaudeChatObserver?
+    private var claudeChatTaskID: UUID?
     private var lastDoubaoPoll = Date.distantPast
     private var doubaoPollInFlight = false
     private static let doubaoPollInterval: TimeInterval = 3
@@ -169,9 +171,11 @@ final class TaskStore: ObservableObject {
             return
         }
         LinglongtaiPaths.prepare()
+        ApprovalRelay.clearPendingRequests()
         loadTasks()
         selectedTaskID = sortedTasks.first?.id
         consumeEvents()
+        configureClaudeChatObserver()
         refreshPresentation()
         let timer = Timer(timeInterval: 0.8, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
@@ -182,6 +186,48 @@ final class TaskStore: ObservableObject {
         }
         RunLoop.main.add(timer, forMode: .common)
         eventTimer = timer
+    }
+
+    private func configureClaudeChatObserver() {
+        guard !isIsolatedRun else { return }
+        let observer = ClaudeChatObserver()
+        observer.onSnapshot = { [weak self] snapshot in
+            self?.applyClaudeChatSnapshot(snapshot)
+        }
+        observer.start()
+        claudeChatObserver = observer
+    }
+
+    private func applyClaudeChatSnapshot(_ snapshot: ClaudeChatObserver.Snapshot) {
+        switch snapshot.phase {
+        case .running:
+            if claudeChatTaskID == nil { claudeChatTaskID = UUID() }
+            applyClaudeChatEvent(id: claudeChatTaskID!, sessionID: snapshot.sessionID,
+                                 status: .running, sourceEvent: "ClaudeChatStart", detail: snapshot.detail)
+        case .completed:
+            guard let id = claudeChatTaskID else { return }
+            applyClaudeChatEvent(id: id, sessionID: snapshot.sessionID,
+                                 status: .completed, sourceEvent: "ClaudeChatStop", detail: snapshot.detail)
+            claudeChatTaskID = nil
+        case .unknown:
+            guard let id = claudeChatTaskID else { return }
+            applyClaudeChatEvent(id: id, sessionID: snapshot.sessionID,
+                                 status: .running, sourceEvent: "ClaudeChatUnknown", detail: snapshot.detail)
+        }
+    }
+
+    private func applyClaudeChatEvent(id: UUID, sessionID: String, status: AgentTaskStatus,
+                                      sourceEvent: String, detail: String) {
+        let event = AgentEvent(
+            type: "upsert", id: id, agent: AgentKind.claude.displayName,
+            title: "Claude Chat", status: status, detail: detail,
+            model: "Claude Chat", requiresApproval: false,
+            colorHex: AgentKind.claude.colorHex, createdAt: now(), sourceEvent: sourceEvent,
+            sessionID: sessionID
+        )
+        guard apply(event) else { return }
+        saveTasksInBackground()
+        refreshPresentation()
     }
 
     var sortedTasks: [AgentTask] {
