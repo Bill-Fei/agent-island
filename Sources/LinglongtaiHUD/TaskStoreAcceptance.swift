@@ -89,6 +89,46 @@ enum TaskStoreAcceptance {
             reloaded.clearAllTasks()
             let emptyReload = TaskStore()
             check("clear is not undone by old event replay", emptyReload.tasks.isEmpty)
+            let chatStore = TaskStore()
+            let observer = ClaudeChatObserver()
+            var observed: [ClaudeChatObserver.Snapshot] = []
+            var diagnostics: [ClaudeChatObserver.Diagnostic] = []
+            observer.onSnapshot = { snapshot in
+                observed.append(snapshot)
+                chatStore.applyClaudeChatSnapshot(snapshot)
+            }
+            observer.onDiagnostic = { diagnostics.append($0) }
+            let observedAt = Date()
+            observer.receive(.init(diagnostic: .permissionRequired), at: observedAt)
+            check("Claude Chat missing permission exposes diagnostics without inventing a task",
+                  diagnostics == [.permissionRequired] && observed.isEmpty && chatStore.tasks.isEmpty)
+            observer.receive(.init(diagnostic: .codeMode), at: observedAt)
+            check("Claude Code mode does not duplicate its hook task", observed.isEmpty && chatStore.tasks.isEmpty)
+            observer.receive(.init(diagnostic: .running, sessionID: "chat-A", running: true), at: observedAt)
+            let firstChatID = chatStore.tasks.first?.id
+            check("Claude Chat real running signal creates one event-backed turn",
+                  chatStore.tasks.count == 1 && chatStore.tasks.first?.status == .running &&
+                  chatStore.tasks.first?.progressKnown == false && chatStore.tasks.first?.requiresApproval == false)
+            let countBeforeHeartbeat = observed.count
+            observer.receive(.init(diagnostic: .running, sessionID: "chat-A", running: true), at: observedAt.addingTimeInterval(1))
+            check("Claude Chat identical polls do not invalidate the view tree", observed.count == countBeforeHeartbeat)
+            observer.receive(.init(diagnostic: .running, sessionID: "chat-A", running: true), at: observedAt.addingTimeInterval(31))
+            check("Claude Chat long-task heartbeat retains a single turn", observed.count == countBeforeHeartbeat + 1 && chatStore.tasks.count == 1)
+            observer.receive(.init(diagnostic: .unreadable, sessionID: "chat-A", idle: true, scanComplete: false))
+            check("Claude Chat partial tree cannot fabricate completion", observed.last?.phase == .unknown &&
+                  chatStore.tasks.first?.status == .running && chatStore.tasks.first.map { chatStore.displayedStatus(for: $0) } == "状态未知")
+            observer.receive(.init(diagnostic: .idle, sessionID: "chat-B", idle: true))
+            check("Claude Chat another window cannot complete the running window", observed.last?.phase == .unknown)
+            observer.receive(.init(diagnostic: .running, sessionID: "chat-B", running: true))
+            check("Claude Chat switching running windows keeps separate tasks", chatStore.tasks.count == 2 &&
+                  chatStore.tasks.first(where: { $0.id == firstChatID })?.sourceEvent == "ClaudeChatUnknown")
+            observer.receive(.init(diagnostic: .idle, sessionID: "chat-B", idle: true))
+            check("Claude Chat return of send control ends only the observed turn",
+                  chatStore.tasks.first(where: { $0.sessionID == "chat-B" })?.status == .completed &&
+                  chatStore.tasks.first(where: { $0.sessionID == "chat-A" })?.status == .running)
+            observer.receive(.init(diagnostic: .running, sessionID: "chat-B", running: true))
+            check("Claude Chat next generation creates a new turn", chatStore.tasks.filter { $0.sessionID == "chat-B" }.count == 2)
+            chatStore.clearAllTasks()
             store.setNotchOffset(-8)
             store.setNotchWidthAdjustment(24)
             check("both calibration setters accept adjustments", store.notchOffset == -8 && store.notchWidthAdjustment == 24)

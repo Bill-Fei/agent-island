@@ -32,6 +32,7 @@ final class TaskStore: ObservableObject {
     @Published private(set) var reviewingApproval: ApprovalRelay.Request?
     @Published private(set) var submittedApprovals: [UUID: Date] = [:]
     @Published private(set) var failedApprovals: Set<UUID> = []
+    @Published private(set) var claudeChatDiagnostic = "Claude Chat：等待窗口检查"
     private(set) var contextMenuIsOpen = false
 
     func approvalRequest(for task: AgentTask) -> ApprovalRelay.Request? {
@@ -53,6 +54,7 @@ final class TaskStore: ObservableObject {
     }
 
     func currentStepText(for task: AgentTask) -> String {
+        if task.sourceEvent == "ClaudeChatUnknown" { return task.detail }
         if let feedback = approvalFeedback(for: task) { return feedback }
         if approvalRequest(for: task) != nil { return "请求单次批准 · 请核对本次工具操作" }
         if displayedStatus(for: task) == "等待状态更新" { return "等待真实活动更新" }
@@ -118,7 +120,7 @@ final class TaskStore: ObservableObject {
     private let checkpointQueue = DispatchQueue(label: "com.billfei.linglongtai.checkpoint", qos: .utility)
     private var doubaoTracker = DoubaoTracker()
     private var claudeChatObserver: ClaudeChatObserver?
-    private var claudeChatTaskID: UUID?
+    private var claudeChatTaskIDs: [String: UUID] = [:]
     private var lastDoubaoPoll = Date.distantPast
     private var doubaoPollInFlight = false
     private static let doubaoPollInterval: TimeInterval = 3
@@ -190,7 +192,21 @@ final class TaskStore: ObservableObject {
 
     private func configureClaudeChatObserver() {
         guard !isIsolatedRun else { return }
+        // A persisted AX observation is not evidence that a task is still running after restart.
+        var reconciled = false
+        for index in tasks.indices where tasks[index].sourceEvent?.hasPrefix("ClaudeChat") == true &&
+            [.running, .queued, .waiting].contains(tasks[index].status) {
+            tasks[index].sourceEvent = "ClaudeChatUnknown"
+            tasks[index].detail = "灵动岛已重启，等待 Claude Chat 窗口状态"
+            if let session = tasks[index].sessionID { claudeChatTaskIDs[session] = tasks[index].id }
+            reconciled = true
+        }
+        if reconciled { saveTasksInBackground() }
         let observer = ClaudeChatObserver()
+        observer.onDiagnostic = { [weak self] diagnostic in
+            guard let self, self.claudeChatDiagnostic != diagnostic.rawValue else { return }
+            self.claudeChatDiagnostic = diagnostic.rawValue
+        }
         observer.onSnapshot = { [weak self] snapshot in
             self?.applyClaudeChatSnapshot(snapshot)
         }
@@ -198,20 +214,22 @@ final class TaskStore: ObservableObject {
         claudeChatObserver = observer
     }
 
-    private func applyClaudeChatSnapshot(_ snapshot: ClaudeChatObserver.Snapshot) {
+    func applyClaudeChatSnapshot(_ snapshot: ClaudeChatObserver.Snapshot) {
+        let session = snapshot.sessionID
         switch snapshot.phase {
         case .running:
-            if claudeChatTaskID == nil { claudeChatTaskID = UUID() }
-            applyClaudeChatEvent(id: claudeChatTaskID!, sessionID: snapshot.sessionID,
+            let id = claudeChatTaskIDs[session] ?? UUID()
+            claudeChatTaskIDs[session] = id
+            applyClaudeChatEvent(id: id, sessionID: session,
                                  status: .running, sourceEvent: "ClaudeChatStart", detail: snapshot.detail)
         case .completed:
-            guard let id = claudeChatTaskID else { return }
-            applyClaudeChatEvent(id: id, sessionID: snapshot.sessionID,
+            guard let id = claudeChatTaskIDs[session] else { return }
+            applyClaudeChatEvent(id: id, sessionID: session,
                                  status: .completed, sourceEvent: "ClaudeChatStop", detail: snapshot.detail)
-            claudeChatTaskID = nil
+            claudeChatTaskIDs.removeValue(forKey: session)
         case .unknown:
-            guard let id = claudeChatTaskID else { return }
-            applyClaudeChatEvent(id: id, sessionID: snapshot.sessionID,
+            guard let id = claudeChatTaskIDs[session] else { return }
+            applyClaudeChatEvent(id: id, sessionID: session,
                                  status: .running, sourceEvent: "ClaudeChatUnknown", detail: snapshot.detail)
         }
     }
@@ -385,9 +403,11 @@ final class TaskStore: ObservableObject {
     }
 
     func displayedStatus(for task: AgentTask) -> String {
+        if task.sourceEvent == "ClaudeChatUnknown" { return "状态未知" }
         if task.sourceEvent == "DoubaoAbandoned" || task.sourceEvent == "DoubaoSilent" { return task.statusLabel }
         if task.sourceEvent == "AmbiguousTurn" { return "等待状态更新" }
         if task.source.isLive && !isFresh(task) && [.queued, .running, .waiting].contains(task.status) { return "等待状态更新" }
+        if task.sourceEvent == "ClaudeChatStart" { return "正在生成" }
         if task.status == .waiting && !needsUserAttention(task) {
             if task.sourceEvent == "PermissionRequest" { return "权限检查中" }
             if let id = task.approvalRequestID, submittedApprovals[id] != nil { return "等待回执" }
@@ -1135,7 +1155,7 @@ final class TaskStore: ObservableObject {
 
     private func isFresh(_ task: AgentTask) -> Bool {
         let age = now().timeIntervalSince(task.updatedAt)
-        guard !["DoubaoSilent", "DoubaoAbandoned", "AmbiguousTurn"].contains(task.sourceEvent ?? "") else { return false }
+        guard !["DoubaoSilent", "DoubaoAbandoned", "AmbiguousTurn", "ClaudeChatUnknown"].contains(task.sourceEvent ?? "") else { return false }
         let limit = task.profile.kind == .doubao ? DoubaoTrajectory.staleAfter : 120
         return age >= -5 && age <= limit
     }
