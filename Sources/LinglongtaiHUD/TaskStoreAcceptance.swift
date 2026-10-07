@@ -91,6 +91,20 @@ enum TaskStoreAcceptance {
             check("clear is not undone by old event replay", emptyReload.tasks.isEmpty)
             let chatStore = TaskStore()
             let observer = ClaudeChatObserver()
+            let routeA = ClaudeChatObserver.documentIdentity(url: URL(string: "app://localhost/cowork/conversation-A")!, pid: 42, launch: 1)
+            let routeB = ClaudeChatObserver.documentIdentity(url: URL(string: "app://localhost/cowork/conversation-B")!, pid: 42, launch: 1)
+            check("Claude Chat same-window conversations have separate hashed identities", routeA.sessionID != nil &&
+                  routeA.sessionID != routeB.sessionID && !routeA.sessionID!.contains("conversation-A"))
+            check("Claude Chat Code route never creates a chat identity",
+                  ClaudeChatObserver.documentIdentity(url: URL(string: "app://localhost/epitaxy/local-A")!, pid: 42, launch: 1).codeMode)
+            check("Claude Chat unknown document routes fail closed",
+                  ClaudeChatObserver.documentIdentity(url: URL(string: "file:///Applications/Claude.app/index.html")!, pid: 42, launch: 1).sessionID == nil)
+            check("Claude Chat AX communication failures invalidate completion evidence",
+                  ClaudeChatObserver.isBlocking(.cannotComplete) && ClaudeChatObserver.isBlocking(.invalidUIElement) &&
+                  ClaudeChatObserver.isBlocking(.apiDisabled) && ClaudeChatObserver.isBlocking(.failure))
+            check("Claude Chat absent optional AX attributes are not transport failures",
+                  !ClaudeChatObserver.isBlocking(.success) && !ClaudeChatObserver.isBlocking(.attributeUnsupported) &&
+                  !ClaudeChatObserver.isBlocking(.noValue))
             var observed: [ClaudeChatObserver.Snapshot] = []
             var diagnostics: [ClaudeChatObserver.Diagnostic] = []
             observer.onSnapshot = { snapshot in

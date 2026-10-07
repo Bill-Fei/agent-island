@@ -20,6 +20,7 @@ final class ClaudeChatObserver {
         case windowUnavailable = "Claude Chat：未读到窗口"
         case unreadable = "Claude Chat：窗口状态暂不可读"
         case codeMode = "Claude 当前为 Code 模式 · 由 Hook 跟踪"
+        case unsupportedPage = "Claude Chat：当前页面未匹配聊天会话"
         case observing = "Claude Chat：窗口可读 · 等待生成信号"
         case running = "Claude Chat：已检测到生成中"
         case idle = "Claude Chat：输入控件就绪"
@@ -126,15 +127,13 @@ final class ClaudeChatObserver {
         guard AXIsProcessTrusted() else { return Observation(diagnostic: .permissionRequired) }
         let application = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(application, 0.1)
-        // Electron can leave its web accessibility tree disabled until explicitly requested.
-        _ = AXUIElementSetAttributeValue(application, "AXManualAccessibility" as CFString, kCFBooleanTrue)
-        let windows = copy(application, attribute: kAXWindowsAttribute) as? [AXUIElement] ?? []
+        let windowsRead = read(application, attribute: kAXWindowsAttribute)
+        let windows = windowsRead.value as? [AXUIElement] ?? []
+        if isBlocking(windowsRead.error) { return Observation(diagnostic: .windowUnavailable) }
         guard let window = copyElement(application, attribute: kAXFocusedWindowAttribute) ?? windows.first else {
             return Observation(diagnostic: .windowUnavailable)
         }
-        let session = "s_" + IdentityDigest.digest(namespace: "claude-chat-v1", components: [
-            String(pid), String(launch), String(CFHash(window))
-        ])
+        var session: String?
         var running = false, idle = false, codeMode = false, complete = true
         var remaining = 1_200
         let deadline = ProcessInfo.processInfo.systemUptime + 0.3
@@ -146,19 +145,37 @@ final class ClaudeChatObserver {
             }
             remaining -= 1
             guard depth <= 36 else { complete = false; continue }
-            guard let role = copy(element, attribute: kAXRoleAttribute) as? String else {
+            let roleRead = read(element, attribute: kAXRoleAttribute)
+            guard let role = roleRead.value as? String else {
                 complete = false
                 continue
             }
-            if role == kAXTextAreaRole || role == kAXTextFieldRole { continue }
+            if role == kAXTextAreaRole || role == kAXTextFieldRole ||
+                role == kAXStaticTextRole || role == "AXHeading" || role == "AXLink" { continue }
+            if role == "AXWebArea" {
+                // Read only the document route; retain its digest, never the URL or page title.
+                let value = copy(element, attribute: kAXURLAttribute)
+                let url = (value as? URL) ?? (value as? String).flatMap(URL.init(string:))
+                if let url {
+                    let route = documentIdentity(url: url, pid: pid, launch: launch)
+                    if route.codeMode { return Observation(diagnostic: .codeMode) }
+                    if let id = route.sessionID { session = id }
+                }
+            }
             if role == kAXGroupRole {
-                let label = (copy(element, attribute: kAXDescriptionAttribute) as? String) ??
-                    (copy(element, attribute: kAXTitleAttribute) as? String) ?? ""
+                var label = ""
+                for attribute in [kAXDescriptionAttribute, kAXTitleAttribute] {
+                    let result = read(element, attribute: attribute)
+                    if isBlocking(result.error) { complete = false }
+                    if let value = result.value as? String { label = value; break }
+                }
                 if label == "Chat messages" || label == "Sidebar" || label.hasPrefix("Message ") { continue }
                 if label == "Currently streaming message" { running = true }
             } else if role == kAXButtonRole || role == kAXPopUpButtonRole {
                 for attribute in [kAXTitleAttribute, kAXDescriptionAttribute] {
-                    guard let label = copy(element, attribute: attribute) as? String else { continue }
+                    let result = read(element, attribute: attribute)
+                    if isBlocking(result.error) { complete = false }
+                    guard let label = result.value as? String else { continue }
                     switch label {
                     case "Stop", "Stop response", "停止", "停止回复", "停止生成": running = true
                     case "Send", "Send message", "发送": idle = true
@@ -166,22 +183,45 @@ final class ClaudeChatObserver {
                     default: break
                     }
                 }
-            } else if role == kAXStaticTextRole {
-                if let label = copy(element, attribute: kAXValueAttribute) as? String,
-                   label == "Claude is responding" || label == "正在生成" { running = true }
             }
-            if let children = copy(element, attribute: kAXChildrenAttribute) as? [AXUIElement] {
+            let childrenRead = read(element, attribute: kAXChildrenAttribute)
+            if isBlocking(childrenRead.error) { complete = false }
+            if let children = childrenRead.value as? [AXUIElement] {
                 stack.append(contentsOf: children.reversed().map { ($0, depth + 1) })
             }
         }
         if codeMode { return Observation(diagnostic: .codeMode) }
+        guard let session else { return Observation(diagnostic: complete ? .unsupportedPage : .unreadable) }
         return Observation(diagnostic: running ? .running : (idle && complete ? .idle : (complete ? .observing : .unreadable)),
                            sessionID: session, running: running, idle: idle, scanComplete: complete)
     }
 
-    private nonisolated static func copy(_ element: AXUIElement, attribute: String) -> CFTypeRef? {
+    nonisolated static func documentIdentity(url: URL, pid: pid_t, launch: TimeInterval) -> (sessionID: String?, codeMode: Bool) {
+        let route = url.pathComponents.filter { $0 != "/" }
+        let local = url.scheme == "app" && url.host == "localhost"
+        let remote = url.scheme == "https" && url.host == "claude.ai"
+        if local && route.first == "epitaxy" { return (nil, true) }
+        guard route.count == 2, !route[1].isEmpty,
+              (local && ["chat", "cowork"].contains(route[0])) || (remote && route[0] == "chat") else {
+            return (nil, false)
+        }
+        return ("s_" + IdentityDigest.digest(namespace: "claude-chat-v2", components: [
+            String(pid), String(launch), route[0], route[1]
+        ]), false)
+    }
+
+    private nonisolated static func read(_ element: AXUIElement, attribute: String) -> (value: CFTypeRef?, error: AXError) {
         var value: CFTypeRef?
-        return AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success ? value : nil
+        let error = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+        return (error == .success ? value : nil, error)
+    }
+
+    private nonisolated static func copy(_ element: AXUIElement, attribute: String) -> CFTypeRef? {
+        read(element, attribute: attribute).value
+    }
+
+    nonisolated static func isBlocking(_ error: AXError) -> Bool {
+        error != .success && error != .attributeUnsupported && error != .noValue
     }
 
     private nonisolated static func copyElement(_ element: AXUIElement, attribute: String) -> AXUIElement? {

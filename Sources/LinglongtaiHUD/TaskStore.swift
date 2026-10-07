@@ -198,7 +198,6 @@ final class TaskStore: ObservableObject {
             [.running, .queued, .waiting].contains(tasks[index].status) {
             tasks[index].sourceEvent = "ClaudeChatUnknown"
             tasks[index].detail = "灵动岛已重启，等待 Claude Chat 窗口状态"
-            if let session = tasks[index].sessionID { claudeChatTaskIDs[session] = tasks[index].id }
             reconciled = true
         }
         if reconciled { saveTasksInBackground() }
