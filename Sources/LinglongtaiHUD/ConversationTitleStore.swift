@@ -10,6 +10,8 @@ final class ConversationTitleStore: ObservableObject {
     private var loading = false
 
     private init() {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard !arguments.contains("--data-dir"), !arguments.contains("--qa-empty"), !arguments.contains("--qa-demo") else { return }
         refresh()
         timer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in self?.refresh() }
     }

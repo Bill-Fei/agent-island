@@ -50,12 +50,16 @@ final class IslandSurface: ObservableObject {
     private var isConfigured = false
 
     func configure(_ layout: IslandLayout, presentation: IslandPresentation) {
-        self.layout = layout
+        guard !isConfigured || self.layout != layout else {
+            motion.setTarget(presentation)
+            return
+        }
+        if self.layout != layout { self.layout = layout }
         // Recalibration retargets the spring rather than snapping to collapsed.
         motion.configure(layout.metrics, initial: !isConfigured)
         isConfigured = true
         motion.setTarget(presentation)
-        frame = motion.frame
+        if frame != motion.frame { frame = motion.frame }
     }
 
     func setTarget(_ presentation: IslandPresentation) { motion.setTarget(presentation) }

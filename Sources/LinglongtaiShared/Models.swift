@@ -182,9 +182,11 @@ public struct AgentTask: Codable, Identifiable, Equatable, Sendable {
         case .completed: return sourceEvent == nil ? status.label : "本轮已结束"
         case .failed: return sourceEvent == nil ? status.label : "本轮响应失败"
         case .cancelled:
+            if sourceEvent == "DoubaoAbandoned" { return "已停止跟踪 · 状态未知" }
             if sourceEvent == "SessionEnd" { return "会话已关闭" }
             return sourceEvent == nil ? status.label : "本轮已中断"
         case .queued, .running, .waiting:
+            if sourceEvent == "DoubaoSilent" { return "状态未知" }
             if sourceEvent == "AmbiguousTurn" { return "等待状态更新" }
             if status == .waiting { return "等待确认" }
             if status == .queued { return status.label }

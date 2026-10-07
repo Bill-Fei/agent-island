@@ -52,6 +52,10 @@ func runDoubaoRevisionChecks(check: (String, Bool) -> Void) {
         check("doubao: an announced tool call keeps the turn running",
               pendingObservation.map { DoubaoTrajectory.phase(of: $0, now: now) } == .running(tool: "Bash"))
         let pendingDetail = pendingObservation.flatMap { DoubaoTrajectory.event(for: $0, now: now).detail } ?? ""
+        check("doubao: an unreturned assistant tool becomes unknown after four minutes",
+              pendingObservation.map { DoubaoTrajectory.phase(of: $0, now: now.addingTimeInterval(240)) } == .unknown(quiet: 245))
+        check("doubao: an unreturned tool stops tracking without claiming completion",
+              pendingObservation.map { DoubaoTrajectory.event(for: $0, now: now.addingTimeInterval(1_200)).sourceEvent } == "DoubaoAbandoned")
         check("doubao: a tool call is reported by classified label, never raw name",
               pendingDetail.contains("执行命令") && !pendingDetail.contains("Bash"))
 
@@ -76,6 +80,10 @@ func runDoubaoRevisionChecks(check: (String, Bool) -> Void) {
             .map { DoubaoTrajectory.event(for: $0, now: now) }
         check("doubao: long silence stops tracking instead of staying live",
               abandonedEvent?.status == .cancelled)
+        let unknown = write(root, session: "s-unknown", rows: [user(), ["role": "unexpected"]], age: 5, now: now)
+        check("doubao: unrecognized role is unknown, never completed", DoubaoTrajectory.observation(sessionKey: "s-unknown", url: unknown).map { DoubaoTrajectory.event(for: $0, now: now).status } != .completed)
+        let abandonedTask = AgentTask(agent: "豆包", title: "fixture", status: .cancelled, detail: "", model: "", sourceEvent: "DoubaoAbandoned")
+        check("doubao: stopped tracking does not claim provider interruption", abandonedTask.statusLabel == "已停止跟踪 · 状态未知")
 
         // 6. The privacy boundary: row content must never reach the island.
         let secret = "绝不外传的私密内容-9f3a"

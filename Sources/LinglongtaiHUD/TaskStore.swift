@@ -26,6 +26,7 @@ final class TaskStore: ObservableObject {
     @Published var notchOffset: Double
     @Published var notchWidthAdjustment: Double
     @Published var activityWidth: Double
+    @Published private(set) var automaticActivityWidth: Bool
     @Published private(set) var demoPreviewActive = false
     @Published private(set) var connections: [String: Date] = [:]
     @Published private(set) var reviewingApproval: ApprovalRelay.Request?
@@ -102,11 +103,19 @@ final class TaskStore: ObservableObject {
     private var visibleTasksCache: [AgentTask]?
     private var sortedTasksCache: [AgentTask]?
     private var liveTasksCache: [AgentTask]?
+    private var freshLiveTasksCache: [AgentTask]?
     private var waitingCountCache: Int?
+    private var usageCache: (day: Date, values: [AgentUsageCount])?
+    private var statusSignatureCache: String?
     private var taskCacheExpiresAt = Date.distantPast
+    private var visibleStateSignature = ""
 
     private var eventOffset: UInt64 = 0
     private var eventTimer: Timer?
+    private var eventPollInFlight = false
+    private var checkpointNeedsRetry = false
+    private var checkpointGeneration: UInt64 = 0
+    private let checkpointQueue = DispatchQueue(label: "com.billfei.linglongtai.checkpoint", qos: .utility)
     private var doubaoTracker = DoubaoTracker()
     private var lastDoubaoPoll = Date.distantPast
     private var doubaoPollInFlight = false
@@ -117,7 +126,7 @@ final class TaskStore: ObservableObject {
     @Published private(set) var calibrationPreview: Presentation?
     private var calibrationUntil = Date.distantPast
     private let now: () -> Date
-    private struct Snapshot: Codable {
+    private struct Snapshot: Codable, Sendable {
         var tasks: [AgentTask]
         var eventOffset: UInt64
         var connections: [String: Date]?
@@ -129,6 +138,7 @@ final class TaskStore: ObservableObject {
     private let notchOffsetKey = "dynamicIsland.notchOffset"
     private let notchWidthAdjustmentKey = "dynamicIsland.notchWidthAdjustment"
     private let activityWidthKey = "dynamicIsland.activityWidth"
+    private let automaticActivityWidthKey = "dynamicIsland.automaticActivityWidth"
     private let isAcceptancePreview: Bool
     private var isIsolatedRun: Bool {
         isAcceptancePreview || ProcessInfo.processInfo.arguments.contains("--data-dir")
@@ -143,6 +153,7 @@ final class TaskStore: ObservableObject {
         notchOffset = UserDefaults.standard.object(forKey: notchOffsetKey) as? Double ?? 0
         notchWidthAdjustment = UserDefaults.standard.object(forKey: notchWidthAdjustmentKey) as? Double ?? 0
         activityWidth = UserDefaults.standard.object(forKey: activityWidthKey) as? Double ?? 228
+        automaticActivityWidth = UserDefaults.standard.object(forKey: automaticActivityWidthKey) as? Bool ?? true
         // Acceptance launches are entirely in-memory: never overwrite personal tasks.
         if isAcceptancePreview {
             autoPopOnEvent = true
@@ -150,6 +161,7 @@ final class TaskStore: ObservableObject {
             notchOffset = 0
             notchWidthAdjustment = 0
             activityWidth = 228
+            automaticActivityWidth = true
             tasks = arguments.contains("--qa-demo") ? Self.demoTasks : []
             selectedTaskID = sortedTasks.first?.id
             notice = "验收预览 · 不写入个人任务"
@@ -163,7 +175,7 @@ final class TaskStore: ObservableObject {
         refreshPresentation()
         let timer = Timer(timeInterval: 0.8, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.consumeEvents()
+                self?.pollEvents()
                 self?.consumeDoubaoTrajectories()
                 self?.refreshPresentation()
             }
@@ -210,6 +222,7 @@ final class TaskStore: ObservableObject {
     }
 
     var liveTasks: [AgentTask] {
+        refreshTaskCacheIfNeeded()
         if let liveTasksCache { return liveTasksCache }
         let live = sortedTasks.filter { $0.source.isLive && [.queued, .running, .waiting].contains($0.status) }
         liveTasksCache = live
@@ -220,11 +233,16 @@ final class TaskStore: ObservableObject {
     /// but that is not evidence that it is still executing. Ambient animation
     /// must follow a fresh real task when one exists; stale rows stay available
     /// for history and the details view.
-    private var freshLiveTasks: [AgentTask] {
-        liveTasks.filter { isFresh($0) }
+    var freshLiveTasks: [AgentTask] {
+        refreshTaskCacheIfNeeded()
+        if let freshLiveTasksCache { return freshLiveTasksCache }
+        let fresh = liveTasks.filter { isFresh($0) }
+        freshLiveTasksCache = fresh
+        return fresh
     }
 
     var waitingCount: Int {
+        refreshTaskCacheIfNeeded()
         if let waitingCountCache { return waitingCountCache }
         let count = displayTasks.filter { needsUserAttention($0) }.count
         waitingCountCache = count
@@ -235,7 +253,10 @@ final class TaskStore: ObservableObject {
         visibleTasksCache = nil
         sortedTasksCache = nil
         liveTasksCache = nil
+        freshLiveTasksCache = nil
         waitingCountCache = nil
+        usageCache = nil
+        statusSignatureCache = nil
         taskCacheExpiresAt = .distantPast
     }
 
@@ -252,7 +273,9 @@ final class TaskStore: ObservableObject {
         let boundaries = candidates.flatMap { task in
             [
                 task.updatedAt.addingTimeInterval(-5),
+                task.updatedAt,
                 task.updatedAt.addingTimeInterval(120),
+                task.updatedAt.addingTimeInterval(DoubaoTrajectory.staleAfter),
                 task.updatedAt.addingTimeInterval(86_400)
             ]
         }.filter { $0 >= reference }
@@ -316,6 +339,7 @@ final class TaskStore: ObservableObject {
     }
 
     func displayedStatus(for task: AgentTask) -> String {
+        if task.sourceEvent == "DoubaoAbandoned" || task.sourceEvent == "DoubaoSilent" { return task.statusLabel }
         if task.sourceEvent == "AmbiguousTurn" { return "等待状态更新" }
         if task.source.isLive && !isFresh(task) && [.queued, .running, .waiting].contains(task.status) { return "等待状态更新" }
         if task.status == .waiting && !needsUserAttention(task) {
@@ -372,9 +396,12 @@ final class TaskStore: ObservableObject {
         if waitingCount > 0 { return "\(waitingCount)项待确认" }
         if now() < eventPulseUntil, let task = activeTask,
            [.completed, .failed, .cancelled].contains(task.status) {
-            return liveTasks.isEmpty ? task.statusLabel : "1项结束 · \(liveTasks.count)项进行"
+            return liveTasks.isEmpty ? task.statusLabel : "1项结束 · \(liveTasks.count)项未结束"
         }
-        if liveTasks.count > 1 { return "\(liveTasks.count)项进行中" }
+        if liveTasks.count > 1 {
+            let fresh = freshLiveTasks.count
+            return fresh == liveTasks.count ? "\(fresh)项有活动" : "\(fresh)项活跃 · \(liveTasks.count - fresh)项待更新"
+        }
         guard let task = activeTask else { return "等待事件" }
         return displayedStatus(for: task)
     }
@@ -405,6 +432,12 @@ final class TaskStore: ObservableObject {
     }
 
     private func refreshContentWidth() {
+        guard automaticActivityWidth else {
+            if mediumWingWidth != nil { mediumWingWidth = nil }
+            pendingNarrowWidth = nil
+            pendingNarrowSince = nil
+            return
+        }
         let name = calibrationPreview == nil ? primaryAgentName : "尺寸预览"
         let iconSize = min(24, max(0, 32 + notchOffset - 4))
             * (1 + Double(max(0, islandIconTasks.count - 1)) * 0.34)
@@ -416,7 +449,7 @@ final class TaskStore: ObservableObject {
             return
         }
         if target >= current {
-            mediumWingWidth = target
+            if target != current { mediumWingWidth = target }
             pendingNarrowWidth = nil
             pendingNarrowSince = nil
             return
@@ -475,9 +508,16 @@ final class TaskStore: ObservableObject {
     }
 
     func setActivityWidth(_ value: Double) {
+        setAutomaticActivityWidth(false, preview: false)
         activityWidth = min(max(value, 200), 300)
         if !isIsolatedRun { UserDefaults.standard.set(activityWidth, forKey: activityWidthKey) }
         previewCalibration(.medium)
+    }
+
+    func setAutomaticActivityWidth(_ enabled: Bool, preview: Bool = true) {
+        if automaticActivityWidth != enabled { automaticActivityWidth = enabled }
+        if !isIsolatedRun { UserDefaults.standard.set(enabled, forKey: automaticActivityWidthKey) }
+        if preview { previewCalibration(.medium) }
     }
 
     func previewCalibration(_ state: Presentation = .medium) {
@@ -490,6 +530,7 @@ final class TaskStore: ObservableObject {
         setNotchOffset(0)
         setNotchWidthAdjustment(0)
         setActivityWidth(228)
+        setAutomaticActivityWidth(true)
     }
 
     deinit {
@@ -675,14 +716,15 @@ final class TaskStore: ObservableObject {
     @discardableResult
     private func saveTasks() -> Bool {
         guard !isAcceptancePreview && !demoPreviewActive else { return false }
+        checkpointGeneration += 1
+        checkpointNeedsRetry = true
         let persistentTasks = tasks.filter { $0.source != .demo }
         do {
             // One atomic checkpoint contains both data and cursor, preventing
             // a cursor from skipping events after a failed task write.
             let snapshot = Snapshot(tasks: persistentTasks, eventOffset: eventOffset, connections: connections, version: 2)
-            try JSONEncoder().encode(snapshot).write(to: LinglongtaiPaths.state, options: .atomic)
-            // Compatibility export; state.json remains the authoritative file.
-            try? JSONEncoder().encode(persistentTasks).write(to: LinglongtaiPaths.tasks, options: .atomic)
+            try checkpointQueue.sync { try Self.writeCheckpoint(snapshot) }
+            checkpointNeedsRetry = false
             return true
         } catch {
             notice = "任务保存失败，事件将重试"
@@ -693,29 +735,77 @@ final class TaskStore: ObservableObject {
     func consumeEvents() {
         if let fileSize = try? LinglongtaiPaths.events.resourceValues(forKeys: [.fileSizeKey]).fileSize,
            eventOffset == UInt64(fileSize) { return }
-        guard let data = try? Data(contentsOf: LinglongtaiPaths.events) else { return }
-        if eventOffset > UInt64(data.count) { eventOffset = 0 }
-        guard Int(eventOffset) < data.count,
-              let lastNewline = data.lastIndex(of: 0x0A) else { return }
-        let safeEnd = Int(lastNewline) + 1
-        guard safeEnd > Int(eventOffset),
-              let text = String(data: data.subdata(in: Int(eventOffset)..<safeEnd), encoding: .utf8) else { return }
-
-        let previousOffset = eventOffset
-        eventOffset = UInt64(safeEnd)
-        for line in text.split(whereSeparator: { $0.isNewline }) {
-            guard let eventData = line.data(using: .utf8),
-                  let event = try? JSONDecoder().decode(AgentEvent.self, from: eventData) else { continue }
-            _ = apply(event)
-        }
-        if !saveTasks() { eventOffset = previousOffset }
+        guard let batch = try? EventJournal.read(at: LinglongtaiPaths.events, offset: eventOffset) else { return }
+        if batch.blockedByOversizedLine { notice = "事件行超过 1MiB，已暂停读取；原日志未改动，请核实数据源" }
+        guard batch.end > batch.start else { return }
+        eventOffset = batch.end
+        for event in batch.events { _ = apply(event) }
+        _ = saveTasks()
         refreshPresentation()
+    }
+
+    nonisolated private static func writeCheckpoint(_ snapshot: Snapshot) throws {
+        try JSONEncoder().encode(snapshot).write(to: LinglongtaiPaths.state, options: .atomic)
+        // One encode for authoritative state; compatibility remains optional.
+        try? JSONEncoder().encode(snapshot.tasks).write(to: LinglongtaiPaths.tasks, options: .atomic)
+    }
+
+    /// Runtime polling does file I/O/decoding and checkpoint encoding off main.
+    /// One batch at a time and FIFO atomic checkpoints preserve
+    /// the atomic data+cursor contract. Explicit acceptance calls stay synchronous.
+    func pollEvents() {
+        guard !eventPollInFlight, !isAcceptancePreview else { return }
+        if checkpointNeedsRetry {
+            eventPollInFlight = true
+            saveTasksInBackground { [weak self] in self?.eventPollInFlight = false }
+            return
+        }
+        eventPollInFlight = true
+        let offset = eventOffset
+        let url = LinglongtaiPaths.events
+        Task { @MainActor [weak self] in
+            let batch = await Task.detached(priority: .utility) {
+                try? EventJournal.read(at: url, offset: offset)
+            }.value
+            guard let self else { return }
+            if batch?.blockedByOversizedLine == true { self.notice = "事件行超过 1MiB，已暂停读取；原日志未改动，请核实数据源" }
+            guard let batch, batch.end > batch.start, self.eventOffset == offset else {
+                self.eventPollInFlight = false
+                return
+            }
+            self.eventOffset = batch.end
+            for event in batch.events { _ = self.apply(event) }
+            self.refreshPresentation()
+            self.saveTasksInBackground { [weak self] in self?.eventPollInFlight = false }
+        }
+    }
+
+    private func saveTasksInBackground(completion: (@MainActor () -> Void)? = nil) {
+        checkpointGeneration += 1
+        let generation = checkpointGeneration
+        checkpointNeedsRetry = true
+        let snapshot = Snapshot(tasks: tasks.filter { $0.source != .demo },
+                                eventOffset: eventOffset, connections: connections, version: 2)
+        checkpointQueue.async { [weak self] in
+            let succeeded: Bool
+            do { try Self.writeCheckpoint(snapshot); succeeded = true }
+            catch { succeeded = false }
+            Task { @MainActor [weak self] in
+                if let self, self.checkpointGeneration == generation {
+                    self.checkpointNeedsRetry = !succeeded
+                    if !succeeded { self.notice = "任务保存失败，正在重试最新快照" }
+                }
+                // Never rewind the in-memory cursor: replaying already-applied
+                // events after a local clear could resurrect removed rows.
+                completion?()
+            }
+        }
     }
 
     /// Doubao exposes no hook, so its Agent-mode trajectory is polled instead.
     /// Acceptance runs are in-memory only and never read the personal directory.
     private func consumeDoubaoTrajectories() {
-        guard !isAcceptancePreview, !demoPreviewActive, !doubaoPollInFlight else { return }
+        guard !isIsolatedRun, !demoPreviewActive, !doubaoPollInFlight else { return }
         let current = now()
         guard current.timeIntervalSince(lastDoubaoPoll) >= Self.doubaoPollInterval else { return }
         lastDoubaoPoll = current
@@ -733,7 +823,10 @@ final class TaskStore: ObservableObject {
             guard !result.1.isEmpty else { return }
             var didChange = false
             for event in result.1 { didChange = self.apply(event) || didChange }
-            if didChange { self.saveTasks(); self.refreshPresentation() }
+            if didChange {
+                self.saveTasksInBackground()
+                self.refreshPresentation()
+            }
         }
     }
 
@@ -946,6 +1039,17 @@ final class TaskStore: ObservableObject {
     }
 
     func refreshPresentation() {
+        // Publish time-driven changes once at semantic boundaries, even in
+        // manual sizing mode. Never publish a blind 0.8-second refresh tick.
+        refreshTaskCacheIfNeeded()
+        if statusSignatureCache == nil {
+            statusSignatureCache = sortedTasks.map { "\($0.id):\(displayedStatus(for: $0))" }.joined(separator: "|") + ":\(waitingCount)"
+        }
+        let signature = (statusSignatureCache ?? "") + ":\(Calendar.autoupdatingCurrent.startOfDay(for: now()))"
+        if signature != visibleStateSignature {
+            visibleStateSignature = signature
+            objectWillChange.send()
+        }
         refreshContentWidth()
         // A menu can extend outside the island: retain its anchor until closed.
         if contextMenuIsOpen {
@@ -985,7 +1089,25 @@ final class TaskStore: ObservableObject {
 
     private func isFresh(_ task: AgentTask) -> Bool {
         let age = now().timeIntervalSince(task.updatedAt)
-        return age >= -5 && age <= 120
+        guard !["DoubaoSilent", "DoubaoAbandoned", "AmbiguousTurn"].contains(task.sourceEvent ?? "") else { return false }
+        let limit = task.profile.kind == .doubao ? DoubaoTrajectory.staleAfter : 120
+        return age >= -5 && age <= limit
+    }
+
+    /// Counts retained real turns that had an update today, not model/API calls.
+    var todayAgentUsage: [AgentUsageCount] {
+        refreshTaskCacheIfNeeded()
+        let current = now()
+        let day = Calendar.autoupdatingCurrent.startOfDay(for: current)
+        if let cache = usageCache, cache.day == day { return cache.values }
+        let counts = tasks.filter { $0.source == .liveEvent && $0.updatedAt >= day && $0.updatedAt <= current }
+            .reduce(into: [AgentKind: Int]()) { $0[$1.profile.kind, default: 0] += 1 }
+        let values = AgentCatalog.supportedKinds.compactMap { kind -> AgentUsageCount? in
+            guard let count = counts[kind], count > 0 else { return nil }
+            return AgentUsageCount(kind: kind, count: count)
+        }.sorted { $0.count == $1.count ? $0.kind.displayName < $1.kind.displayName : $0.count > $1.count }
+        usageCache = (day, values)
+        return values
     }
 
     private static let demoTasks: [AgentTask] = [

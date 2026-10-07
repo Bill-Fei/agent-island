@@ -256,7 +256,8 @@ private struct HUDExpandedContent: View {
                         .lineLimit(1)
                 }
                 Spacer()
-                Metric(value: String(store.liveTasks.count), label: "LIVE", tint: .mint)
+                Metric(value: String(store.freshLiveTasks.count), label: "活跃", tint: .mint)
+                Metric(value: String(store.liveTasks.count - store.freshLiveTasks.count), label: "待更新", tint: .secondary)
                 Metric(value: String(store.waitingCount), label: "REVIEW", tint: .orange)
                 Button(action: store.toggleExpanded) {
                     Image(systemName: "chevron.up")
@@ -307,7 +308,8 @@ private struct HUDExpandedContent: View {
                             }
                             ForEach(tasks) { task in
                                 TaskRow(task: task, title: conversationTitles.title(for: task), isSelected: selectedID == task.id,
-                                        isStale: store.displayedStatus(for: task) == "等待状态更新",
+                                        displayedStatus: store.displayedStatus(for: task),
+                                        isStale: ["等待状态更新", "状态未知", "已停止跟踪 · 状态未知"].contains(store.displayedStatus(for: task)),
                                         needsAttention: store.needsUserAttention(task)) {
                                     store.select(task)
                                 }
@@ -532,22 +534,16 @@ private struct TaskRow: View {
     let task: AgentTask
     let title: String
     let isSelected: Bool
+    let displayedStatus: String
     let isStale: Bool
     let needsAttention: Bool
     let onSelect: () -> Void
 
     private var isEnded: Bool { [.completed, .failed, .cancelled].contains(task.status) }
     private var stateText: String {
-        if isStale { return "等待更新" }
         if needsAttention { return "待确认" }
-        switch task.status {
-        case .running: return "进行中"
-        case .queued: return "排队中"
-        case .waiting: return "等待中"
-        case .completed: return "已完成"
-        case .failed: return "失败"
-        case .cancelled: return "已停止"
-        }
+        if displayedStatus == "已停止跟踪 · 状态未知" { return "停止跟踪" }
+        return displayedStatus
     }
 
     var body: some View {

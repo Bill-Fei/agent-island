@@ -77,11 +77,17 @@ struct AppSettingsView: View {
 
     private var sizingSection: some View {
         SettingsCard(title: "刘海与活动提示尺寸", subtitle: "拖动滑块会在顶部预览 6 秒，预览不会创建任务") {
+            Toggle("自动按内容适配宽度", isOn: Binding(
+                get: { store.automaticActivityWidth },
+                set: { store.setAutomaticActivityWidth($0) }
+            ))
+            Text(store.automaticActivityWidth ? "当前：自动适配。拖动下方宽度会切换到手动，长文字可滚动显示。" : "当前：手动宽度。小态按比例收窄，中态使用滑块值。")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 7) {
                 HStack {
                     SettingLabel(title: "活动提示宽度", detail: "控制中态左右两翼；小态按比例收窄。较长名称和状态会缓慢往返滚动；减少动态效果时静态适配。")
                     Spacer()
-                    Text("每侧 \(Int(store.activityWidth / 2)) pt")
+                    Text("两翼预算 \(Int(store.activityWidth)) pt")
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
                         .foregroundStyle(.secondary).monospacedDigit()
                 }
@@ -139,7 +145,20 @@ struct AppSettingsView: View {
             .buttonStyle(.bordered)
             Text("空闲：物理刘海 · 小态：持续任务 · 中态：重要变化 10 秒 · 悬停：完整详情")
                 .font(.system(size: 11)).foregroundStyle(.secondary)
+            Text(effectiveSizeSummary)
+                .font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
+            Text("负向宽度校准若已到摄像头安全下限，不会再缩窄中央；高度只调整活动态，详情顶部不会侵入物理刘海。")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
         }
+    }
+
+    private var effectiveSizeSummary: String {
+        guard let screen = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }) ?? NSScreen.main else { return "等待屏幕尺寸" }
+        let layout = IslandLayout(screen: screen, heightAdjustment: store.notchOffset,
+                                 widthAdjustment: store.notchWidthAdjustment, activityWidth: store.activityWidth,
+                                 mediumWingWidth: store.automaticActivityWidth ? store.mediumWingWidth : nil)
+        let compact = layout.size(for: .compact), medium = layout.size(for: .medium)
+        return "实际 小态 \(Int(compact.width))×\(Int(compact.height)) · 中态 \(Int(medium.width))×\(Int(medium.height)) pt"
     }
 
     private var offsetLabel: String {
@@ -177,7 +196,7 @@ struct AppSettingsView: View {
                     }
                 }
             }
-            Text("豆包没有开放 Hook，改为只读它写在本地的 Agent 模式轨迹：不读对话内容、不需要任何权限，但只能看、不能批准；普通聊天在云端，本地没有记录。轨迹行内没有时间戳，长时间无更新时状态显示为未知而不是完成。Codex / Claude Code / WorkBuddy 单次批准需安装并信任批准桥接；不支持的请求仍在原应用确认。")
+            Text("Codex / Claude Code / WorkBuddy 仅观察真实 Hook；权限检查不等于需要你确认。明确待确认时请打开原应用处理，当前版本不在岛上批准、停止或重试。Claude 接入指 Claude Code，不覆盖普通 Claude Chat；打开应用也不保证定位到原会话。豆包只读 Agent 轨迹，普通聊天不可见；长时间无更新显示未知或停止跟踪，不代表完成或中断。收到过回调不等于连接持续健康。")
                 .font(.system(size: 11)).foregroundStyle(.secondary)
         }
     }
@@ -192,7 +211,12 @@ struct AppSettingsView: View {
                 .buttonStyle(.borderedProminent)
 
                 Button("清空任务") {
-                    store.clearAllTasks()
+                    let confirmation = NSAlert()
+                    confirmation.messageText = "清空本地任务显示？"
+                    confirmation.informativeText = "不会停止 Agent，也不会删除原应用会话。清理后今日统计会随保留记录减少。"
+                    confirmation.addButton(withTitle: "取消")
+                    confirmation.addButton(withTitle: "清空显示")
+                    if confirmation.runModal() == .alertSecondButtonReturn { store.clearAllTasks() }
                 }
                 .buttonStyle(.bordered)
 
@@ -203,6 +227,10 @@ struct AppSettingsView: View {
                 .font(.system(size: 10, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)
+            Text("当前提示：" + store.notice)
+                .font(.system(size: 11)).foregroundStyle(.secondary)
+            Text("24 小时仅是显示窗口，不自动删除日志。统计为保留记录中今日有活动的轮次，非 API 调用次数；清理显示后统计会减少。事件按批增量读取，保留原日志用于恢复。")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
         }
     }
 
@@ -226,7 +254,7 @@ struct AppSettingsView: View {
     }
 
     private var footer: some View {
-        Text("Agent 灵动岛 0.3 · 你的 Agent 管家")
+        Text("Agent 灵动岛 \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "开发版") · \(Bundle.main.object(forInfoDictionaryKey: "IslandSourceRevision") as? String ?? "未打包")")
             .font(.system(size: 10, weight: .medium, design: .rounded))
             .foregroundStyle(.tertiary)
     }

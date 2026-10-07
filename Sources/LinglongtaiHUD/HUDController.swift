@@ -11,6 +11,8 @@ final class HUDController: NSObject {
     private var hostingView: NSHostingView<HUDRootView>!
     private var cancellables = Set<AnyCancellable>()
     private var screenObserver: NSObjectProtocol?
+    private var wakeObserver: NSObjectProtocol?
+    private var sleepObserver: NSObjectProtocol?
     private var frameTimer: Timer?
     private var lastFrameTime = ProcessInfo.processInfo.systemUptime
     private var lastHeartbeatTime = -Double.infinity
@@ -92,6 +94,17 @@ final class HUDController: NSObject {
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.positionOnNotchedScreen() }
+        }
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.lastFrameTime = ProcessInfo.processInfo.systemUptime
+                self.store.resetInteraction()
+                self.positionOnNotchedScreen()
+            }
+        }
+        sleepObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.store.resetInteraction() }
         }
     }
 
@@ -211,6 +224,8 @@ final class HUDController: NSObject {
         frameTimer?.invalidate()
         if let contextMenuMonitor { NSEvent.removeMonitor(contextMenuMonitor) }
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
+        if let wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver) }
+        if let sleepObserver { NSWorkspace.shared.notificationCenter.removeObserver(sleepObserver) }
     }
 }
 

@@ -11,6 +11,7 @@ final class AgentPresence: ObservableObject {
     @Published private(set) var foreground: AgentKind?
     @Published private(set) var icons: [AgentKind: NSImage] = [:]
     private var observers: [NSObjectProtocol] = []
+    private var iconPaths: [AgentKind: String] = [:]
     private static let bundleIDs: [AgentKind: String] = [
         .codex: "com.openai.codex",
         .claude: "com.anthropic.claudefordesktop",
@@ -48,13 +49,21 @@ final class AgentPresence: ObservableObject {
     private func refresh() {
         for (kind, bundleID) in Self.bundleIDs {
             if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
-                icons[kind] = NSWorkspace.shared.icon(forFile: url.path)
-            } else { icons[kind] = nil }
+                if iconPaths[kind] != url.path {
+                    icons[kind] = NSWorkspace.shared.icon(forFile: url.path)
+                    iconPaths[kind] = url.path
+                }
+            } else if icons[kind] != nil {
+                icons[kind] = nil
+                iconPaths[kind] = nil
+            }
         }
         let ids = Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
-        running = Set(Self.bundleIDs.compactMap { ids.contains($0.value) ? $0.key : nil })
+        let nextRunning = Set(Self.bundleIDs.compactMap { ids.contains($0.value) ? $0.key : nil })
+        if running != nextRunning { running = nextRunning }
         let activeID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-        foreground = Self.bundleIDs.first { $0.value == activeID }?.key
+        let nextForeground = Self.bundleIDs.first { $0.value == activeID }?.key
+        if foreground != nextForeground { foreground = nextForeground }
     }
 
     deinit {

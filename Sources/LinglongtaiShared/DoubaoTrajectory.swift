@@ -171,12 +171,14 @@ public enum DoubaoTrajectory {
         case "assistant":
             // A call announced but not yet returned is still in flight. An
             // assistant row with no call ends the turn.
-            return observation.lastToolName == nil ? .finished : .running(tool: observation.lastToolName)
+            guard observation.lastToolName != nil else { return .finished }
+            let quiet = now.timeIntervalSince(observation.modifiedAt)
+            return quiet >= staleAfter ? .unknown(quiet: quiet) : .running(tool: observation.lastToolName)
         case "user", "tool":
             let quiet = now.timeIntervalSince(observation.modifiedAt)
             return quiet >= staleAfter ? .unknown(quiet: quiet) : .running(tool: observation.lastToolName)
         default:
-            return .finished
+            return .unknown(quiet: max(0, now.timeIntervalSince(observation.modifiedAt)))
         }
     }
 
@@ -242,7 +244,8 @@ public struct DoubaoTracker: Sendable {
             // Capped: once abandoned there is nothing left to say.
             let quiet = now.timeIntervalSince(observation.modifiedAt)
             let cap = Int(DoubaoTrajectory.abandonAfter / 60)
-            let quietBucket = observation.lastRole == "assistant" ? 0 : min(Int(quiet / 60), cap)
+            let ended = observation.lastRole == "assistant" && observation.lastToolName == nil
+            let quietBucket = ended ? 0 : min(Int(quiet / 60), cap)
             let signature = "\(observation.turnKey):\(observation.lastRole):"
                 + "\(observation.lastToolName ?? ""):\(Int(observation.modifiedAt.timeIntervalSince1970)):\(quietBucket)"
             guard seen[key] != signature else { continue }

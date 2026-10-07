@@ -19,12 +19,18 @@ COMPILER=(swiftc -target "$(uname -m)-apple-macosx13.0")
   -I "$VALIDATION_DIR" Sources/LinglongtaiHUD/*.swift \
   "$VALIDATION_DIR/LinglongtaiShared.o" -o "$VALIDATION_DIR/LinglongtaiHUD"
 "${COMPILER[@]}" -parse-as-library -module-cache-path "$VALIDATION_DIR/module-cache" \
-  -I "$VALIDATION_DIR" Sources/LinglongtaiHUD/TaskStore.swift \
+  -I "$VALIDATION_DIR" Sources/LinglongtaiHUD/AgentUsageCount.swift Sources/LinglongtaiHUD/TaskStore.swift \
   Sources/LinglongtaiHUD/TaskStoreAcceptance.swift script/StoreAcceptanceMain.swift \
   "$VALIDATION_DIR/LinglongtaiShared.o" -o "$VALIDATION_DIR/store-acceptance"
 "$VALIDATION_DIR/linglongtai-acceptance"
 ISLAND_QA_DIRECTORY="$(mktemp -d /private/tmp/island-contained-store.XXXXXX)"
 "$VALIDATION_DIR/store-acceptance" --data-dir "$ISLAND_QA_DIRECTORY"
+"${COMPILER[@]}" -parse-as-library -module-cache-path "$VALIDATION_DIR/module-cache" \
+  -I "$VALIDATION_DIR" Sources/LinglongtaiHUD/AgentUsageCount.swift Sources/LinglongtaiHUD/TaskStore.swift \
+  Sources/LinglongtaiHUD/BackgroundStoreAcceptance.swift script/BackgroundStoreAcceptanceMain.swift \
+  "$VALIDATION_DIR/LinglongtaiShared.o" -o "$VALIDATION_DIR/background-store-acceptance"
+ISLAND_BG_DIRECTORY="$(mktemp -d /private/tmp/island-background-store.XXXXXX)"
+"$VALIDATION_DIR/background-store-acceptance" --data-dir "$ISLAND_BG_DIRECTORY"
 python3 script/check_hook_bridge.py --ctl "$VALIDATION_DIR/linglongtaictl" \
   --report "$VALIDATION_DIR/hook-report.json"
 python3 -u script/check_approval_relay.py "$VALIDATION_DIR/linglongtaictl"

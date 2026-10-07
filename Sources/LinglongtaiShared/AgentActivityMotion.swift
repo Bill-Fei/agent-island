@@ -4,9 +4,10 @@ import Foundation
 public enum AgentActivityMotion {
     public static func isExecuting(_ task: AgentTask?, now: Date) -> Bool {
         guard let task, task.source.isLive, task.status == .running,
-              !task.requiresApproval, task.sourceEvent != "AmbiguousTurn" else { return false }
+              !task.requiresApproval, !["AmbiguousTurn", "DoubaoSilent", "DoubaoAbandoned"].contains(task.sourceEvent ?? "") else { return false }
         let age = now.timeIntervalSince(task.updatedAt)
-        return age >= -5 && age <= 120
+        let limit = task.profile.kind == .doubao ? DoubaoTrajectory.staleAfter : 120
+        return age >= -5 && age <= limit
     }
 
     /// A quiet 2.4 second breath with zero velocity at the loop boundary.

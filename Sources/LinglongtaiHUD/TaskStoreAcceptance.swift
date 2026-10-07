@@ -241,12 +241,47 @@ enum TaskStoreAcceptance {
             try runTrackedHookRevisionChecks(check: check, emit: emit)
             try runButlerStoreChecks(check: check, emit: emit)
             try runReleaseStoreChecks(check: check, emit: emit)
+            try runSizingRefreshChecks(check: check, emit: emit)
         } catch {
             results.append("FAIL: test harness error: \(error)")
         }
         let report = results.joined(separator: "\n") + "\n"
         try? report.write(to: root.appendingPathComponent("acceptance.txt"), atomically: true, encoding: .utf8)
         print(report)
+    }
+
+    private static func runSizingRefreshChecks(check: (String, Bool) -> Void, emit: (AgentEvent) throws -> Void) throws {
+        var date = Date()
+        let store = TaskStore(now: { date })
+        store.clearAllTasks()
+        let id = UUID()
+        try emit(AgentEvent(type: "upsert", id: id, agent: "Codex", status: .running, createdAt: date, sourceEvent: "UserPromptSubmit"))
+        store.consumeEvents()
+        check("fresh real activity count starts at one", store.freshLiveTasks.count == 1)
+        date.addTimeInterval(121)
+        check("fresh activity expires even when first read bypasses sortedTasks", store.freshLiveTasks.isEmpty && store.liveTasks.count == 1)
+        check("silent task remains compact without claiming ongoing execution", store.mediumStatusText == "等待状态更新" && !store.activeTaskIsExecuting)
+        let waiting = UUID()
+        try emit(AgentEvent(type: "upsert", id: waiting, agent: "WorkBuddy", status: .waiting, createdAt: date, sourceEvent: "Notification"))
+        store.consumeEvents()
+        check("explicit notification counts user attention", store.waitingCount == 1)
+        date.addTimeInterval(121)
+        check("waiting cache expires without needing another property read", store.waitingCount == 0)
+        check("usage uses injected current calendar day and counts each retained turn once", store.todayAgentUsage.reduce(0) { $0 + $1.count } == store.tasks.filter { $0.updatedAt >= Calendar.autoupdatingCurrent.startOfDay(for: date) && $0.updatedAt <= date }.count)
+        date = Calendar.autoupdatingCurrent.startOfDay(for: date).addingTimeInterval(86_401)
+        check("usage cache resets across calendar midnight", store.todayAgentUsage.isEmpty)
+        store.clearAllTasks()
+        store.setAutomaticActivityWidth(true)
+        var publications = 0
+        let observation = store.$mediumWingWidth.dropFirst().sink { _ in publications += 1 }
+        for _ in 0..<10 { store.refreshPresentation() }
+        check("unchanged automatic width does not publish on each poll", publications == 0)
+        observation.cancel()
+        store.setActivityWidth(200)
+        check("manual size clears auto width override", store.mediumWingWidth == nil && !store.automaticActivityWidth)
+        store.setAutomaticActivityWidth(true)
+        check("auto mode restores measured width", store.mediumWingWidth != nil)
+        store.clearAllTasks()
     }
 
     private static func runButlerStoreChecks(check: (String, Bool) -> Void, emit: (AgentEvent) throws -> Void) throws {
@@ -535,7 +570,7 @@ enum TaskStoreAcceptance {
         try send(firstConcurrent, name: "Stop", status: .completed)
         check("one terminal event highlights completion while another task remains active",
               store.presentation == .medium && store.liveTasks.map(\.id) == [remainingConcurrent] &&
-              store.activeTask?.id == firstConcurrent && store.mediumStatusText == "1项结束 · 1项进行")
+              store.activeTask?.id == firstConcurrent && store.mediumStatusText == "1项结束 · 1项未结束")
         jump(to: 6_021.9)
         check("mixed terminal feedback remains medium at 9.9 seconds", store.presentation == .medium)
         jump(to: 6_022)
@@ -587,6 +622,13 @@ enum TaskStoreAcceptance {
         }
         check("all three calibration controls accept independent values",
               store.notchOffset == -6 && store.notchWidthAdjustment == 24 && store.activityWidth == 260)
+        check("activity slider explicitly selects manual sizing and clears content override",
+              !store.automaticActivityWidth && store.mediumWingWidth == nil)
+        let manualNarrow = IslandMetrics(activityWidth: 200, mediumWingWidth: store.mediumWingWidth).size(for: .medium)
+        let manualWide = IslandMetrics(activityWidth: 300, mediumWingWidth: store.mediumWingWidth).size(for: .medium)
+        check("manual activity width reaches actual medium geometry", manualWide.width > manualNarrow.width)
+        store.setAutomaticActivityWidth(true)
+        check("automatic sizing can be restored without changing task data", store.automaticActivityWidth && store.mediumWingWidth != nil && store.tasks == beforeCalibration)
 
         for (index, preview) in [TaskStore.Presentation.compact, .medium].enumerated() {
             let start = 8_200 + Double(index) * 10
@@ -612,7 +654,7 @@ enum TaskStoreAcceptance {
         jump(to: 8_270)
         store.resetCalibration()
         check("reset restores height zero, notch width zero and activity width 228",
-              store.notchOffset == 0 && store.notchWidthAdjustment == 0 && store.activityWidth == 228 && store.calibrationPreview == .medium)
+              store.notchOffset == 0 && store.notchWidthAdjustment == 0 && store.activityWidth == 228 && store.automaticActivityWidth && store.calibrationPreview == .medium)
         jump(to: 8_275.9)
         check("reset also exposes a 5.9-second preview", store.calibrationPreview == .medium)
         jump(to: 8_276)
