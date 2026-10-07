@@ -342,24 +342,34 @@ private struct HUDExpandedContent: View {
         Group {
             if let task = store.selectedTask {
                 VStack(alignment: .leading, spacing: 0) {
-                    HStack(alignment: .top, spacing: 12) {
-                        AgentAvatar(task: task, size: 42)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(task.agent)
-                                .font(.system(size: 15, weight: .bold, design: .rounded))
-                                .foregroundStyle(.white)
-                        }
-                        Spacer()
+                    HStack(alignment: .center, spacing: 8) {
+                        AgentAvatar(task: task, size: 32)
+                        Text(task.agent)
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.9)
+                        Spacer(minLength: 4)
                         Text(store.displayedStatus(for: task))
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.9)
+                        if task.profile.kind != .custom {
+                            ActionButton(title: "打开应用", systemName: "arrow.up.forward", tint: .mint) {
+                                presence.open(task.profile.kind)
+                            }
+                            .fixedSize()
+                            .disabled(!presence.canOpen(task.profile.kind))
+                            .help("打开桌面应用；终端和 IDE 任务请回到原会话处理。")
+                        }
                     }
 
                     Text(conversationTitles.title(for: task))
-                        .font(.system(size: 20, weight: .semibold, design: .rounded))
+                        .font(.system(size: 16, weight: .semibold, design: .rounded))
                         .foregroundStyle(.white)
                         .lineLimit(2)
-                        .padding(.top, 24)
+                        .padding(.top, 16)
                     ScrollView {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("当前步骤").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
@@ -384,12 +394,16 @@ private struct HUDExpandedContent: View {
                                 }
                             }
                         }.frame(maxWidth: .infinity, alignment: .leading)
-                    }.padding(.top, 16)
+                    }
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .padding(.top, 14)
 
-                    Spacer()
                     actionBar(for: task)
+                        .padding(.top, 12)
                 }
-                .padding(22)
+                .padding(.horizontal, 18)
+                .padding(.top, 18)
+                .padding(.bottom, 14)
             } else {
                 VStack(spacing: 12) {
                     Image(systemName: "sparkles")
@@ -417,34 +431,28 @@ private struct HUDExpandedContent: View {
     }
 
     private func actionBar(for task: AgentTask) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-          HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             if store.approvalRequest(for: task) != nil {
                 ActionButton(title: "批准请求…", systemName: "hand.raised", tint: .orange) {
                     store.reviewApproval(for: task)
                 }
             }
-            if task.profile.kind != .custom {
-                ActionButton(title: "打开应用", systemName: "arrow.up.forward", tint: .mint) {
-                    presence.open(task.profile.kind)
+            HStack(alignment: .bottom, spacing: 8) {
+                if store.displayedStatus(for: task) == "等待状态更新" {
+                    Button("从岛上移除") { store.dismissTask(task) }
+                        .font(.system(size: 10))
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        .fixedSize()
+                        .help("只移除本地显示，不会停止 Agent；后续真实事件仍可再次出现。")
                 }
-                .disabled(!presence.canOpen(task.profile.kind))
-                .help("打开桌面应用；终端和 IDE 任务请回到原会话处理。")
+                Spacer(minLength: 8)
+                Text(store.approvalFeedback(for: task) ?? (store.needsUserAttention(task) && store.approvalRequest(for: task) == nil ? "需在原应用确认" : "由真实事件更新"))
+                    .font(.system(size: 9, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.32))
+                    .multilineTextAlignment(.trailing)
+                    .lineLimit(2)
             }
-            Spacer()
-          }
-          HStack {
-            if store.displayedStatus(for: task) == "等待状态更新" {
-                Button("从岛上移除") { store.dismissTask(task) }
-                    .font(.system(size: 10))
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .help("只移除本地显示，不会停止 Agent；后续真实事件仍可再次出现。")
-            }
-            Text(store.approvalFeedback(for: task) ?? (store.needsUserAttention(task) && store.approvalRequest(for: task) == nil ? "需在原应用确认" : "由真实事件更新"))
-                .font(.system(size: 9, weight: .medium, design: .rounded))
-                .foregroundStyle(.white.opacity(0.32))
-          }
         }
     }
 }
