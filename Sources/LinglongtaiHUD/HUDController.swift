@@ -23,10 +23,10 @@ final class HUDController: NSObject {
         configurePanel()
         configureContextMenu()
         observeState()
-        // SwiftUI/AppKit layout is the expensive part of this surface. A
-        // 60 Hz display clock keeps the spring visually continuous while
-        // avoiding a second layout pass between two display frames.
-        let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
+        // Sample the existing spring at 120 Hz for smoother high-refresh
+        // display motion. Task history caching and background polling remain
+        // independent; this does not change spring timing or rebound.
+        let timer = Timer(timeInterval: 1.0 / 120, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
         RunLoop.main.add(timer, forMode: .common)
