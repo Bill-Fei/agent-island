@@ -229,8 +229,12 @@ enum TaskStoreAcceptance {
             let hookReload = TaskStore()
             check("restart preserves hook states and connection metadata without replay",
                   hookReload.tasks == hookStore.tasks && hookReload.connections == hookStore.connections)
-            check("Doubao remains explicitly application status only",
-                  hookReload.statusSummary(for: .doubao) == "仅应用状态" &&
+            // Doubao state now arrives through its local trajectory, but this
+            // harness is isolated from the personal directory, so none can
+            // appear here. This proves nothing is invented without a source;
+            // live derivation is covered by DoubaoRevisionChecks instead.
+            check("Doubao invents no task status without a trajectory present",
+                  hookReload.statusSummary(for: .doubao) == "等待首次任务回调" &&
                   hookReload.latestKnownLiveTask(for: .doubao) == nil)
             hookReload.clearAllTasks()
             try runPresentationRevisionChecks(check: check, emit: emit)
@@ -392,8 +396,8 @@ enum TaskStoreAcceptance {
                   !store.needsUserAttention(task) && store.waitingCount == 0 && store.presentation == .compact &&
                   store.mediumStatusText == "权限检查中")
             check("permission check details do not tell the user to find a nonexistent prompt",
-                  store.currentStepText(for: task) == "应用正在核对工具权限，尚未确认需要你操作" &&
-                  store.statusSummary(for: .codex).hasPrefix("权限检查中"))
+                  store.currentStepText(for: task).contains("不接管审批") &&
+                  store.statusSummary(for: .codex).contains("权限检查中"))
         }
         let permissionReload = TaskStore(now: { date })
         check("restarting cannot turn a bare permission check into a user prompt",
@@ -412,148 +416,21 @@ enum TaskStoreAcceptance {
               store.waitingCount == 1 && store.presentation == .medium && store.mediumStatusText == "1项待确认")
         store.clearAllTasks()
 
-        // Exercise approvals only under the enclosing /tmp --data-dir guard.
-        // The parent process stands in for the live hook process; no provider
-        // invocation, command execution or personal configuration is involved.
+        // Island-side approval fixtures were intentionally removed. A
+        // PermissionRequest without a provider Notification is not actionable.
         date = Date()
-        let commandBytes = try Data(contentsOf: LinglongtaiPaths.commands)
-        let privateContext = "APPROVAL_CONTEXT_ONLY_NOT_EVENT_JOURNAL"
-        let safePayload = try JSONSerialization.data(withJSONObject: [
-            "tool_name": "Bash", "cwd": "/tmp/release-fixture", "tool_input": ["command": "printf " + privateContext]
-        ])
-        var publishedIDs: [UUID] = []
-        defer { for id in publishedIDs { ApprovalRelay.cleanup(id) } }
-
-        func permissionEvent(_ id: UUID, at timestamp: Date) -> AgentEvent {
-            AgentEvent(type: "upsert", id: id, agent: "Codex", status: .waiting,
-                       requiresApproval: true, createdAt: timestamp, sourceEvent: "PermissionRequest")
+        let permissionTaskID = UUID()
+        try emit(AgentEvent(type: "upsert", id: permissionTaskID, agent: "Claude", status: .waiting,
+                            requiresApproval: true, createdAt: date, sourceEvent: "PermissionRequest"))
+        store.consumeEvents()
+        if let task = store.tasks.first(where: { $0.id == permissionTaskID }) {
+            check("release store: observer-only PermissionRequest never creates a review request",
+                  store.approvalRequest(for: task) == nil && store.reviewingApproval == nil &&
+                  !store.needsUserAttention(task) && store.waitingCount == 0 &&
+                  store.mediumStatusText == "权限检查中")
         }
-        func pendingTask() throws -> (AgentTask, ApprovalRelay.Request)? {
-            let id = UUID()
-            var event = permissionEvent(id, at: date)
-            guard let request = ApprovalRelay.makeRequest(payload: safePayload, event: event, now: date),
-                  ApprovalRelay.publish(request) else {
-                check("release store: isolated approval fixture can be published", false)
-                return nil
-            }
-            publishedIDs.append(request.id)
-            event.approvalRequestID = request.id
-            try emit(event)
-            store.consumeEvents()
-            guard let task = store.tasks.first(where: { $0.id == id }) else {
-                check("release store: approval event produces its exact waiting task", false)
-                return nil
-            }
-            return (task, request)
-        }
-
-        if let (task, request) = try pendingTask() {
-            check("release store: pending approval is bound to the actual waiting task", store.approvalRequest(for: task) == request)
-            check("a live island approval still displays a real actionable confirmation",
-                  store.needsUserAttention(task) && store.waitingCount == 1 && store.mediumStatusText == "1项待确认")
-            let beforeTasks = store.tasks
-            let beforeSnapshot = try Data(contentsOf: LinglongtaiPaths.state)
-            store.reviewApproval(for: task)
-            check("release store: opening a review does not approve or modify the provider task",
-                  store.reviewingApproval == request && store.tasks == beforeTasks && store.presentation == .medium)
-            store.respondToApproval(request, decision: .allow)
-            check("submitting a decision removes the confirmation counter before the provider callback",
-                  !store.needsUserAttention(task) && store.waitingCount == 0 && store.displayedStatus(for: task) == "等待回执")
-            let replyURL = LinglongtaiPaths.applicationSupport.appendingPathComponent("pending-approvals/\(request.id.uuidString).reply")
-            let reply = try? Data(contentsOf: replyURL)
-            let encodedReply = reply.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
-            check("release store: an explicit confirmation writes one allow reply for the exact request",
-                  encodedReply?["id"] as? String == request.id.uuidString && encodedReply?["decision"] as? String == "allow")
-            check("release store: confirmation awaits a real provider callback without faking completion or progress",
-                  store.tasks == beforeTasks && store.tasks.first { $0.id == task.id }?.status == .waiting &&
-                  store.tasks.first { $0.id == task.id }?.requiresApproval == true && store.reviewingApproval == nil)
-            check("release store: approving does not write a fake task snapshot", try Data(contentsOf: LinglongtaiPaths.state) == beforeSnapshot)
-            store.respondToApproval(request, decision: .deny)
-            check("release store: duplicate confirmation cannot replace an already submitted decision",
-                  (try? Data(contentsOf: replyURL)) == reply && store.tasks == beforeTasks)
-            check("release store: handled requests cannot be offered for approval again", store.approvalRequest(for: task) == nil)
-            // wait() is safe here only after evidence that a reply was written;
-            // otherwise it would mask a failure by waiting out the 45s TTL.
-            if reply != nil {
-                check("release store: the hook-side relay receives the exact explicit decision", ApprovalRelay.wait(for: request) == .allow)
-            }
-            date.addTimeInterval(1)
-            try emit(AgentEvent(type: "upsert", id: task.id, agent: "Codex", status: .waiting,
-                                requiresApproval: true, createdAt: date, sourceEvent: "Notification"))
-            store.consumeEvents()
-            if let notificationTask = store.tasks.first(where: { $0.id == task.id }) {
-                check("a real prompt after a submitted relay is not suppressed by its previous request",
-                      store.needsUserAttention(notificationTask) && notificationTask.approvalRequestID == nil &&
-                      store.approvalFeedback(for: notificationTask) == nil)
-            }
-            date.addTimeInterval(1)
-            try emit(AgentEvent(type: "upsert", id: task.id, agent: "Codex", status: .running,
-                                requiresApproval: false, createdAt: date, sourceEvent: "PreToolUse"))
-            store.consumeEvents()
-            check("release store: only a provider callback resumes the approved task",
-                  store.tasks.first { $0.id == task.id }?.status == .running &&
-                  store.tasks.first { $0.id == task.id }?.requiresApproval == false &&
-                  store.tasks.first { $0.id == task.id }?.approvalRequestID == nil)
-        }
-
-        date = Date()
-        if let (staleTask, staleRequest) = try pendingTask() {
-            date.addTimeInterval(1)
-            try emit(AgentEvent(type: "upsert", id: staleTask.id, agent: "Codex", status: .running,
-                                requiresApproval: false, createdAt: date, sourceEvent: "PostToolUse"))
-            store.consumeEvents()
-            store.reviewApproval(for: staleTask)
-            check("release store: stale UI snapshots cannot reopen a permission already resolved by the provider",
-                  store.approvalRequest(for: staleTask) == nil && store.reviewingApproval == nil)
-            let beforeTasks = store.tasks
-            store.respondToApproval(staleRequest, decision: .allow)
-            let staleReplyURL = LinglongtaiPaths.applicationSupport.appendingPathComponent("pending-approvals/\(staleRequest.id.uuidString).reply")
-            check("release store: stale approval actions neither emit decisions nor alter current task state",
-                  !FileManager.default.fileExists(atPath: staleReplyURL.path) && store.tasks == beforeTasks)
-            check("release store: a failed confirmation exposes a visible failure instead of success",
-                  store.approvalFeedback(for: staleTask) == "未提交决定 · 请在原应用核实" &&
-                  store.failedApprovals.contains(staleTask.id))
-        }
-
-        date = Date()
-        if let (expiringTask, expiringRequest) = try pendingTask() {
-            store.reviewApproval(for: expiringTask)
-            date.addTimeInterval(45)
-            store.refreshPresentation()
-            check("an expired island request is no longer advertised as a user confirmation",
-                  !store.needsUserAttention(expiringTask) && store.displayedStatus(for: expiringTask) == "等待权限结果")
-            check("release store: request expiration removes review and shows bounded failure feedback",
-                  store.reviewingApproval == nil && store.approvalRequest(for: expiringTask) == nil && store.presentation == .medium)
-            check("release store: expiration remains explicitly visible as an unsubmitted decision",
-                  store.approvalFeedback(for: expiringTask) == "未提交决定 · 请在原应用核实")
-            date.addTimeInterval(10)
-            store.refreshPresentation()
-            check("release store: expiration feedback shrinks after ten seconds instead of pinning the island",
-                  store.presentation == .compact)
-            let beforeTasks = store.tasks
-            store.respondToApproval(expiringRequest, decision: .allow)
-            let expiredReplyURL = LinglongtaiPaths.applicationSupport.appendingPathComponent("pending-approvals/\(expiringRequest.id.uuidString).reply")
-            check("release store: an expired review never grants approval or marks a task complete",
-                  !FileManager.default.fileExists(atPath: expiredReplyURL.path) && store.tasks == beforeTasks)
-            date.addTimeInterval(11)
-            store.refreshPresentation()
-            check("expired relay feedback has finished before the provider's next prompt",
-                  store.presentation == .compact)
-            try emit(AgentEvent(type: "upsert", id: expiringTask.id, agent: "Codex", status: .waiting,
-                                requiresApproval: true, createdAt: date, sourceEvent: "Notification"))
-            store.consumeEvents()
-            if let notificationTask = store.tasks.first(where: { $0.id == expiringTask.id }) {
-                check("a real prompt after expiry clears obsolete approval feedback and restores attention",
-                      store.needsUserAttention(notificationTask) && notificationTask.approvalRequestID == nil &&
-                      store.approvalFeedback(for: notificationTask) == nil && store.presentation == .medium)
-            }
-        }
-        let journal = try String(contentsOf: LinglongtaiPaths.events, encoding: .utf8)
-        let snapshot = try String(contentsOf: LinglongtaiPaths.state, encoding: .utf8)
-        check("release store: approval action context stays out of event history and task snapshots",
-              !journal.contains(privateContext) && !snapshot.contains(privateContext))
-        check("release store: approval relay does not emit an unconsumed generic approve command",
-              try Data(contentsOf: LinglongtaiPaths.commands) == commandBytes)
+        check("release store: approval relay is disabled until a provider-specific loop is verified",
+              !ApprovalRelay.islandApprovalEnabled)
         store.clearAllTasks()
     }
 

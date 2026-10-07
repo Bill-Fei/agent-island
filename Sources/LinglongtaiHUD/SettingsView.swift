@@ -31,11 +31,7 @@ struct AppSettingsView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 12) {
-                Image(systemName: "rectangle.topthird.inset.filled")
-                    .font(.system(size: 24, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 46, height: 46)
-                    .background(Color.black, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                LinglongtaiBrandMark(size: 46)
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Agent 灵动岛")
                         .font(.system(size: 24, weight: .bold, design: .rounded))
@@ -159,7 +155,7 @@ struct AppSettingsView: View {
     }
 
     private var agentsSection: some View {
-        SettingsCard(title: "Agent", subtitle: "Codex、Claude Code、WorkBuddy 任务事件；豆包仅应用状态") {
+        SettingsCard(title: "Agent", subtitle: "Codex、Claude Code、WorkBuddy 走 Hook 事件；豆包读取本地 Agent 模式轨迹") {
             VStack(spacing: 10) {
                 ForEach(AgentCatalog.supportedKinds, id: \.self) { kind in
                     HStack(spacing: 12) {
@@ -181,7 +177,7 @@ struct AppSettingsView: View {
                     }
                 }
             }
-            Text("豆包模型 API 不等于豆包桌面会话接入；目前仅显示应用运行状态。Codex / Claude Code / WorkBuddy 单次批准需安装并信任批准桥接；不支持的请求仍在原应用确认。")
+            Text("豆包没有开放 Hook，改为只读它写在本地的 Agent 模式轨迹：不读对话内容、不需要任何权限，但只能看、不能批准；普通聊天在云端，本地没有记录。轨迹行内没有时间戳，长时间无更新时状态显示为未知而不是完成。Codex / Claude Code / WorkBuddy 单次批准需安装并信任批准桥接；不支持的请求仍在原应用确认。")
                 .font(.system(size: 11)).foregroundStyle(.secondary)
         }
     }
@@ -211,20 +207,20 @@ struct AppSettingsView: View {
     }
 
     private var doubaoSection: some View {
-        SettingsCard(title: "豆包接入状态", subtitle: "应用是否运行，与 Agent 是否正在执行任务是两件事") {
+        SettingsCard(title: "豆包接入状态", subtitle: "只读本地 Agent 模式轨迹，看不到普通聊天") {
             HStack {
                 AgentIcon(kind: .doubao, size: 32)
                 Text(presence.label(for: .doubao))
                 Spacer()
                 Button("打开豆包") { presence.open(.doubao) }.disabled(!presence.canOpen(.doubao))
             }
-            Text("会话进度 / 审批回传：尚未接入。当前未确认有适用于豆包桌面会话的官方事件接口；接入模型 API 也不会获得你在桌面应用中的任务状态。")
+            Text("已接入：豆包桌面端会把 Agent 模式的每一步写在本地，岛上直接读这个文件推导“运行中 / 本轮已结束 / 状态未知”。审批回传仍未接入——豆包没有可回写的接口，需要你确认的操作只能回豆包里点。普通聊天全程在云端，本地不留痕迹，因此无法接入。")
                 .font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack {
                 Link("豆包官网", destination: URL(string: "https://www.doubao.com/")!)
                 Link("火山引擎模型平台", destination: URL(string: "https://www.volcengine.com/product/ark")!)
             }.font(.system(size: 11))
-            Text("暂不索取 API Key，也不会用模拟任务填充这里。")
+            Text("只读取角色与工具类别，不读对话内容，不索取 API Key，也不会用模拟任务填充这里。")
                 .font(.system(size: 11)).foregroundStyle(.secondary)
         }
     }
