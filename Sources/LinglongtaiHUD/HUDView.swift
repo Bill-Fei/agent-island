@@ -247,11 +247,11 @@ private struct HUDExpandedContent: View {
                 LinglongtaiBrandMark(size: 24, active: store.activeTaskIsExecuting)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Agent 灵动岛")
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
-                        .tracking(1.2)
+                        .font(HUDTypography.pageTitle)
+                        .tracking(0.2)
                         .foregroundStyle(.white)
                     Text(store.demoPreviewActive ? "演示预览 · 非真实状态" : "你的 Agent 管家")
-                        .font(.system(size: 10, weight: .medium, design: .rounded))
+                        .font(HUDTypography.caption)
                         .foregroundStyle(.white.opacity(0.48))
                         .lineLimit(1)
                 }
@@ -289,10 +289,10 @@ private struct HUDExpandedContent: View {
         return VStack(alignment: .leading, spacing: 11) {
             HStack {
                 Text("最近 24 小时")
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .font(HUDTypography.captionEmphasis)
                     .foregroundStyle(.white.opacity(0.46))
                 Spacer()
-                Text("进行中优先").font(.system(size: 10)).foregroundStyle(.secondary)
+                Text("进行中优先").font(HUDTypography.caption).foregroundStyle(.secondary)
             }
             .padding(.horizontal, 18)
 
@@ -302,7 +302,7 @@ private struct HUDExpandedContent: View {
                         Color.clear.frame(height: 0).id("task-list-top")
                         LazyVStack(spacing: 7) {
                             if tasks.isEmpty {
-                                Text("最近 24 小时暂无会话记录").font(.system(size: 12))
+                                Text("最近 24 小时暂无会话记录").font(HUDTypography.body)
                                     .foregroundStyle(.secondary).padding(.vertical, 24)
                             }
                             ForEach(tasks) { task in
@@ -345,13 +345,13 @@ private struct HUDExpandedContent: View {
                     HStack(alignment: .center, spacing: 8) {
                         AgentAvatar(task: task, size: 32)
                         Text(task.agent)
-                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .font(HUDTypography.bodyEmphasis)
                             .foregroundStyle(.white)
                             .lineLimit(1)
                             .minimumScaleFactor(0.9)
                         Spacer(minLength: 4)
                         Text(store.displayedStatus(for: task))
-                            .font(.system(size: 10, weight: .medium))
+                            .font(HUDTypography.captionEmphasis)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.9)
@@ -366,31 +366,33 @@ private struct HUDExpandedContent: View {
                     }
 
                     Text(conversationTitles.title(for: task))
-                        .font(.system(size: 16, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white)
+                        .font(HUDTypography.body)
+                        .foregroundStyle(.white.opacity(0.72))
                         .lineLimit(2)
                         .padding(.top, 16)
                     ScrollView {
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("当前步骤").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                            Text("当前步骤").font(HUDTypography.captionEmphasis).foregroundStyle(.secondary)
                             Text(store.currentStepText(for: task))
-                                .font(.system(size: 13)).fixedSize(horizontal: false, vertical: true)
-                            Text("已执行步骤").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                                .font(HUDTypography.bodyEmphasis)
+                                .foregroundStyle(.white.opacity(0.9))
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text("已执行步骤").font(HUDTypography.captionEmphasis).foregroundStyle(.secondary)
                             if task.returnedToolSteps.isEmpty {
-                                Text("尚未收到工具完成事件").font(.system(size: 12)).foregroundStyle(.secondary)
+                                Text("尚未收到工具完成事件").font(HUDTypography.body).foregroundStyle(.secondary)
                             } else {
                                 Text(task.hasUnidentifiedToolSteps ? "收到 \(task.returnedToolSteps.count) 条工具返回记录 · 未提供唯一步骤标识" : "\(task.returnedToolSteps.count) 个工具步骤已返回")
-                                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                                    .font(HUDTypography.caption).foregroundStyle(.secondary)
                                 ForEach(Array(task.returnedToolSteps.prefix(30))) { step in
                                     HStack(alignment: .top) {
                                         Image(systemName: step.state == .failed ? "exclamationmark.circle" : "arrow.turn.down.right")
                                         Text(step.label + (step.state == .failed ? " · 返回错误" : " · 已返回"))
                                         Spacer()
                                         Text(step.updatedAt, style: .time).foregroundStyle(.secondary)
-                                    }.font(.system(size: 12))
+                                    }.font(HUDTypography.body)
                                 }
                                 if task.returnedToolSteps.count > 30 {
-                                    Text("显示最近 30 条，计数包含全部返回记录").font(.caption2).foregroundStyle(.secondary)
+                                    Text("显示最近 30 条，计数包含全部返回记录").font(HUDTypography.caption).foregroundStyle(.secondary)
                                 }
                             }
                         }.frame(maxWidth: .infinity, alignment: .leading)
@@ -410,7 +412,7 @@ private struct HUDExpandedContent: View {
                         .font(.system(size: 26, weight: .light))
                         .foregroundStyle(.white.opacity(0.42))
                     Text("等待任务事件")
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .font(HUDTypography.bodyEmphasis)
                         .foregroundStyle(.white.opacity(0.58))
                     ForEach(AgentCatalog.supportedKinds, id: \.self) { kind in
                         HStack {
@@ -418,11 +420,11 @@ private struct HUDExpandedContent: View {
                             Spacer()
                             Text(store.connectionLabel(for: kind)).foregroundStyle(.secondary)
                         }
-                        .font(.system(size: 11))
+                        .font(HUDTypography.body)
                     }
                     .padding(.horizontal, 24)
                     Text("收到真实事件后显示；不推测任务进度。")
-                        .font(.system(size: 9)).foregroundStyle(.secondary)
+                        .font(HUDTypography.caption).foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -440,7 +442,7 @@ private struct HUDExpandedContent: View {
             HStack(alignment: .bottom, spacing: 8) {
                 if store.displayedStatus(for: task) == "等待状态更新" {
                     Button("从岛上移除") { store.dismissTask(task) }
-                        .font(.system(size: 10))
+                        .font(HUDTypography.caption)
                         .buttonStyle(.plain)
                         .foregroundStyle(.secondary)
                         .fixedSize()
@@ -448,7 +450,7 @@ private struct HUDExpandedContent: View {
                 }
                 Spacer(minLength: 8)
                 Text(store.approvalFeedback(for: task) ?? (store.needsUserAttention(task) && store.approvalRequest(for: task) == nil ? "需在原应用确认" : "由真实事件更新"))
-                    .font(.system(size: 9, weight: .medium, design: .rounded))
+                    .font(HUDTypography.caption)
                     .foregroundStyle(.white.opacity(0.32))
                     .multilineTextAlignment(.trailing)
                     .lineLimit(2)
@@ -479,8 +481,8 @@ private struct Metric: View {
 
     var body: some View {
         VStack(spacing: 1) {
-            Text(value).font(.system(size: 13, weight: .bold, design: .rounded)).foregroundStyle(tint)
-            Text(label).font(.system(size: 8, weight: .bold, design: .rounded)).tracking(0.7).foregroundStyle(.white.opacity(0.35))
+            Text(value).font(HUDTypography.metric).monospacedDigit().foregroundStyle(tint)
+            Text(label).font(HUDTypography.caption).foregroundStyle(.white.opacity(0.35))
         }
         .frame(minWidth: 36)
     }
@@ -556,7 +558,7 @@ private struct TaskRow: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 5) {
                         Text(task.agent)
-                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .font(HUDTypography.bodyEmphasis)
                             .foregroundStyle(.white.opacity(isEnded ? 0.6 : 1))
                         if needsAttention {
                             Image(systemName: "hand.raised.fill")
@@ -565,14 +567,14 @@ private struct TaskRow: View {
                         }
                     }
                     Text(title)
-                        .font(.system(size: 10, weight: .regular, design: .rounded))
+                        .font(HUDTypography.caption)
                         .foregroundStyle(.white.opacity(0.48))
                         .lineLimit(2)
                         .help(title)
                 }
                 Spacer(minLength: 4)
                 Label(stateText, systemImage: isStale || (task.status == .waiting && !needsAttention) ? "clock" : task.status.symbolName)
-                    .font(.system(size: 9, weight: .medium))
+                    .font(HUDTypography.captionEmphasis)
                     .foregroundStyle(isEnded || isStale || (task.status == .waiting && !needsAttention) ? Color.secondary : task.status.tint)
                     .fixedSize()
             }
@@ -597,7 +599,7 @@ private struct ActionButton: View {
     var body: some View {
         Button(action: action) {
             Label(title, systemImage: systemName)
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .font(HUDTypography.captionEmphasis)
                 .foregroundStyle(tint)
                 .padding(.horizontal, 11)
                 .padding(.vertical, 7)
