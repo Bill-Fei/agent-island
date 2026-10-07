@@ -10,6 +10,8 @@ final class ConversationTitleStore: ObservableObject {
     private var loading = false
     private var codexTitles: [String: String] = [:]
     private var workBuddyTitles: [String: String] = [:]
+    private var claudeTitles: [String: String] = [:]
+    private var claudeReader = ClaudeConversationTitles()
 
     private init() {
         let arguments = ProcessInfo.processInfo.arguments
@@ -21,9 +23,12 @@ final class ConversationTitleStore: ObservableObject {
     private func refresh() {
         guard !loading else { return }
         loading = true
+        let reader = claudeReader
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let codex = ConversationTitles.codexSnapshot()
             let workBuddy = ConversationTitles.workBuddySnapshot()
+            var claudeReader = reader
+            let claude = claudeReader.snapshot()
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.loading = false
@@ -32,7 +37,10 @@ final class ConversationTitleStore: ObservableObject {
                 // snapshot does clear deleted/untitled metadata.
                 if let codex { self.codexTitles = codex }
                 if let workBuddy { self.workBuddyTitles = workBuddy }
+                self.claudeReader = claudeReader
+                if let claude { self.claudeTitles = claude }
                 let combined = self.codexTitles.merging(self.workBuddyTitles) { _, workBuddy in workBuddy }
+                    .merging(self.claudeTitles) { _, claude in claude }
                 if self.titles != combined { self.titles = combined }
             }
         }

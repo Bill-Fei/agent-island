@@ -79,7 +79,7 @@ public enum ConversationTitles {
 
     public static func display(task: AgentTask, titles: [String: String]) -> String {
         let generic = ["Codex 会话", "Claude Code 会话", "Claude 会话", "WorkBuddy 会话", "豆包 Agent 会话", "豆包 会话"]
-        if task.profile.kind == .codex || (task.profile.kind == .workBuddy && generic.contains(task.title)),
+        if task.profile.kind == .codex || ([AgentKind.workBuddy, .claude].contains(task.profile.kind) && generic.contains(task.title)),
            let session = task.sessionID, let title = titles[session] { return title }
         if generic.contains(task.title) {
             let identity = task.sessionID.map { String($0.suffix(6)) } ?? String(task.id.uuidString.prefix(6))
