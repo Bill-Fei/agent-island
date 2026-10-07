@@ -8,6 +8,8 @@ final class ConversationTitleStore: ObservableObject {
     @Published private(set) var titles: [String: String] = [:]
     private var timer: Timer?
     private var loading = false
+    private var codexTitles: [String: String] = [:]
+    private var workBuddyTitles: [String: String] = [:]
 
     private init() {
         let arguments = ProcessInfo.processInfo.arguments
@@ -20,11 +22,18 @@ final class ConversationTitleStore: ObservableObject {
         guard !loading else { return }
         loading = true
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            let result = ConversationTitles.codexSnapshot()
+            let codex = ConversationTitles.codexSnapshot()
+            let workBuddy = ConversationTitles.workBuddySnapshot()
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.loading = false
-                if let result, self.titles != result { self.titles = result }
+                // A temporarily unavailable source must not erase the other
+                // provider or its own last good snapshot. A successful empty
+                // snapshot does clear deleted/untitled metadata.
+                if let codex { self.codexTitles = codex }
+                if let workBuddy { self.workBuddyTitles = workBuddy }
+                let combined = self.codexTitles.merging(self.workBuddyTitles) { _, workBuddy in workBuddy }
+                if self.titles != combined { self.titles = combined }
             }
         }
     }
