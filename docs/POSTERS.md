@@ -36,6 +36,12 @@
 
 署名：Designed by Bill · GitHub @Bill-Fei。GitHub 用户名已通过账号资料确认；链接为 https://github.com/Bill-Fei，不暗示仓库已经上线。
 
-分享文案沿用 `media/alpha-covers-20261008-v4/SHARE.md`。排版源文件：`media/alpha-covers-20261008-v6-4k/compose_covers.py`。系统图标保存在同目录 `assets/`，仅作为桌面环境插图，权利归各自所有者。背景沿用旧版素材中不包含界面的壁纸区域。旧版保留供对比，未作为本版产品界面使用。
+## 产品总览
+
+![Agent 灵动岛产品总览](media/alpha-overview-20261008/agent-island-overview-4k.png)
+
+这张总览海报借鉴「顶部主张 + 三行能力说明」的叙事方式：轻态、中态、展开态分别对应一段真实产品界面局部。尺寸为 2880 × 3840（长边 4K），另有 JPG 和 1080 × 1440 预览图。三种状态不会被误解为同时出现在同一块屏幕；展开态使用更大展示面积。
+
+分享文案沿用 `media/alpha-covers-20261008-v4/SHARE.md`。单图排版源文件：`media/alpha-covers-20261008-v6-4k/compose_covers.py`；总览排版源文件：`media/alpha-overview-20261008/compose_overview.py`。系统图标保存在单图目录 `assets/`，仅作为桌面环境插图，权利归各自所有者。背景沿用旧版素材中不包含界面的壁纸区域。旧版保留供对比，未作为本版产品界面使用。
 
 本版只在本地生成与保存，未推送 GitHub。
