@@ -2,10 +2,12 @@
 """Install only this app's lifecycle observer, preserving every existing setting."""
 import argparse
 import datetime
+import hashlib
 import json
 import os
 from pathlib import Path
 import shlex
+import re
 import tempfile
 
 
@@ -15,6 +17,22 @@ PROVIDERS = {
     "claude": (".claude/settings.json", COMMON_EVENTS + ["Notification", "StopFailure", "PostToolUseFailure"]),
     "work-buddy": (".workbuddy/settings.json", COMMON_EVENTS + ["Notification"]),
 }
+
+
+def owned_command(value, provider, support):
+    """Recognize exact island argv only; never remove another hook by substring."""
+    if not isinstance(value, str):
+        return False
+    try:
+        parts = shlex.split(value)
+    except ValueError:
+        return False
+    if len(parts) not in (4, 5) or parts[1:4] != ["hook", "--provider", provider]:
+        return False
+    if len(parts) == 5 and parts[4] != "--approval-relay":
+        return False
+    path = Path(parts[0])
+    return path.parent == support / "bin" and bool(re.fullmatch(r"linglongtaictl(?:-[0-9a-f]{16})?", path.name))
 
 
 def atomic_write(path, content, mode=0o600):
@@ -37,13 +55,14 @@ def main():
     parser.add_argument("--binary", required=True, type=Path)
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--uninstall", action="store_true")
-    parser.add_argument("--approval-relay", action="store_true", help="Enable one-shot Codex/Claude Code/WorkBuddy approval relay; temporary local context, 45s timeout")
+    parser.add_argument("--approval-relay", action="store_true", help="Opt in to Claude Code single-use approval only; other providers remain observers")
     parser.add_argument("--providers", nargs="+", choices=list(PROVIDERS), default=list(PROVIDERS))
     args = parser.parse_args()
     task_home = Path.home()
     support = task_home / "Library/Application Support/LinglongtaiHUD"
-    installed_binary = support / "bin/linglongtaictl"
     binary = args.binary.resolve(strict=True)
+    binary_data = binary.read_bytes()
+    installed_binary = support / ("bin/linglongtaictl-" + hashlib.sha256(binary_data).hexdigest()[:16])
     plans = []
     for provider in args.providers:
         relative, events = PROVIDERS[provider]
@@ -66,14 +85,14 @@ def main():
                 if not isinstance(group, dict) or not isinstance(group.get("hooks"), list):
                     raise ValueError(f"Unexpected hook group: {config}, {event}")
                 new_group = dict(group)
-                new_group["hooks"] = [hook for hook in group["hooks"] if hook.get("command") not in [command, command + " --approval-relay"]]
+                new_group["hooks"] = [hook for hook in group["hooks"] if not owned_command(hook.get("command"), provider, support)]
                 if new_group["hooks"]:
                     kept.append(new_group)
             hooks[event] = kept
         if not args.uninstall:
             for event in events:
                 group = {"hooks": [{"type": "command", "command": command, "timeout": 2}]}
-                if args.approval_relay and event == "PermissionRequest":
+                if args.approval_relay and provider == "claude" and event == "PermissionRequest":
                     group["hooks"][0].update(command=command + " --approval-relay", timeout=50)
                 if event == "Notification":
                     group["matcher"] = "permission_prompt|elicitation_dialog|agent_needs_input"
@@ -88,8 +107,16 @@ def main():
         return
     stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     if not args.uninstall:
-        atomic_write(installed_binary, binary.read_bytes(), 0o755)
+        if installed_binary.is_symlink():
+            raise ValueError("Refusing a symlinked bridge")
+        if installed_binary.exists():
+            if installed_binary.read_bytes() != binary_data:
+                raise ValueError("Existing immutable bridge content differs; configuration unchanged")
+        else:
+            atomic_write(installed_binary, binary_data, 0o755)
     for config, original, updated in plans:
+        if config.is_symlink() or (config.read_bytes() if config.exists() else None) != original:
+            raise ValueError(f"Configuration changed during installation; refusing to overwrite: {config}")
         if original == updated:
             continue
         if original is not None:

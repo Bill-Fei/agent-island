@@ -86,23 +86,17 @@ func runReleaseRevisionChecks(check: (String, Bool) -> Void) {
     var permission = AgentEvent(type: "upsert", id: UUID(), agent: "Codex", status: .waiting,
                                 requiresApproval: true, createdAt: origin, sourceEvent: "PermissionRequest")
     func payload(_ input: Any, tool: String = "Bash") -> Data {
-        (try? JSONSerialization.data(withJSONObject: ["tool_name": tool, "cwd": "/tmp/release-fixture", "tool_input": input])) ?? Data()
+        (try? JSONSerialization.data(withJSONObject: ["hook_event_name": "PermissionRequest", "tool_name": tool, "cwd": "/tmp/release-fixture", "tool_input": input])) ?? Data()
     }
     let safe = payload(["command": "printf release-fixture"])
-    for provider in [AgentKind.codex, .claude, .workBuddy] {
+    for provider in [AgentKind.codex, .workBuddy] {
         permission.agent = provider.displayName
-        let first = ApprovalRelay.makeRequest(payload: safe, event: permission, now: origin)
-        let second = ApprovalRelay.makeRequest(payload: safe, event: permission, now: origin)
-        check("release: \(provider.rawValue) request binds exact task, provider and bounded lifetime",
-              first?.taskID == permission.id && first?.provider == provider && first?.expiresAt == origin.addingTimeInterval(45))
-        check("release: \(provider.rawValue) separate permission requests never reuse a response identity",
-              first?.id != nil && second?.id != nil && first?.id != second?.id)
-        check("release: approval preview retains the exact safe action instead of a generic affirmative button",
-              first?.context.contains("printf release-fixture") == true && first?.tool == "执行命令" &&
-              first?.context.contains("/tmp/release-fixture") == true && first?.context.contains("Bash") == true)
+        check("release: \(provider.rawValue) PermissionRequest stays observer-only",
+              ApprovalRelay.makeRequest(payload: safe, event: permission, now: origin) == nil)
     }
-    permission.agent = "Codex"
-    let missingCwd = try! JSONSerialization.data(withJSONObject: ["tool_name": "Bash", "tool_input": ["command": "printf fixture"]])
+    permission.agent = "Claude"
+    check("release: complete Claude Code request reaches relay validation", ApprovalRelay.makeRequest(payload: safe, event: permission, now: origin) != nil)
+    let missingCwd = try! JSONSerialization.data(withJSONObject: ["hook_event_name": "PermissionRequest", "tool_name": "Bash", "tool_input": ["command": "printf fixture"]])
     check("release: a missing working directory never produces an under-specified approval",
           ApprovalRelay.makeRequest(payload: missingCwd, event: permission, now: origin) == nil)
     for input in [["authorization": "bearer fixture"], ["command": "read .env"], ["password": "fixture"], ["nested": "api_key=fixture"]] {

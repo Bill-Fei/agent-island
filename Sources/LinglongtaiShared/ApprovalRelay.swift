@@ -4,7 +4,12 @@ import Darwin
 /// Opt-in, one-shot PermissionRequest relay. Never grants standing permissions.
 /// Context is local, private, short-lived and excluded from the event journal.
 public enum ApprovalRelay {
+    /// Claude Code only; hook callers must explicitly opt in. Other providers
+    /// remain observation-only, and no standing permissions are returned.
+    public static func supports(_ provider: AgentKind) -> Bool { provider == .claude }
+
     public struct Request: Codable, Identifiable, Equatable, Sendable {
+        public var protocolVersion = 2
         public var id: UUID
         public var taskID: UUID
         public var provider: AgentKind
@@ -23,10 +28,12 @@ public enum ApprovalRelay {
     public static func makeRequest(payload: Data, event: AgentEvent, now: Date = Date()) -> Request? {
         guard let taskID = event.id, event.type == "upsert", event.status == .waiting,
               event.requiresApproval == true, event.sourceEvent == "PermissionRequest",
-              let provider = event.agent.map(AgentKind.resolve), [.codex, .claude, .workBuddy].contains(provider),
+              let provider = event.agent.map(AgentKind.resolve), supports(provider),
               let input = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
+              input["hook_event_name"] as? String == "PermissionRequest",
+              (input["agent_id"] as? String ?? "").isEmpty,
               let tool = input["tool_name"] as? String, !tool.isEmpty, tool.count <= 120,
-              let arguments = input["tool_input"], JSONSerialization.isValidJSONObject(arguments),
+              let arguments = input["tool_input"] as? [String: Any], JSONSerialization.isValidJSONObject(arguments),
               let cwd = input["cwd"] as? String, cwd.hasPrefix("/"), cwd.count <= 1_024,
               let data = try? JSONSerialization.data(withJSONObject: ["tool": tool, "working_directory": cwd, "arguments": arguments], options: [.sortedKeys, .prettyPrinted, .withoutEscapingSlashes]),
               data.count <= 8_192, let context = String(data: data, encoding: .utf8),
@@ -41,6 +48,9 @@ public enum ApprovalRelay {
     }
 
     public static func publish(_ request: Request) -> Bool {
+        guard supports(request.provider), request.protocolVersion == 2,
+              request.processID == getpid(), request.expiresAt > Date(),
+              request.expiresAt.timeIntervalSinceNow <= 46 else { return false }
         guard prepareDirectory(), let data = try? JSONEncoder().encode(request) else { return false }
         cleanupExpired()
         return writeExclusive(data, to: requestURL(request.id))
@@ -78,7 +88,7 @@ public enum ApprovalRelay {
     }
 
     public static func pending(_ id: UUID, taskID: UUID, now: Date = Date()) -> Request? {
-        guard let request = readRequest(id), request.taskID == taskID,
+        guard let request = readRequest(id), supports(request.provider), request.protocolVersion == 2, request.taskID == taskID,
               request.expiresAt > now, request.expiresAt.timeIntervalSince(now) <= 46,
               request.processID > 0, kill(request.processID, 0) == 0,
               !FileManager.default.fileExists(atPath: replyURL(id).path) else { return nil }
@@ -92,6 +102,7 @@ public enum ApprovalRelay {
     }
 
     public static func wait(for request: Request) -> Decision? {
+        guard supports(request.provider), request.protocolVersion == 2 else { return nil }
         defer { cleanup(request.id) }
         let deadline = ProcessInfo.processInfo.systemUptime + 45
         while Date() < request.expiresAt && ProcessInfo.processInfo.systemUptime < deadline {

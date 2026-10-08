@@ -220,14 +220,15 @@ struct LinglongtaiCtl {
             if chunk.isEmpty { break }
             input.append(chunk)
         }
-        var approval: ApprovalRelay.Request?
         var publishedEvent = false
-        // Default mode remains metadata-only. Relay requires explicit opt-in.
+        var approval: ApprovalRelay.Request?
+        // Explicit opt-in applies ONLY to Claude Code's documented contract.
         withEventLock { fd in
             guard var state = loadBridgeState(), recoverPending(&state, descriptor: fd),
                   let mapped = HookEventMapper.map(provider: AgentKind.resolve(provider), payload: input) else { return }
             var events = state.tracker.route(mapped)
-            if args.contains("--approval-relay"), ApprovalRelay.hasActiveHUD, events.count == 1,
+            if args.contains("--approval-relay"), ApprovalRelay.supports(AgentKind.resolve(provider)),
+               ApprovalRelay.hasActiveHUD, events.count == 1,
                let request = ApprovalRelay.makeRequest(payload: input, event: events[0]),
                ApprovalRelay.publish(request) {
                 approval = request
@@ -244,10 +245,11 @@ struct LinglongtaiCtl {
             ApprovalRelay.cleanup(request.id)
             approval = nil
         }
-        // Crucially wait outside the journal lock: other sessions remain live.
+        // Wait outside the journal lock. No decision falls back to the provider.
         if let request = approval, let decision = ApprovalRelay.wait(for: request) {
-            let result = ["hookSpecificOutput": ["hookEventName": "PermissionRequest",
-                                                "decision": ["behavior": decision.rawValue]]] as [String: Any]
+            let result: [String: Any] = ["hookSpecificOutput": [
+                "hookEventName": "PermissionRequest", "decision": ["behavior": decision.rawValue]
+            ]]
             if let data = try? JSONSerialization.data(withJSONObject: result),
                let json = String(data: data, encoding: .utf8) { print(json) }
         }

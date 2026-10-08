@@ -1,6 +1,6 @@
 # Agent 灵动岛 / Agent Dynamic Island
 
-你的 Agent 管家。运行在 macOS 刘海区域的本地动态状态层：空闲时归入物理刘海，事件到达时保持刘海高度并横向展开，连续悬停 0.2 秒查看详情。状态来自真实事件，不推测进度。当前只观察状态，待确认操作回原应用处理，不在岛上批准、停止或重试。
+你的 Agent 管家。运行在 macOS 刘海区域的本地动态状态层：空闲时归入物理刘海，事件到达时保持刘海高度并横向展开，连续悬停 0.2 秒查看详情。状态来自真实事件，不推测进度。默认只观察状态；Claude Code 可显式开启经参数审阅的单次审批，其余待确认操作回原应用处理。不在岛上停止或重试任务。
 
 内置四个一级 Agent 身份：
 
@@ -122,25 +122,24 @@ $CTL finish --id "$TASK_ID"
 
 HUD 提供“打开应用”，不在本地假装停止、重试或任务完成。`commands.jsonl` 是旧命令请求协议，不代表厂商执行成功，也不由当前界面调用。
 
-## 岛内单次批准（实验性）
+## 审批与权限检查
 
-Codex、Claude Code、WorkBuddy 的 PermissionRequest 可选择桥接到岛。中态显示「批准…」，小态显示可点击的橙色手掌；点击后在岛旁核对原始工具名、工作目录、完整参数，再选择「仅允许这一次」或「拒绝本次」，无需先 Hover 打开详情或切换应用。
+默认接入只观察状态，Codex、WorkBuddy、豆包不提供岛内批准回写。Claude Code 可显式开启单次审批中继：只有真实、存活、未过期且绑定当前任务的请求才显示“批准请求…”，核对完整参数后选择“仅允许这一次”或“拒绝本次”。Claude Chat 的普通通知不可回写。
 
 ```bash
-python3 script/install_hooks.py --binary .build/out/Products/Debug/linglongtaictl --approval-relay --apply
+python3 script/install_hooks.py --binary .build/out/Products/Debug/linglongtaictl --apply
 ```
 
-- 只返回原生本次 `allow` / `deny`，不写长期授权。提交后等待真实回调，不改任务为“已成功”。Codex 官方信任确认仍由用户操作；新 Hook 可能需要重启原会话。
-- 请求绑定唯一 UUID 与任务。45 秒无决定回原流程；HUD 未运行立即回退，失去心跳不超过约 4 秒回退。不完整、过大或疑似包含凭据的参数不转移到岛。
-- 确认上下文暂存在本机私有目录 `pending-approvals`（目录0700、文件0600），不进入事件日志/任务快照。正常完成或超时清理；异常退出后，下次岛启动或新请求时清理。不是系统保证的定时物理擦除。
-- 同一轮并行批准当前仅展示最新入口，较早请求超时后仍回原应用，不会被自动批准。
-- 已通过隔离进程和 Store 回归，且核对了本机消费协议。**三家真实会话中从岛点击直到工具恢复的端到端验收仍未完成**；普通 Claude Chat 和豆包不在本次批准范围内。
+- 显式开启：`python3 script/install_hooks.py --binary 'dist/Agent 灵动岛.app/Contents/Helpers/linglongtaictl' --providers claude --approval-relay --apply`。配置先备份，只使用已签名桥接程序，其他 provider 配置不变。
+- 完整工具参数只在本机私有目录暂存，敏感或过大参数回退原应用，不进入事件日志。仅回写单次 allow/deny，不写长期权限。
+- 45 秒无决定、HUD 隐藏/退出或不可用时回退原应用。真实会话是否加载新 Hook 需以实际事件确认；fixture 不等于端到端验证。
+- 原生“安装接入”当前仍安装观察模式，重新安装 Claude 后如需快捷审批，须再次显式执行上述选项。
 
-协议依据：[Claude Code 官方 Hooks 文档](https://code.claude.com/docs/en/hooks#permissionrequest-decision-control)；本机 Codex `permission-request.command.output` 内置 Schema；本机 WorkBuddy 2.115.0 `executePermissionRequestHooks` / `executeToolWithHooks` 代码。兼容性不能泛化所有历史版本。
+协议依据：[Claude Code 官方 Hooks 文档](https://code.claude.com/docs/en/hooks#permissionrequest-decision-control)。该回写协议不泛化到其他应用或历史版本。
 
 ## 当前边界
 
-当前能力与待验证项以 [0.3.1 发布准备](docs/RELEASE_READINESS.md) 为准。下列日期条目为历史记录；旧“批准桥 / 审批接管 / 安装批准 Hook”描述已失效，当前 observer-only 不向原应用回传任何批准决定。
+当前能力与待验证项以 [0.3.1 发布准备](docs/RELEASE_READINESS.md) 和 [Claude 快捷审批修订](docs/CLAUDE_APPROVAL_FIX_20261008.md) 为准。旧三家通用批准桥已失效，目前只恢复 Claude Code 显式开启的单次中继。
 
 - `20261006.7`：左侧无额外边框；多任务图标叠放，当前展示任务在最前。Hover保留最近24小时的进行中与已结束记录，状态文字及弱化样式区分；历史不计运行数量、不让空闲岛常驻。相关Store回归与构建通过，小态实机可见；完整列表视觉验收受锁屏中断。
 - `20261006.6`：补上处理中小态右侧动态指示。真实 running 时显示三段错峰呼吸条，不代表百分比；等待、批准、过期、完成、失败与减少动态效果时保持静态 SF Symbol。固定在右侧小翼内，不改变刘海宽度或相机避让区。

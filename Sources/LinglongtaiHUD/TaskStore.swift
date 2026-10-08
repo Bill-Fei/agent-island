@@ -36,7 +36,7 @@ final class TaskStore: ObservableObject {
     private(set) var contextMenuIsOpen = false
 
     func approvalRequest(for task: AgentTask) -> ApprovalRelay.Request? {
-        guard ApprovalRelay.islandApprovalEnabled else { return nil }
+        guard ApprovalRelay.supports(task.profile.kind) else { return nil }
         guard let current = tasks.first(where: { $0.id == task.id }),
               current.approvalRequestID == task.approvalRequestID,
               current.updatedAt == task.updatedAt,
@@ -44,7 +44,9 @@ final class TaskStore: ObservableObject {
               current.sourceEvent != "AmbiguousTurn", now().timeIntervalSince(current.updatedAt) <= 86_400,
               now().timeIntervalSince(current.updatedAt) >= -5,
               let id = current.approvalRequestID else { return nil }
-        return ApprovalRelay.pending(id, taskID: task.id, now: now())
+        guard let request = ApprovalRelay.pending(id, taskID: task.id, now: now()),
+              request.provider == task.profile.kind else { return nil }
+        return request
     }
 
     func approvalFeedback(for task: AgentTask) -> String? {
@@ -173,7 +175,7 @@ final class TaskStore: ObservableObject {
             return
         }
         LinglongtaiPaths.prepare()
-        ApprovalRelay.clearPendingRequests()
+        ApprovalRelay.cleanupExpired()
         loadTasks()
         selectedTaskID = sortedTasks.first?.id
         consumeEvents()

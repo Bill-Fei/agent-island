@@ -25,17 +25,17 @@ func runButlerRevisionChecks(check: (String, Bool) -> Void) {
     let encoded = try! JSONEncoder().encode(task)
     check("tool ledger survives snapshot roundtrip", (try? JSONDecoder().decode(AgentTask.self, from: encoded)) == task)
 
-    var mapped = AgentEvent(type: "upsert", id: UUID(), agent: "Codex", status: .waiting,
+    var mapped = AgentEvent(type: "upsert", id: UUID(), agent: "Claude", status: .waiting,
                             requiresApproval: true, sourceEvent: "PermissionRequest")
     func payload(_ args: [String: Any]) -> Data {
-        try! JSONSerialization.data(withJSONObject: ["tool_name": "Bash", "cwd": "/tmp/approval-fixture", "tool_input": args])
+        try! JSONSerialization.data(withJSONObject: ["hook_event_name": "PermissionRequest", "tool_name": "Bash", "cwd": "/tmp/approval-fixture", "tool_input": args])
     }
     let safe = payload(["command": "printf hello"])
-    let request = ApprovalRelay.makeRequest(payload: safe, event: mapped, now: date)
-    check("permission relay binds one exact task and expires in 45 seconds",
-          request?.taskID == mapped.id && request?.expiresAt == date.addingTimeInterval(45))
-    check("credentials are not copied into approval cache", ApprovalRelay.makeRequest(payload: payload(["token": "private"]), event: mapped) == nil)
-    check("oversized approval inputs fall back rather than truncate", ApprovalRelay.makeRequest(payload: payload(["command": String(repeating: "x", count: 9000)]), event: mapped) == nil)
+    check("only Claude Code supports single-use approval requests",
+          ApprovalRelay.supports(.claude) && !ApprovalRelay.supports(.codex) && !ApprovalRelay.supports(.workBuddy) &&
+          ApprovalRelay.makeRequest(payload: safe, event: mapped, now: date)?.protocolVersion == 2)
+    check("credential-like permission input never reaches an island cache", ApprovalRelay.makeRequest(payload: payload(["token": "private"]), event: mapped) == nil)
+    check("oversized permission input never reaches an island cache", ApprovalRelay.makeRequest(payload: payload(["command": String(repeating: "x", count: 9000)]), event: mapped) == nil)
     mapped.sourceEvent = "Notification"
     check("notification alone cannot offer approval", ApprovalRelay.makeRequest(payload: safe, event: mapped) == nil)
     mapped.sourceEvent = "PermissionRequest"

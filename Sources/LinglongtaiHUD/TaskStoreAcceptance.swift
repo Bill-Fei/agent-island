@@ -295,6 +295,7 @@ enum TaskStoreAcceptance {
             try runTrackedHookRevisionChecks(check: check, emit: emit)
             try runButlerStoreChecks(check: check, emit: emit)
             try runReleaseStoreChecks(check: check, emit: emit)
+            try runClaudeApprovalStoreChecks(check: check, emit: emit)
             try runSizingRefreshChecks(check: check, emit: emit)
             try runAmbientEvidenceChecks(check: check, emit: emit)
         } catch {
@@ -611,8 +612,8 @@ enum TaskStoreAcceptance {
                   !store.needsUserAttention(task) && store.waitingCount == 0 &&
                   store.mediumStatusText == "权限检查中")
         }
-        check("release store: approval relay is disabled until a provider-specific loop is verified",
-              !ApprovalRelay.islandApprovalEnabled)
+        check("release store: approval support is limited to Claude Code",
+              ApprovalRelay.supports(.claude) && !ApprovalRelay.supports(.codex) && !ApprovalRelay.supports(.workBuddy))
         store.clearAllTasks()
     }
 
