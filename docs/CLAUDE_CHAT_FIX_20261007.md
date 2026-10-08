@@ -41,3 +41,12 @@ After unlocking, verify the actual app path and Settings diagnosis, then observe
 - System Settings shows the existing `Agent 灵动岛` Accessibility switch **on**, while the currently running island continues to report no trust. The development bundle's designated requirement is its ad-hoc code hash. A stale grant after rebuilding or a grant for the other same-ID bundle is plausible, not yet proven.
 - The Accessibility page has been opened, but no permission switches, system settings, or Claude messages were changed. Refreshing the grant requires explicit user confirmation. Do not enable Claude's own Accessibility switch; the observing island is the process that needs permission.
 - Real Chat generation and completion remain **NOT VERIFIED**, blocked on authorization of the current island executable and a user-initiated Chat turn.
+
+## Permission Refresh Result — 2026-10-08
+
+- With user approval and user-completed system authentication, the island's Accessibility switch was changed from on to off, then back to on. Claude's own switch was not changed.
+- Restarted the existing development bundle without rebuilding. A new process runs from `dist/Agent 灵动岛.app` without QA arguments. The bundle passes `codesign --verify --deep --strict`.
+- Selected that exact development bundle in the Accessibility Add dialog. The list continues to show the island enabled, but the island's own diagnostic still reports no Accessibility trust.
+- The development and Release bundles have different ad-hoc designated code-hash requirements. This supports the stale-identity hypothesis but does not prove the TCC denial cause.
+- No permission database was edited or bypassed, and no Chat message was sent. Removing the existing stale permission entry and adding the current bundle is a separate proposed recovery step requiring explicit confirmation; it would not delete the application or task data.
+- Stop repeating toggles or builds while trust remains false. End-to-end Chat acceptance remains **NOT VERIFIED**.
