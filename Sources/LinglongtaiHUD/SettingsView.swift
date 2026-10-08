@@ -139,15 +139,6 @@ struct AppSettingsView: View {
         }
     }
 
-    private var effectiveSizeSummary: String {
-        guard let screen = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }) ?? NSScreen.main else { return "等待屏幕尺寸" }
-        let layout = IslandLayout(screen: screen, heightAdjustment: store.notchOffset,
-                                 widthAdjustment: store.notchWidthAdjustment, activityWidth: store.activityWidth,
-                                 mediumWingWidth: store.automaticActivityWidth ? store.mediumWingWidth : nil)
-        let compact = layout.size(for: .compact), medium = layout.size(for: .medium)
-        return "实际 小态 \(Int(compact.width))×\(Int(compact.height)) · 中态 \(Int(medium.width))×\(Int(medium.height)) pt"
-    }
-
     private var offsetLabel: String {
         let value = Int(store.notchOffset.rounded())
         if value == 0 { return "自动" }
@@ -220,28 +211,6 @@ struct AppSettingsView: View {
                     if confirmation.runModal() == .alertSecondButtonReturn { store.clearAllTasks() }
                 }
                 .buttonStyle(.bordered)
-            }
-
-            Divider()
-            DisclosureGroup("高级与诊断") {
-                VStack(alignment: .leading, spacing: 12) {
-                    Button(store.demoPreviewActive ? "退出演示预览" : "预览演示（非真实任务）") {
-                        if store.demoPreviewActive { store.endDemoPreview() }
-                        else { store.loadDemoTasks() }
-                    }.buttonStyle(.bordered)
-                    Text("当前提示：" + store.notice)
-                    Text(effectiveSizeSummary)
-                        .font(.system(size: 10, design: .monospaced))
-                    Text(store.claudeChatDiagnostic)
-                    Text("Claude Chat 为实验性功能，仅观察可见窗口；待确认操作请在原应用处理。")
-                    Text("任务状态保存在本机，不保存聊天正文。历史记录展示最近 24 小时；今日统计为保留轮次，不是 API 调用次数。")
-                    Text("事件文件：~/Library/Application Support/LinglongtaiHUD/events.jsonl")
-                        .font(.system(size: 10, design: .monospaced))
-                        .textSelection(.enabled)
-                }
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-                .padding(.top, 10)
             }
         }
     }
