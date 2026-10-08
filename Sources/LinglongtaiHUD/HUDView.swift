@@ -380,14 +380,19 @@ private struct HUDExpandedContent: View {
                             .minimumScaleFactor(0.9)
                         Spacer(minLength: 4)
                         if task.profile.kind != .custom {
-                            Button(presence.opening.contains(task.profile.kind) ? "正在打开…" : "打开应用") {
+                            Button {
                                 presence.open(task.profile.kind)
+                            } label: {
+                                Text(presence.opening.contains(task.profile.kind) ? "正在打开…" : "打开应用")
+                                    .font(HUDTypography.captionEmphasis)
+                                    .foregroundStyle(HUDColorTokens.info)
+                                    .padding(.horizontal, 11)
+                                    .padding(.vertical, 7)
+                                    .background(HUDColorTokens.info.opacity(0.14), in: Capsule())
+                                    // Match the interaction region to the visible pill,
+                                    // including the padding, not only its text glyphs.
+                                    .contentShape(Capsule())
                             }
-                            .font(HUDTypography.captionEmphasis)
-                            .foregroundStyle(HUDColorTokens.info)
-                            .padding(.horizontal, 11)
-                            .padding(.vertical, 7)
-                            .background(HUDColorTokens.info.opacity(0.14), in: Capsule())
                             .buttonStyle(.plain)
                             .fixedSize()
                             .disabled(presence.opening.contains(task.profile.kind))
