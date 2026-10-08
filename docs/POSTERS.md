@@ -38,12 +38,14 @@
 
 ## 产品总览
 
-![Agent 灵动岛产品总览](media/alpha-overview-20261008-v2/agent-island-overview-4k.png)
+![Agent 灵动岛产品总览](media/alpha-overview-20261008-v3/agent-island-overview-4k.png)
 
 这张总览海报借鉴「顶部主张 + 三行能力说明」的叙事方式：轻态、中态、展开态分别对应一段真实产品界面局部。尺寸为 2880 × 3840（长边 4K），另有 JPG 和 1080 × 1440 预览图。三种状态不会被误解为同时出现在同一块屏幕；展开态使用更大展示面积。
 
-总览 v2 的展开态来自 Bill 提供的 2026-10-08 21:07:09 原始截图，裁出完整岛体并去掉外围桌面。顶部统计栏包含 Codex、Claude、WorkBuddy、豆包四家；任务列表在该截图中可见 Claude、WorkBuddy、Codex，不补造豆包任务卡片，不修改状态或计数。只保存裁切面板，未将整张私人桌面复制进项目。原始总览版本保留。
+总览 v3 的展开态沿用 v2 从 Bill 提供的 2026-10-08 21:07:09 原始截图裁出的完整岛体，去掉外围桌面。顶部统计栏包含 Codex、Claude、WorkBuddy、豆包四家；任务列表在该截图中可见 Claude、WorkBuddy、Codex，不补造豆包任务卡片，不修改状态或计数。仅清理截图顶部空白摄像头区域的鼠标指针和轮廓外围的蓝色背景毛边；任务内容与图标保持原样。只保存裁切面板，未将整张私人桌面复制进项目。原始总览版本保留。
 
-分享文案沿用 `media/alpha-covers-20261008-v4/SHARE.md`。单图排版源文件：`media/alpha-covers-20261008-v6-4k/compose_covers.py`；总览排版源文件：`media/alpha-overview-20261008-v2/compose_overview.py`。系统图标保存在单图目录 `assets/`，仅作为桌面环境插图，权利归各自所有者。背景沿用旧版素材中不包含界面的壁纸区域。旧版保留供对比，未作为本版产品界面使用。
+v3 专项修正三处屏幕局部的合成细节：去除壁纸素材中误带入的左侧旧黑边；左右边框统一为 8px；内外圆角分别为 42px / 50px，采用 4 倍采样抗锯齿。圆角遮罩与底部渐隐相乘，不再覆盖透明角；阴影沿用同一遮罩，避免方角残留和黑边淡出不一致。尺寸均为 2880 × 3840 输出画布上的像素值。按 Design QA Checklist 完成放大检查和专项像素校验，记录见 `media/alpha-overview-20261008-v3/QA.md`。
+
+分享文案沿用 `media/alpha-covers-20261008-v4/SHARE.md`。单图排版源文件：`media/alpha-covers-20261008-v6-4k/compose_covers.py`；总览排版源文件：`media/alpha-overview-20261008-v3/compose_overview.py`。系统图标保存在单图目录 `assets/`，仅作为桌面环境插图，权利归各自所有者。背景沿用旧版素材中不包含界面的壁纸区域。旧版保留供对比，未作为本版产品界面使用。
 
 本版只在本地生成与保存，未推送 GitHub。
