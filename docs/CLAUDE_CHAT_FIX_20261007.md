@@ -29,7 +29,7 @@ The previous delivery confirmed compilation, not the real Chat-to-island lifecyc
 
 ## Acceptance Boundary
 
-Real Chat generation to visible island task and real end-state: **NOT VERIFIED**.
+At initial delivery, real Chat generation to visible island task and real end-state was **NOT VERIFIED**. The later live check below supersedes this boundary only for the observed current-window Chat lifecycle.
 Root cause of the user's individual failed run is not yet proven. Missing Stop compatibility, a silent permission/window failure, or an old Release process are separate hypotheses; do not describe any one as confirmed without the running app's diagnostics.
 
 After unlocking, verify the actual app path and Settings diagnosis, then observe a user-initiated Chat generation and ending. Accessibility permission is app-specific; a granted permission in the desktop automation tool is not evidence that the island process is trusted. Short responses between polls and hidden/unrendered conversations remain outside this experimental observer's guarantee.
@@ -61,4 +61,13 @@ After unlocking, verify the actual app path and Settings diagnosis, then observe
 - Bash syntax and packaging fixture checks are separate from compiling/running the Swift app. Normal SwiftPM compilation failed with `sandbox_apply: Operation not permitted`; both authorized retry attempts expired in the automatic permission reviewer. They did not package or relaunch the app. UI inspection reported the Mac locked.
 - `bash -n script/build_and_run.sh`: PASS. `python3 script/check_build_workflow.py`: 8 isolated fixtures PASS (unchanged signed bundle reuse, changed resources, changed binaries/helpers, restart dispatch, failed build preservation, concurrent lock, signer change, invalid signer/mode). All compiler/signing/launch actions are fixture stubs; no real app or keychain is touched by those tests.
 
-Real user-initiated Chat generation → island running state → real completion remains **NOT VERIFIED**. Do not ask the user to repeatedly toggle permission while other workflows replace the executable. Resume by keeping one current bundle stable, checking its own trust diagnostic, then observing a user-initiated Chat turn.
+At this build-workflow checkpoint, real user-initiated Chat generation → island running state → real completion remained **NOT VERIFIED**. Do not ask the user to repeatedly toggle permission while other workflows replace the executable.
+
+## Live Chat Lifecycle Check — 2026-10-08, Asia/Shanghai
+
+- The user explicitly approved removing the island's old Accessibility entry and adding the exact development bundle. Removal was confirmed in System Settings after user-completed Touch ID. The Add action timed out in the UI tool, so registration was not declared successful from the action alone. Claude's own permission was not changed by this agent.
+- The user subsequently reported that an ordinary Chat turn appeared on the island. At approximately 21:00, the running island's Settings explicitly reported `Claude Chat：已检测到生成中`; its local checkpoint contained a live `running / ClaudeChatStart` row, refreshed at 21:00:39. This is real observer evidence, not fixture/demo data.
+- After the user reported the response had ended, the read-only checkpoint inspection at 21:08:30 showed two `completed / ClaudeChatStop` rows, updated at **21:03:06** and **21:07:16**, with detail `Claude Chat 本轮已结束`. No Chat message was sent by the agent, and no task state was edited for validation.
+- Result: **observed current-window Chat generation and automatic completion PASS**. Visible generation is supported by the user's report and island diagnostic. Completion is supported by the real persisted observer records; the final rendered completion UI was not independently captured.
+- The on-disk bundle at this point reported revision `9a1af5f-dirty` with CDHash `3d28ec859f4530082a8e4a92819010ec6002b0fe`, while Settings of the inspected running instance reported `fe843d9-dirty`. Do not imply the latest on-disk bundle has been launched or its permission persistence validated. No rebuild/restart was performed during this successful live check.
+- Still unverified: permission survival across a real app update/restart, hidden/unrendered conversations, rapid responses between polls, multiple windows, and extended background reliability. Chat remains experimental; there is no genuine progress percentage and no claim of an official provider integration.
