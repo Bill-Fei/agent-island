@@ -15,5 +15,7 @@
 - `./script/build_and_run.sh --package-only`：通过，成功生成 `dist/Agent 灵动岛.app`。
 - 新临时目录视觉预览：`/private/tmp/island-task-visual.YIvzP6/events.jsonl`，仅包含隔离 fixture，不写入个人任务日志。
 - 独立只读复核：无新增阻断项；真实帧率、减少动态系统开关和不同 Mac 刘海尺寸仍属于实机观察项。
+- 实际窗口前后检查发现：任务因静默转入待更新分组时，SwiftUI 懒列表曾保留旧的执行标记。已增加 `UUID + visual state` 行内容标识（外层仍是任务 UUID），同时保留按钮辅助功能语义；修复后编译和 28 项映射检查通过。**这处跨组切换的最终实机复测仍 NOT VERIFIED**：重启后 CUA 连续返回旧窗口句柄 / 失效的菜单元素，有限重连未解决，未将其写为验收通过。
+- 已用 `./script/build_and_run.sh --verify` 恢复正常数据模式，exit 0；运行进程无 `--data-dir` 参数。没有把验收 fixture 放入个人任务日志。
 
 未知态的完整解释放在详情面板，列表保持短标记，避免长文案挤压 Agent 名称和会话标题。
