@@ -365,7 +365,16 @@ final class TaskStore: ObservableObject {
     }
 
     var hasLiveEvent: Bool {
-        !liveTasks.isEmpty || now() < eventPulseUntil
+        !freshLiveTasks.isEmpty || highlightedFeedbackTask != nil
+    }
+
+    /// A historical unresolved row is not an ambient activity signal. Even a
+    /// recent unknown-state update cannot keep the island open via its pulse.
+    private var highlightedFeedbackTask: AgentTask? {
+        guard now() < eventPulseUntil, let highlightedTaskID,
+              let task = tasks.first(where: { $0.id == highlightedTaskID }),
+              isFresh(task) else { return nil }
+        return task
     }
 
     func latestLiveTask(for kind: AgentKind) -> AgentTask? {
@@ -416,28 +425,18 @@ final class TaskStore: ObservableObject {
     }
 
     var activeTask: AgentTask? {
-        if let waiting = liveTasks.first(where: { needsUserAttention($0) }) { return waiting }
-        if now() < eventPulseUntil, let highlightedTaskID,
-           let task = tasks.first(where: { $0.id == highlightedTaskID }) { return task }
+        if let waiting = freshLiveTasks.first(where: { needsUserAttention($0) }) { return waiting }
+        if let task = highlightedFeedbackTask { return task }
         if let selectedTask, (selectedTask.source.isLive || demoPreviewActive || isAcceptancePreview),
-           (demoPreviewActive || isAcceptancePreview || [.queued, .running, .waiting].contains(selectedTask.status)),
-           [.queued, .running, .waiting].contains(selectedTask.status) {
-            // Keep a live selection stable while it is fresh. Once it becomes
-            // stale, do not let it mask another task that is actively sending
-            // real events; the island's executing glyph should describe that
-            // fresh task instead of a silent historical row.
-            if demoPreviewActive || isAcceptancePreview || isFresh(selectedTask) {
-                return selectedTask
-            }
-            if let fresh = freshLiveTasks.first(where: { $0.status == .running }) ?? freshLiveTasks.first {
-                return fresh
-            }
+           [.queued, .running, .waiting].contains(selectedTask.status),
+           demoPreviewActive || isAcceptancePreview || isFresh(selectedTask) {
+            // Selection still controls history/detail, but only a fresh real
+            // signal (or explicit QA preview) may drive the ambient surface.
             return selectedTask
         }
         if let current = freshLiveTasks.first(where: { $0.status == .running }) ?? freshLiveTasks.first {
             return current
         }
-        if let current = liveTasks.first { return current }
         return demoPreviewActive || isAcceptancePreview ? selectedTask : nil
     }
 
@@ -453,26 +452,25 @@ final class TaskStore: ObservableObject {
     /// Finished history never creates an ambient icon or increments live counts.
     var islandIconTasks: [AgentTask] {
         guard let front = activeTask else { return [] }
-        return [front] + liveTasks.filter { $0.id != front.id }.prefix(3)
+        return [front] + freshLiveTasks.filter { $0.id != front.id }.prefix(3)
     }
 
     var mediumStatusText: String {
-        if calibrationPreview != nil { return "尺寸预览" }
+        if calibrationPreview != nil { return "中态预览" }
         if waitingCount > 0 { return "\(waitingCount)项待确认" }
-        if now() < eventPulseUntil, let task = activeTask,
+        if let task = highlightedFeedbackTask,
            [.completed, .failed, .cancelled].contains(task.status) {
-            return liveTasks.isEmpty ? task.statusLabel : "1项结束 · \(liveTasks.count)项未结束"
+            return freshLiveTasks.isEmpty ? task.statusLabel : "1项结束 · \(freshLiveTasks.count)项有活动"
         }
-        if liveTasks.count > 1 {
-            let fresh = freshLiveTasks.count
-            return fresh == liveTasks.count ? "\(fresh)项有活动" : "\(fresh)项活跃 · \(liveTasks.count - fresh)项待更新"
+        if freshLiveTasks.count > 1 {
+            return "\(freshLiveTasks.count)项有活动"
         }
         guard let task = activeTask else { return "等待事件" }
         return displayedStatus(for: task)
     }
 
     var compactCountText: String {
-        waitingCount > 0 ? "\(waitingCount)" : liveTasks.isEmpty ? "" : "\(liveTasks.count)"
+        waitingCount > 0 ? "\(waitingCount)" : freshLiveTasks.isEmpty ? "" : "\(freshLiveTasks.count)"
     }
 
     // MARK: - Content-driven medium width
@@ -503,7 +501,7 @@ final class TaskStore: ObservableObject {
             pendingNarrowSince = nil
             return
         }
-        let name = calibrationPreview == nil ? primaryAgentName : "尺寸预览"
+        let name = calibrationPreview == nil ? primaryAgentName : "中态预览"
         let iconSize = min(24, max(0, 32 + notchOffset - 4))
             * (1 + Double(max(0, islandIconTasks.count - 1)) * 0.34)
         let content = IslandContentWidth.medium(agentName: name, statusText: mediumStatusText,
@@ -1050,7 +1048,9 @@ final class TaskStore: ObservableObject {
                 (event.approvalRequestID != nil && event.approvalRequestID != previousApproval) ||
                 (event.status != previousStatus && [.waiting, .completed, .failed, .cancelled].contains(event.status ?? .running))
             let permissionCheckOnly = event.sourceEvent == "PermissionRequest" && event.approvalRequestID == nil
-            if important && !permissionCheckOnly, let createdAt = event.createdAt, abs(now().timeIntervalSince(createdAt)) <= 120 {
+            if important && !permissionCheckOnly,
+               tasks.first(where: { $0.id == id }).map({ isFresh($0) }) == true,
+               let createdAt = event.createdAt, abs(now().timeIntervalSince(createdAt)) <= 120 {
                 mediumUntil = now().addingTimeInterval(10)
                 eventPulseUntil = mediumUntil
                 highlightedTaskID = id

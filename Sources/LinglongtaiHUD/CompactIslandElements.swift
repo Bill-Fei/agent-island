@@ -16,9 +16,7 @@ struct CompactAgentMark: View {
                     .font(.system(size: size * 0.46, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.84))
             } else {
-                Image(systemName: "sparkle")
-                    .font(.system(size: size * 0.48, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.65))
+                LinglongtaiBrandMark(size: size)
             }
         }
         .frame(width: size, height: size)
@@ -71,6 +69,7 @@ struct CompactTaskIndicator: View {
 
     var body: some View {
         HStack(spacing: 3) {
+            // A count or waiting symbol is not proof of current execution.
             if executing && !needsAttention && !reduceMotion {
                 CompactActivityGlyph(height: height, active: visible)
             } else {
@@ -84,12 +83,12 @@ struct CompactTaskIndicator: View {
                     .monospacedDigit()
             }
         }
-        .foregroundStyle(needsAttention ? Color.orange.opacity(0.95) : Color.white.opacity(0.72))
+        .foregroundStyle(needsAttention ? HUDColorTokens.attention.opacity(0.95) : HUDColorTokens.info.opacity(0.9))
         .padding(.horizontal, 4)
         .frame(minWidth: height, minHeight: height, maxHeight: height)
-        .background(needsAttention ? Color.orange.opacity(0.12) : Color.white.opacity(0.055), in: Capsule())
+        .background(needsAttention ? HUDColorTokens.attention.opacity(0.12) : HUDColorTokens.info.opacity(0.08), in: Capsule())
         .overlay {
-            Capsule().strokeBorder(needsAttention ? Color.orange.opacity(0.2) : Color.white.opacity(0.09), lineWidth: 0.5)
+            Capsule().strokeBorder(needsAttention ? HUDColorTokens.attention.opacity(0.2) : HUDColorTokens.info.opacity(0.16), lineWidth: 0.5)
         }
         .accessibilityHidden(true)
     }
@@ -102,16 +101,17 @@ private struct CompactActivityGlyph: View {
 
     var body: some View {
         let width = min(9, height * 0.48)
-        let glyphHeight = min(12, height * 0.56)
         return TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !clock.running)) { context in
             let elapsed = clock.running ? context.date.timeIntervalSince(clock.startedAt) : clock.frozenElapsed
+            let glyphHeight = min(12, height * 0.56)
             HStack(alignment: .center, spacing: width / 6) {
                 ForEach(0..<3, id: \.self) { index in
                     Capsule(style: .continuous)
-                        .frame(width: width * 2 / 9, height: glyphHeight * CGFloat(AgentActivityMotion.barScale(
-                            elapsed: elapsed,
-                            index: index
-                        )))
+                        .frame(width: width * 2 / 9,
+                               height: glyphHeight * CGFloat(AgentActivityMotion.barScale(
+                                   elapsed: elapsed,
+                                   index: index
+                               )))
                 }
             }
             .frame(width: width, height: glyphHeight)

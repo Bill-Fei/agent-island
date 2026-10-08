@@ -296,12 +296,102 @@ enum TaskStoreAcceptance {
             try runButlerStoreChecks(check: check, emit: emit)
             try runReleaseStoreChecks(check: check, emit: emit)
             try runSizingRefreshChecks(check: check, emit: emit)
+            try runAmbientEvidenceChecks(check: check, emit: emit)
         } catch {
             results.append("FAIL: test harness error: \(error)")
         }
         let report = results.joined(separator: "\n") + "\n"
         try? report.write(to: root.appendingPathComponent("acceptance.txt"), atomically: true, encoding: .utf8)
         print(report)
+    }
+
+    private static func runAmbientEvidenceChecks(check: (String, Bool) -> Void, emit: (AgentEvent) throws -> Void) throws {
+        var date = Date()
+        let store = TaskStore(now: { date })
+        store.clearAllTasks()
+        store.setAutoPopOnEvent(true)
+        store.setHeavyOnHover(true)
+        let oldCodexA = UUID(), oldCodexB = UUID(), silentDoubaoA = UUID(), silentDoubaoB = UUID()
+        for (id, agent, event, age) in [
+            (oldCodexA, "Codex", "PostToolUse", 14 * 3_600.0),
+            (oldCodexB, "Codex", "PostToolUse", 15 * 3_600.0),
+            (silentDoubaoA, "豆包", "DoubaoSilent", 4 * 3_600.0),
+            (silentDoubaoB, "豆包", "DoubaoSilent", 5 * 3_600.0)
+        ] {
+            try emit(AgentEvent(type: "upsert", id: id, agent: agent, status: .running,
+                                createdAt: date.addingTimeInterval(-age), sourceEvent: event))
+        }
+        store.consumeEvents()
+        let unresolved = store.tasks
+        check("ambient evidence: screenshot's four unresolved rows stay in 24h history", store.liveTasks.count == 4 && store.sortedTasks.count == 4)
+        check("ambient evidence: four stale rows cannot keep island open", store.presentation == .collapsed && !store.hasLiveEvent)
+        check("ambient evidence: stale rows create no count, icons or execution motion", store.compactCountText.isEmpty &&
+              store.islandIconTasks.isEmpty && store.activeTask == nil && !store.activeTaskIsExecuting)
+        let reload = TaskStore(now: { date })
+        check("ambient evidence: restart cannot resurrect stale ambient activity", reload.tasks == unresolved &&
+              reload.presentation == .collapsed && reload.compactCountText.isEmpty)
+        store.selectedTaskID = oldCodexA
+        store.samplePointer(inside: true, at: 20)
+        store.samplePointer(inside: true, at: 20.21)
+        check("ambient evidence: stale history remains reachable by hover", store.presentation == .heavy && store.selectedTask?.id == oldCodexA)
+        store.samplePointer(inside: false, at: 21)
+        store.samplePointer(inside: false, at: 21.16)
+        check("ambient evidence: leaving stale history returns to hardware notch", store.presentation == .collapsed && store.tasks == unresolved)
+
+        let active = UUID()
+        try emit(AgentEvent(type: "upsert", id: active, agent: "WorkBuddy", status: .running,
+                            createdAt: date, sourceEvent: "UserPromptSubmit"))
+        store.consumeEvents()
+        check("ambient evidence: new real task appears without inflating count from history", store.presentation == .medium &&
+              store.compactCountText == "1" && store.islandIconTasks.map(\.id) == [active] && store.activeTask?.id == active)
+        date.addTimeInterval(10)
+        store.refreshPresentation()
+        check("ambient evidence: stale selection cannot displace fresh compact task", store.presentation == .compact &&
+              store.selectedTask?.id == oldCodexA && store.activeTask?.id == active && store.activeTaskIsExecuting)
+        for _ in 0..<6 {
+            date.addTimeInterval(90)
+            try emit(AgentEvent(type: "upsert", id: active, agent: "WorkBuddy", status: .running,
+                                createdAt: date, sourceEvent: "PostToolUse"))
+            store.consumeEvents()
+        }
+        check("ambient evidence: a long task with actual updates stays compact", store.presentation == .compact &&
+              store.activeTask?.id == active && store.activeTaskIsExecuting && store.compactCountText == "1")
+        let beforeExpiry = store.tasks
+        date.addTimeInterval(120)
+        store.refreshPresentation()
+        check("ambient evidence: exact freshness boundary remains active", store.presentation == .compact && store.compactCountText == "1")
+        date.addTimeInterval(0.01)
+        store.refreshPresentation()
+        check("ambient evidence: freshness expiry clears every ambient channel without completion", store.presentation == .collapsed &&
+              !store.hasLiveEvent && store.activeTask == nil && store.islandIconTasks.isEmpty && store.compactCountText.isEmpty &&
+              store.tasks == beforeExpiry && store.tasks.first(where: { $0.id == active })?.status == .running)
+
+        for (provider, name, status) in [("豆包", "DoubaoSilent", AgentTaskStatus.running),
+                                          ("豆包", "DoubaoAbandoned", .cancelled),
+                                          ("Claude", "ClaudeChatUnknown", .running),
+                                          ("Codex", "AmbiguousTurn", .running)] {
+            let id = UUID()
+            try emit(AgentEvent(type: "upsert", id: id, agent: provider, status: status,
+                                createdAt: date, sourceEvent: name))
+            store.consumeEvents()
+            check("ambient evidence: fresh-timestamp \(name) is not an activity pulse", store.presentation == .collapsed &&
+                  !store.hasLiveEvent && store.compactCountText.isEmpty && store.islandIconTasks.isEmpty)
+        }
+        try emit(AgentEvent(type: "upsert", id: active, agent: "WorkBuddy", status: .running,
+                            createdAt: date, sourceEvent: "PreToolUse"))
+        store.consumeEvents()
+        check("ambient evidence: resumed actual tool restores only the real task", store.presentation == .compact &&
+              store.compactCountText == "1" && store.activeTaskIsExecuting && store.islandIconTasks.map(\.id) == [active])
+        try emit(AgentEvent(type: "upsert", id: active, agent: "WorkBuddy", status: .completed,
+                            createdAt: date, sourceEvent: "Stop"))
+        store.consumeEvents()
+        check("ambient evidence: true completion retains ten-second feedback without an execution glyph", store.presentation == .medium &&
+              store.activeTask?.id == active && !store.activeTaskIsExecuting && store.compactCountText.isEmpty && store.mediumStatusText == "本轮已结束")
+        date.addTimeInterval(10)
+        store.refreshPresentation()
+        check("ambient evidence: completion feedback expires despite unresolved history", store.presentation == .collapsed &&
+              !store.hasLiveEvent && store.activeTask == nil && store.islandIconTasks.isEmpty && store.sortedTasks.count == 9)
+        store.clearAllTasks()
     }
 
     private static func runSizingRefreshChecks(check: (String, Bool) -> Void, emit: (AgentEvent) throws -> Void) throws {
@@ -314,7 +404,10 @@ enum TaskStoreAcceptance {
         check("fresh real activity count starts at one", store.freshLiveTasks.count == 1)
         date.addTimeInterval(121)
         check("fresh activity expires even when first read bypasses sortedTasks", store.freshLiveTasks.isEmpty && store.liveTasks.count == 1)
-        check("silent task remains compact without claiming ongoing execution", store.mediumStatusText == "等待状态更新" && !store.activeTaskIsExecuting)
+        store.refreshPresentation()
+        check("silent task leaves ambient surface without inventing completion", store.presentation == .collapsed &&
+              store.activeTask == nil && store.compactCountText.isEmpty && !store.activeTaskIsExecuting &&
+              store.tasks.first(where: { $0.id == id })?.status == .running)
         let waiting = UUID()
         try emit(AgentEvent(type: "upsert", id: waiting, agent: "WorkBuddy", status: .waiting, createdAt: date, sourceEvent: "Notification"))
         store.consumeEvents()
@@ -564,9 +657,9 @@ enum TaskStoreAcceptance {
 
         jump(to: 1_800)
         let silentTask = store.tasks.first { $0.id == longTask }
-        check("a thirty-minute silent task stays active and compact",
-              store.presentation == .compact && store.liveTasks.map(\.id) == [longTask] &&
-              silentTask?.status == .running && store.compactCountText == "1")
+        check("a thirty-minute silent task remains history without keeping the island open",
+              store.presentation == .collapsed && store.liveTasks.map(\.id) == [longTask] &&
+              silentTask?.status == .running && store.compactCountText.isEmpty && store.activeTask == nil)
         check("a silent task reports missing updates without inventing an ending",
               silentTask.map { store.displayedStatus(for: $0) == "等待状态更新" } == true &&
               store.statusSummary(for: .codex).contains("尚未收到结束"))
@@ -594,9 +687,9 @@ enum TaskStoreAcceptance {
         check("a bare permission check remains visible as a non-actionable waiting task",
               store.presentation == .compact && store.waitingCount == 0 && store.liveTasks.first?.status == .waiting)
         jump(to: 3_622)
-        check("a thirty-minute unresolved permission check remains pending without a false prompt",
-              store.presentation == .compact && store.waitingCount == 0 &&
-              store.liveTasks.first?.status == .waiting && store.activeTask?.requiresApproval == true)
+        check("a thirty-minute unresolved permission check is history without ambient activity",
+              store.presentation == .collapsed && store.waitingCount == 0 && store.activeTask == nil &&
+              store.liveTasks.first?.status == .waiting && store.liveTasks.first?.requiresApproval == true)
         jump(to: 3_623)
         try send(longTask, name: "PostToolUse", status: .running)
         check("tool resumption clears approval without reopening medium", store.presentation == .compact && store.waitingCount == 0)
@@ -624,7 +717,7 @@ enum TaskStoreAcceptance {
         try send(firstConcurrent, name: "Stop", status: .completed)
         check("one terminal event highlights completion while another task remains active",
               store.presentation == .medium && store.liveTasks.map(\.id) == [remainingConcurrent] &&
-              store.activeTask?.id == firstConcurrent && store.mediumStatusText == "1项结束 · 1项未结束")
+              store.activeTask?.id == firstConcurrent && store.mediumStatusText == "1项结束 · 1项有活动")
         jump(to: 6_021.9)
         check("mixed terminal feedback remains medium at 9.9 seconds", store.presentation == .medium)
         jump(to: 6_022)
@@ -668,7 +761,7 @@ enum TaskStoreAcceptance {
             jump(to: start)
             adjustment.1()
             check("\(adjustment.0) adjustment starts a labeled medium calibration preview",
-                  store.presentation == .medium && store.calibrationPreview == .medium && store.mediumStatusText == "尺寸预览")
+                  store.presentation == .medium && store.calibrationPreview == .medium && store.mediumStatusText == "中态预览")
             jump(to: start + 5.9)
             check("\(adjustment.0) calibration remains visible at 5.9 seconds", store.calibrationPreview == .medium && store.presentation == .medium)
             jump(to: start + 6)

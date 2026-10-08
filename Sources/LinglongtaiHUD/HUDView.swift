@@ -180,7 +180,7 @@ private struct HUDActivityContent: View {
                             .modifier(AgentActivityEffect(executing: store.activeTaskIsExecuting,
                                                           visible: animationActive))
                             .fixedSize()
-                        IslandAgentLabel(text: store.calibrationPreview == nil ? store.primaryAgentName : "尺寸预览",
+                        IslandAgentLabel(text: store.calibrationPreview == nil ? store.primaryAgentName : "中态预览",
                                          width: labelWidth,
                                          active: animationActive)
                             .id(store.activeTask?.id)
@@ -203,17 +203,17 @@ private struct HUDActivityContent: View {
     private var mediumStatus: some View {
         Group {
             if let task = store.activeTask, store.failedApprovals.contains(task.id) {
-                detailButton(title: "未提交决定", tint: .orange)
+                detailButton(title: "未提交决定", tint: HUDColorTokens.attention)
                     .help("请在原应用核实；没有自动批准")
             } else if let task = store.activeTask, store.approvalRequest(for: task) != nil,
                       store.calibrationPreview == nil {
                 Button("批准…") { store.reviewApproval(for: task) }
-                    .buttonStyle(.plain).foregroundStyle(.orange)
+                    .buttonStyle(.plain).foregroundStyle(HUDColorTokens.attention)
                     .padding(.horizontal, 8).padding(.vertical, 2)
-                    .background(Color.orange.opacity(0.18), in: Capsule())
+                    .background(HUDColorTokens.attention.opacity(0.18), in: Capsule())
                     .help("查看本次请求并直接批准，无需打开应用")
             } else if let task = store.activeTask, store.approvalFeedback(for: task) != nil {
-                detailButton(title: "等待回执", tint: .orange)
+                detailButton(title: "等待回执", tint: HUDColorTokens.attention)
             } else {
                 detailButton(title: store.mediumStatusText, tint: .white.opacity(0.8))
             }
@@ -244,7 +244,7 @@ private struct HUDExpandedContent: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                LinglongtaiBrandMark(size: 24, active: store.activeTaskIsExecuting)
+                LinglongtaiBrandMark(size: 32)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Agent 灵动岛")
                         .font(HUDTypography.pageTitle)
@@ -256,9 +256,9 @@ private struct HUDExpandedContent: View {
                         .lineLimit(1)
                 }
                 Spacer()
-                Metric(value: String(store.freshLiveTasks.count), label: "活跃", tint: .mint)
+                Metric(value: String(store.freshLiveTasks.count), label: "活跃", tint: HUDColorTokens.info)
                 Metric(value: String(store.liveTasks.count - store.freshLiveTasks.count), label: "待更新", tint: .secondary)
-                Metric(value: String(store.waitingCount), label: "REVIEW", tint: .orange)
+                Metric(value: String(store.waitingCount), label: "待处理", tint: HUDColorTokens.attention)
                 Button(action: store.toggleExpanded) {
                     Image(systemName: "chevron.up")
                         .font(.system(size: 12, weight: .semibold))
@@ -273,11 +273,14 @@ private struct HUDExpandedContent: View {
             .padding(.top, 8)
             .padding(.bottom, 13)
 
-            Divider().overlay(Color.white.opacity(0.1))
+            HUDSectionDivider()
+
+            TodayUsageBar(usage: store.todayAgentUsage)
+            HUDSectionDivider()
 
             HStack(spacing: 0) {
                 taskList.frame(width: 274)
-                Divider().overlay(Color.white.opacity(0.1))
+                HUDSectionDivider(vertical: true)
                 detailPane
             }
             .frame(maxHeight: .infinity)
@@ -352,15 +355,16 @@ private struct HUDExpandedContent: View {
                             .lineLimit(1)
                             .minimumScaleFactor(0.9)
                         Spacer(minLength: 4)
-                        Text(store.displayedStatus(for: task))
-                            .font(HUDTypography.captionEmphasis)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.9)
                         if task.profile.kind != .custom {
-                            ActionButton(title: "打开应用", systemName: "arrow.up.forward", tint: .mint) {
+                            Button("打开应用") {
                                 presence.open(task.profile.kind)
                             }
+                            .font(HUDTypography.captionEmphasis)
+                            .foregroundStyle(HUDColorTokens.info)
+                            .padding(.horizontal, 11)
+                            .padding(.vertical, 7)
+                            .background(HUDColorTokens.info.opacity(0.14), in: Capsule())
+                            .buttonStyle(.plain)
                             .fixedSize()
                             .disabled(!presence.canOpen(task.profile.kind))
                             .help("打开桌面应用；终端和 IDE 任务请回到原会话处理。")
@@ -371,7 +375,17 @@ private struct HUDExpandedContent: View {
                         .font(HUDTypography.body)
                         .foregroundStyle(.white.opacity(0.72))
                         .lineLimit(2)
-                        .padding(.top, 16)
+                        .padding(.top, 14)
+                        .textSelection(.enabled)
+                    HStack {
+                        Text("会话线索 · \(String(task.id.uuidString.prefix(6)))")
+                        Text(task.updatedAt, style: .time).monospacedDigit()
+                        Spacer()
+                        Button("复制会话线索") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(conversationTitles.title(for: task) + "\n" + task.agent + " · " + String(task.id.uuidString.prefix(6)), forType: .string)
+                        }.buttonStyle(.plain)
+                    }.font(HUDTypography.caption).foregroundStyle(.secondary).padding(.top, 6)
                     ScrollView {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("当前步骤").font(HUDTypography.captionEmphasis).foregroundStyle(.secondary)
@@ -437,7 +451,7 @@ private struct HUDExpandedContent: View {
     private func actionBar(for task: AgentTask) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             if store.approvalRequest(for: task) != nil {
-                ActionButton(title: "批准请求…", systemName: "hand.raised", tint: .orange) {
+                ActionButton(title: "批准请求…", systemName: "hand.raised", tint: HUDColorTokens.attention) {
                     store.reviewApproval(for: task)
                 }
             }
@@ -468,7 +482,7 @@ private struct LiveOrb: View {
     var body: some View {
         ZStack {
             Circle().fill(Color.white.opacity(0.08))
-            Circle().fill(AngularGradient(colors: [.mint, .blue, .orange, .mint], center: .center)).padding(4)
+            Circle().fill(AngularGradient(colors: [HUDColorTokens.info, HUDColorTokens.claude, Color.white.opacity(0.72), HUDColorTokens.info], center: .center)).padding(4)
             Circle().fill(Color.black.opacity(0.82)).padding(7)
             Circle().fill(Color.white.opacity(0.86)).frame(width: 3, height: 3)
         }
@@ -495,7 +509,7 @@ private struct AgentAvatar: View {
     let size: CGFloat
 
     var body: some View {
-        let color = Color(hex: task?.colorHex ?? "#A7B0C5")
+        let color = task.map { HUDColorTokens.agent($0.profile.kind) } ?? HUDColorTokens.neutral
         return ZStack {
             if task == nil || task?.profile.kind == .custom {
                 Circle().fill(color.opacity(0.25))
@@ -559,7 +573,7 @@ private struct TaskRow: View {
                         if needsAttention {
                             Image(systemName: "hand.raised.fill")
                                 .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(HUDColorTokens.attention)
                         }
                     }
                     Text(title)
@@ -567,6 +581,10 @@ private struct TaskRow: View {
                         .foregroundStyle(.white.opacity(0.48))
                         .lineLimit(2)
                         .help(title)
+                    HStack(spacing: 5) {
+                        Text(String(task.id.uuidString.prefix(6)))
+                        Text(task.updatedAt, style: .time).monospacedDigit()
+                    }.font(.system(size: 9)).foregroundStyle(.white.opacity(0.35))
                 }
                 Spacer(minLength: 4)
                 Label(stateText, systemImage: isStale || (task.status == .waiting && !needsAttention) ? "clock" : task.status.symbolName)
@@ -608,12 +626,12 @@ private struct ActionButton: View {
 private extension AgentTaskStatus {
     var tint: Color {
         switch self {
-        case .queued: return .gray
-        case .running: return .mint
-        case .waiting: return .orange
-        case .completed: return .green
-        case .failed: return .red
-        case .cancelled: return .gray
+        case .queued: return HUDColorTokens.neutral
+        case .running: return HUDColorTokens.info
+        case .waiting: return HUDColorTokens.attention
+        case .completed: return HUDColorTokens.success
+        case .failed: return HUDColorTokens.danger
+        case .cancelled: return HUDColorTokens.neutral
         }
     }
 }

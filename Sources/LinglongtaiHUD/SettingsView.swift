@@ -13,6 +13,9 @@ struct AppSettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     header
+                    Button("接入与验证…") {
+                        NSApp.sendAction(Selector(("showIntegrationSetup")), to: nil, from: nil)
+                    }.buttonStyle(.borderedProminent)
                     behaviorSection
                     sizingSection
                     agentsSection
@@ -55,7 +58,7 @@ struct AppSettingsView: View {
             )) {
                 SettingLabel(
                     title: "有事件时自动弹出",
-                    detail: "新任务、待确认或结束时显示中态 10 秒。进行中任务随后保持小态；最后真实活动超过 24 小时后隐藏。"
+                    detail: "新任务、待确认或结束时显示中态 10 秒。有近期真实活动的任务随后保持小态；失去状态证据后融回刘海，不代表任务结束。"
                 )
             }
 
@@ -70,7 +73,7 @@ struct AppSettingsView: View {
                     detail: "连续悬停 0.2 秒展开，提前移开立即取消计时。主动事件提示不受影响。"
                     )
             }
-            Text("悬停列表保留最近 24 小时的会话记录，进行中优先，已完成仍可查看。超过 24 小时无真实活动的记录隐藏，不代表完成；新活动到达后会重新出现。")
+            Text("悬停列表保留最近 24 小时的会话记录，已完成和待更新记录仍可查看。静默或状态未知的记录不占用顶部提示；新活动到达后恢复。超过 24 小时无真实活动的记录仅从列表隐藏，不代表完成。")
                 .font(.system(size: 11)).foregroundStyle(.secondary)
         }
     }
@@ -143,7 +146,7 @@ struct AppSettingsView: View {
                 Button("恢复自动尺寸") { store.resetCalibration() }
             }
             .buttonStyle(.bordered)
-            Text("空闲：物理刘海 · 小态：持续任务 · 中态：重要变化 10 秒 · 悬停：完整详情")
+            Text("空闲或状态未知：物理刘海 · 小态：近期真实活动 · 中态：重要变化 10 秒 · 悬停：完整详情")
                 .font(.system(size: 11)).foregroundStyle(.secondary)
             Text(effectiveSizeSummary)
                 .font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
@@ -174,7 +177,7 @@ struct AppSettingsView: View {
     }
 
     private var agentsSection: some View {
-        SettingsCard(title: "Agent", subtitle: "Codex、Claude Code、WorkBuddy 走 Hook 事件；豆包读取本地 Agent 模式轨迹") {
+        SettingsCard(title: "Agent", subtitle: "Codex、Claude Code、WorkBuddy 走 Hook；Claude Chat 为实验性辅助功能观察；豆包读取本地 Agent 模式轨迹") {
             VStack(spacing: 10) {
                 ForEach(AgentCatalog.supportedKinds, id: \.self) { kind in
                     HStack(spacing: 12) {
@@ -189,14 +192,14 @@ struct AppSettingsView: View {
                         Spacer()
                         Text(store.connectionLabel(for: kind))
                             .font(.system(size: 11, weight: .medium, design: .rounded))
-                            .foregroundStyle(store.latestLiveTask(for: kind) == nil ? Color.secondary : Color.mint)
+                            .foregroundStyle(store.latestLiveTask(for: kind) == nil ? Color.secondary : HUDColorTokens.agent(kind))
                     }
                     if kind != AgentCatalog.supportedKinds.last {
                         Divider()
                     }
                 }
             }
-            Text("Codex / Claude Code / WorkBuddy 仅观察真实 Hook；权限检查不等于需要你确认。明确待确认时请打开原应用处理，当前版本不在岛上批准、停止或重试。Claude 接入指 Claude Code，不覆盖普通 Claude Chat；打开应用也不保证定位到原会话。豆包只读 Agent 轨迹，普通聊天不可见；长时间无更新显示未知或停止跟踪，不代表完成或中断。收到过回调不等于连接持续健康。")
+            Text("Codex / Claude Code / WorkBuddy 观察真实 Hook；Claude Chat 通过 macOS 辅助功能只读观察“生成中 / 已结束”，仍属于实验性能力，不作为 Alpha 的正常路径保证，也不读取或保存聊天正文。权限检查不等于需要你确认；明确待确认时请打开原应用处理，当前版本不在岛上批准、停止或重试。Claude Chat 只跟踪当前可见窗口，打开应用也不保证定位到原会话。豆包只读 Agent 轨迹，普通聊天不可见；长时间无更新显示未知或停止跟踪，不代表完成或中断。收到过回调不等于连接持续健康。")
                 .font(.system(size: 11)).foregroundStyle(.secondary)
             Text(store.claudeChatDiagnostic)
                 .font(.system(size: 11, weight: .medium))
