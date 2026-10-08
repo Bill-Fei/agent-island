@@ -242,6 +242,9 @@ private struct HUDExpandedContent: View {
     @ObservedObject private var conversationTitles = ConversationTitleStore.shared
 
     var body: some View {
+        let sections = TaskVisualSection.grouped(store.sortedTasks.map { task in
+            TaskVisualItem(task: task, state: visualState(for: task))
+        })
         VStack(spacing: 0) {
             HStack(spacing: 12) {
                 LinglongtaiBrandMark(size: 32)
@@ -256,9 +259,9 @@ private struct HUDExpandedContent: View {
                         .lineLimit(1)
                 }
                 Spacer()
-                Metric(value: String(store.freshLiveTasks.count), label: "活跃", tint: HUDColorTokens.info)
-                Metric(value: String(store.liveTasks.count - store.freshLiveTasks.count), label: "待更新", tint: .secondary)
-                Metric(value: String(store.waitingCount), label: "待处理", tint: HUDColorTokens.attention)
+                Metric(value: String(sections.first { $0.group == .active }?.items.count ?? 0), label: "进行中", tint: HUDColorTokens.info)
+                Metric(value: String(sections.first { $0.group == .unknown }?.items.count ?? 0), label: "待更新", tint: HUDColorTokens.neutral)
+                Metric(value: String(sections.first { $0.group == .attention }?.items.count ?? 0), label: "待处理", tint: HUDColorTokens.attention)
                 Button(action: store.toggleExpanded) {
                     Image(systemName: "chevron.up")
                         .font(.system(size: 12, weight: .semibold))
@@ -279,7 +282,7 @@ private struct HUDExpandedContent: View {
             HUDSectionDivider()
 
             HStack(spacing: 0) {
-                taskList.frame(width: 274)
+                taskList(sections: sections).frame(width: 274)
                 HUDSectionDivider(vertical: true)
                 detailPane
             }
@@ -287,8 +290,12 @@ private struct HUDExpandedContent: View {
         }
     }
 
-    private var taskList: some View {
-        let tasks = store.sortedTasks
+    private func visualState(for task: AgentTask) -> TaskVisualState {
+        TaskVisualState.resolve(task, displayedStatus: store.displayedStatus(for: task),
+                                needsAttention: store.needsUserAttention(task))
+    }
+
+    private func taskList(sections: [TaskVisualSection]) -> some View {
         let selectedID = store.selectedTask?.id
         return VStack(alignment: .leading, spacing: 11) {
             HStack {
@@ -305,16 +312,32 @@ private struct HUDExpandedContent: View {
                     VStack(spacing: 0) {
                         Color.clear.frame(height: 0).id("task-list-top")
                         LazyVStack(spacing: 7) {
-                            if tasks.isEmpty {
+                            if sections.isEmpty {
                                 Text("最近 24 小时暂无会话记录").font(HUDTypography.body)
                                     .foregroundStyle(.secondary).padding(.vertical, 24)
                             }
-                            ForEach(tasks) { task in
-                                TaskRow(task: task, title: conversationTitles.title(for: task), isSelected: selectedID == task.id,
-                                        displayedStatus: store.displayedStatus(for: task),
-                                        isStale: ["等待状态更新", "状态未知", "已停止跟踪 · 状态未知"].contains(store.displayedStatus(for: task)),
-                                        needsAttention: store.needsUserAttention(task)) {
-                                    store.select(task)
+                            ForEach(sections) { section in
+                                HStack(spacing: 6) {
+                                    Text(section.group.title)
+                                    Text(String(section.items.count)).monospacedDigit()
+                                    Spacer()
+                                }
+                                .font(HUDTypography.captionEmphasis)
+                                .foregroundStyle(.white.opacity(section.group == .ended ? 0.38 : 0.62))
+                                .padding(.horizontal, 9)
+                                .padding(.top, section.group == sections.first?.group ? 0 : 10)
+                                .padding(.bottom, 1)
+                                .accessibilityAddTraits(.isHeader)
+                                ForEach(section.items) { item in
+                                    TaskRow(task: item.task, title: conversationTitles.title(for: item.task),
+                                            isSelected: selectedID == item.id, state: item.state,
+                                            animationActive: store.presentation == .heavy) {
+                                        store.select(item.task)
+                                    }
+                                    // The outer identity stays the task UUID.
+                                    // Reset only the row's semantic presentation
+                                    // when SwiftUI moves it between lazy groups.
+                                    .id("\(item.id.uuidString)-\(item.state)")
                                 }
                             }
                         }
@@ -346,6 +369,7 @@ private struct HUDExpandedContent: View {
     private var detailPane: some View {
         Group {
             if let task = store.selectedTask {
+                let state = visualState(for: task)
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(alignment: .center, spacing: 8) {
                         AgentAvatar(task: task, size: 32)
@@ -375,6 +399,9 @@ private struct HUDExpandedContent: View {
                         Text(error).font(HUDTypography.caption)
                             .foregroundStyle(HUDColorTokens.attention).padding(.top, 8)
                     }
+                    TaskStateIndicator(state: state, visible: store.presentation == .heavy,
+                                       label: store.displayedStatus(for: task))
+                        .padding(.top, 12)
                     Text(conversationTitles.title(for: task))
                         .font(HUDTypography.body)
                         .foregroundStyle(.white.opacity(0.72))
@@ -392,8 +419,9 @@ private struct HUDExpandedContent: View {
                     }.font(HUDTypography.caption).foregroundStyle(.secondary).padding(.top, 6)
                     ScrollView {
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("当前步骤").font(HUDTypography.captionEmphasis).foregroundStyle(.secondary)
-                            Text(store.currentStepText(for: task))
+                            Text(state.group == .unknown ? "状态说明" : state.group == .ended ? "最后状态" : "当前步骤")
+                                .font(HUDTypography.captionEmphasis).foregroundStyle(.secondary)
+                            Text(state.unknownExplanation ?? store.currentStepText(for: task))
                                 .font(HUDTypography.bodyEmphasis)
                                 .foregroundStyle(.white.opacity(0.9))
                                 .fixedSize(horizontal: false, vertical: true)
@@ -552,59 +580,62 @@ private struct TaskRow: View {
     let task: AgentTask
     let title: String
     let isSelected: Bool
-    let displayedStatus: String
-    let isStale: Bool
-    let needsAttention: Bool
+    let state: TaskVisualState
+    let animationActive: Bool
     let onSelect: () -> Void
 
-    private var isEnded: Bool { [.completed, .failed, .cancelled].contains(task.status) }
-    private var stateText: String {
-        if needsAttention { return "待确认" }
-        if displayedStatus == "已停止跟踪 · 状态未知" { return "停止跟踪" }
-        return displayedStatus
-    }
+    private var isEnded: Bool { state.group == .ended }
+    private var isEmphasized: Bool { state.group == .active || state.group == .attention }
 
     var body: some View {
         Button(action: onSelect) {
-            HStack(spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
                 AgentAvatar(task: task, size: 28)
-                    .opacity(isEnded ? 0.55 : 1)
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 5) {
+                    .opacity(isEnded ? 0.56 : state.group == .unknown ? 0.72 : 1)
+                    .padding(.top, 2)
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 6) {
                         Text(task.agent)
-                            .font(HUDTypography.bodyEmphasis)
-                            .foregroundStyle(.white.opacity(isEnded ? 0.6 : 1))
-                        if needsAttention {
-                            Image(systemName: "hand.raised.fill")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(HUDColorTokens.attention)
-                        }
+                            .font(.system(size: 12, weight: isEmphasized ? .semibold : .medium))
+                            .foregroundStyle(.white.opacity(isEnded ? 0.58 : state.group == .unknown ? 0.76 : 1))
+                        Spacer(minLength: 4)
+                        Text(task.updatedAt, style: .time)
+                            .font(.system(size: 9)).monospacedDigit()
+                            .foregroundStyle(.white.opacity(0.42))
+                            .fixedSize()
                     }
                     Text(title)
                         .font(HUDTypography.caption)
-                        .foregroundStyle(.white.opacity(0.48))
+                        .foregroundStyle(.white.opacity(isEnded ? 0.48 : 0.65))
                         .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .help(title)
-                    HStack(spacing: 5) {
+                    HStack(spacing: 6) {
+                        TaskStateIndicator(state: state, visible: animationActive)
+                        Spacer(minLength: 4)
                         Text(String(task.id.uuidString.prefix(6)))
-                        Text(task.updatedAt, style: .time).monospacedDigit()
-                    }.font(.system(size: 9)).foregroundStyle(.white.opacity(0.35))
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(.white.opacity(0.3))
+                    }
                 }
-                Spacer(minLength: 4)
-                Label(stateText, systemImage: isStale || (task.status == .waiting && !needsAttention) ? "clock" : task.status.symbolName)
-                    .font(HUDTypography.captionEmphasis)
-                    .foregroundStyle(isEnded || isStale || (task.status == .waiting && !needsAttention) ? Color.secondary : task.status.tint)
-                    .fixedSize()
             }
-            .padding(.horizontal, 9)
+            .padding(.horizontal, 10)
             .padding(.vertical, 9)
-            .background(isSelected ? Color.white.opacity(0.11) : Color.white.opacity(isEnded ? 0.015 : 0.045), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(isSelected ? Color.white.opacity(0.14) : .clear, lineWidth: 1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(isSelected ? Color.white.opacity(0.09) : Color.white.opacity(isEmphasized ? 0.045 : 0), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(alignment: .leading) {
+                if isEmphasized {
+                    Capsule().fill(state.tint.opacity(0.75))
+                        .frame(width: 2).padding(.vertical, 12)
+                }
             }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(task.agent)，\(title)，\(state.label)\(isSelected ? "，已选中" : "")")
+        .accessibilityAddTraits(.isButton)
+        .help(title + " · " + state.label)
     }
 }
 

@@ -94,7 +94,7 @@ struct CompactTaskIndicator: View {
     }
 }
 
-private struct CompactActivityGlyph: View {
+struct CompactActivityGlyph: View {
     let height: CGFloat
     let active: Bool
     @StateObject private var clock = IslandMotionClock()
@@ -118,6 +118,7 @@ private struct CompactActivityGlyph: View {
             .accessibilityHidden(true)
         }
         .onAppear { clock.setRunning(active) }
+        .onDisappear { clock.setRunning(false) }
         .onChange(of: active) { clock.setRunning($0) }
     }
 }
