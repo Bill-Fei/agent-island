@@ -33,3 +33,11 @@ Real Chat generation to visible island task and real end-state: **NOT VERIFIED**
 Root cause of the user's individual failed run is not yet proven. Missing Stop compatibility, a silent permission/window failure, or an old Release process are separate hypotheses; do not describe any one as confirmed without the running app's diagnostics.
 
 After unlocking, verify the actual app path and Settings diagnosis, then observe a user-initiated Chat generation and ending. Accessibility permission is app-specific; a granted permission in the desktop automation tool is not evidence that the island process is trusted. Short responses between polls and hidden/unrendered conversations remain outside this experimental observer's guarantee.
+
+## Runtime Follow-up — 2026-10-08
+
+- The inspected island process was launched with `--qa-demo`. This in-memory acceptance mode returns before real event polling and Chat observer startup. It explains why that inspected process cannot react to Chat; it does not prove which mode was used for the user's earlier test.
+- The normal build/run workflow subsequently launched the development bundle without QA arguments. Its Settings reports version `0.3.1`, revision `251144e-dirty`, and `Claude Chat：灵动岛尚未获得辅助功能授权`.
+- System Settings shows the existing `Agent 灵动岛` Accessibility switch **on**, while the currently running island continues to report no trust. The development bundle's designated requirement is its ad-hoc code hash. A stale grant after rebuilding or a grant for the other same-ID bundle is plausible, not yet proven.
+- The Accessibility page has been opened, but no permission switches, system settings, or Claude messages were changed. Refreshing the grant requires explicit user confirmation. Do not enable Claude's own Accessibility switch; the observing island is the process that needs permission.
+- Real Chat generation and completion remain **NOT VERIFIED**, blocked on authorization of the current island executable and a user-initiated Chat turn.
