@@ -2,6 +2,10 @@
 set -euo pipefail
 
 MODE="${1:-run}"
+case "$MODE" in
+  run|--debug|debug|--logs|logs|--telemetry|telemetry|--verify|verify|--package-only|--package-validated|--release-package|--release-verify|--qa-empty|--qa-demo|--self-test|--qa-events) ;;
+  *) echo "Unknown build/run mode: $MODE" >&2; exit 2 ;;
+esac
 # APP_NAME 是 SwiftPM product 名、可执行文件名，也是 pkill / pgrep 用的进程名。
 # 改它会让 pkill -x 杀不掉旧进程，不要动它。
 APP_NAME="LinglongtaiHUD"
@@ -25,12 +29,29 @@ if [[ ! "$ISLAND_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo "VERSION must contain a semantic version" >&2
   exit 2
 fi
-ISLAND_BUILD_ID="$(date +%Y%m%d%H%M%S)"
 ISLAND_SOURCE_REVISION="$(git -C "$ROOT_DIR" rev-parse --short HEAD)"
 if [[ -n "$(git -C "$ROOT_DIR" status --porcelain --untracked-files=normal)" ]]; then
   ISLAND_SOURCE_REVISION="$ISLAND_SOURCE_REVISION-dirty"
 fi
+# Pin a certificate fingerprint rather than an ambiguous certificate name.
+SIGNING_IDENTITY="${ISLAND_SIGNING_IDENTITY:-}"
+if [[ -n "$SIGNING_IDENTITY" ]]; then
+  if [[ ! "$SIGNING_IDENTITY" =~ ^[[:xdigit:]]{40}$ ]]; then
+    echo "ISLAND_SIGNING_IDENTITY must be a 40-character certificate SHA-1 fingerprint" >&2
+    exit 2
+  fi
+  SIGNING_IDENTITY="$(printf '%s' "$SIGNING_IDENTITY" | tr '[:lower:]' '[:upper:]')"
+  if ! /usr/bin/security find-identity -p codesigning -v | awk -v fingerprint="$SIGNING_IDENTITY" '$2 == fingerprint { found=1 } END { exit !found }'; then
+    echo "ISLAND_SIGNING_IDENTITY is not a valid local codesigning identity" >&2
+    exit 2
+  fi
+fi
+SIGNING_FLAG="${SIGNING_IDENTITY:--}"
 ISLAND_SOURCE_HASH="$(cd "$ROOT_DIR" && shasum -a 256 Package.swift VERSION Sources/*/*.swift | shasum -a 256 | awk '{print $1}')"
+input_hash() {
+  shasum -a 256 Package.swift VERSION Sources/*/*.swift Resources/AppIcon.icns script/install_hooks.py script/build_and_run.sh | shasum -a 256 | awk '{print $1}'
+}
+ISLAND_INPUT_HASH="$(cd "$ROOT_DIR" && input_hash)"
 ISLAND_CONFIGURATION=debug
 if [[ "$MODE" == "--release-package" || "$MODE" == "--release-verify" ]]; then ISLAND_CONFIGURATION=release; fi
 
@@ -51,10 +72,18 @@ cd "$ROOT_DIR"
 export SWIFT_MODULECACHE_PATH="$ROOT_DIR/.build/module-cache"
 export CLANG_MODULE_CACHE_PATH="$ROOT_DIR/.build/clang-module-cache"
 mkdir -p "$SWIFT_MODULECACHE_PATH" "$CLANG_MODULE_CACHE_PATH"
+# Do not let two local workflows replace/sign the same bundle concurrently.
+PACKAGE_LOCK="$ROOT_DIR/.build/island-package.lock"
+if ! mkdir "$PACKAGE_LOCK" 2>/dev/null; then
+  echo "Another island build/package is in progress; running app left intact." >&2
+  exit 2
+fi
+trap 'rmdir "$PACKAGE_LOCK"' EXIT
 if [[ "$MODE" == "--package-validated" ]]; then
   VALIDATED_DIR="$ROOT_DIR/.build/contained-validation"
   shasum -a 256 -c "$VALIDATED_DIR/validated.sha256"
   BUILD_BINARY="$VALIDATED_DIR/$APP_NAME"
+  BUILD_HELPER="$VALIDATED_DIR/linglongtaictl"
   for source_file in Sources/LinglongtaiShared/*.swift Sources/LinglongtaiHUD/*.swift; do
     if [[ "$source_file" -nt "$BUILD_BINARY" ]]; then
       echo "Source changed after validation; rerun script/check_sandbox.sh" >&2
@@ -65,18 +94,38 @@ else
 swift build --build-system swiftbuild -c "$ISLAND_CONFIGURATION"
 ISLAND_BIN_DIR="$(swift build --build-system swiftbuild -c "$ISLAND_CONFIGURATION" --show-bin-path)"
 BUILD_BINARY="$ISLAND_BIN_DIR/$APP_NAME"
+BUILD_HELPER="$ISLAND_BIN_DIR/linglongtaictl"
 fi
 
 ISLAND_BUILT_SOURCE_HASH="$(cd "$ROOT_DIR" && shasum -a 256 Package.swift VERSION Sources/*/*.swift | shasum -a 256 | awk '{print $1}')"
-if [[ "$ISLAND_BUILT_SOURCE_HASH" != "$ISLAND_SOURCE_HASH" ]]; then
+if [[ "$ISLAND_BUILT_SOURCE_HASH" != "$ISLAND_SOURCE_HASH" || "$(input_hash)" != "$ISLAND_INPUT_HASH" ]]; then
   echo "Source changed during compilation; leave running app intact and rebuild before packaging." >&2
   exit 2
+fi
+
+# Compare unsigned build inputs, not the binary modified by codesign. Verify
+# the whole bundle seal before trusting its recorded build fingerprints.
+ISLAND_BINARY_HASH="$(shasum -a 256 "$BUILD_BINARY" | awk '{print $1}')"
+ISLAND_HELPER_HASH="$(shasum -a 256 "$BUILD_HELPER" | awk '{print $1}')"
+REUSE_BUNDLE=false
+if [[ -f "$INFO_PLIST" && -f "$APP_BINARY" ]]; then
+  EXISTING_INPUT_HASH="$(/usr/bin/plutil -extract IslandInputSHA256 raw -o - "$INFO_PLIST" 2>/dev/null || true)"
+  EXISTING_CONFIGURATION="$(/usr/bin/plutil -extract IslandBuildConfiguration raw -o - "$INFO_PLIST" 2>/dev/null || true)"
+  EXISTING_BINARY_HASH="$(/usr/bin/plutil -extract IslandBuildBinarySHA256 raw -o - "$INFO_PLIST" 2>/dev/null || true)"
+  EXISTING_HELPER_HASH="$(/usr/bin/plutil -extract IslandBuildHelperSHA256 raw -o - "$INFO_PLIST" 2>/dev/null || true)"
+  EXISTING_SIGNER="$(/usr/bin/plutil -extract IslandSigningIdentity raw -o - "$INFO_PLIST" 2>/dev/null || true)"
+  if [[ "$EXISTING_INPUT_HASH" == "$ISLAND_INPUT_HASH" && "$EXISTING_CONFIGURATION" == "$ISLAND_CONFIGURATION" && "$EXISTING_BINARY_HASH" == "$ISLAND_BINARY_HASH" && "$EXISTING_HELPER_HASH" == "$ISLAND_HELPER_HASH" && "$EXISTING_SIGNER" == "$SIGNING_FLAG" ]] && codesign --verify --deep --strict "$APP_BUNDLE"; then
+    REUSE_BUNDLE=true
+    echo "Unchanged bundle: preserving existing signature"
+  fi
 fi
 
 # Only stop the old app after a successful build. Retain a recoverable last build.
 if [[ "$MODE" != "--package-only" && "$MODE" != "--package-validated" && "$MODE" != "--release-package" ]]; then
   pkill -x "$APP_NAME" >/dev/null 2>&1 || true
 fi
+if [[ "$REUSE_BUNDLE" == false ]]; then
+ISLAND_BUILD_ID="$(date +%Y%m%d%H%M%S)"
 if [[ -f "$APP_BINARY" ]]; then
   cp "$APP_BINARY" "$DIST_DIR/$APP_NAME.previous"
 fi
@@ -85,11 +134,7 @@ cp "$BUILD_BINARY" "$APP_BINARY"
 chmod +x "$APP_BINARY"
 cp "$ROOT_DIR/Resources/AppIcon.icns" "$APP_CONTENTS/Resources/AppIcon.icns"
 mkdir -p "$APP_CONTENTS/Helpers" "$APP_CONTENTS/Resources/Integration"
-if [[ "$MODE" == "--package-validated" ]]; then
-  cp "$VALIDATED_DIR/linglongtaictl" "$APP_CONTENTS/Helpers/linglongtaictl"
-else
-  cp "$ISLAND_BIN_DIR/linglongtaictl" "$APP_CONTENTS/Helpers/linglongtaictl"
-fi
+cp "$BUILD_HELPER" "$APP_CONTENTS/Helpers/linglongtaictl"
 cp "$ROOT_DIR/script/install_hooks.py" "$APP_CONTENTS/Resources/Integration/install_hooks.py"
 
 cat >"$INFO_PLIST" <<PLIST
@@ -113,6 +158,14 @@ cat >"$INFO_PLIST" <<PLIST
   <string>$ISLAND_SOURCE_REVISION</string>
   <key>IslandSourceSHA256</key>
   <string>$ISLAND_SOURCE_HASH</string>
+  <key>IslandInputSHA256</key>
+  <string>$ISLAND_INPUT_HASH</string>
+  <key>IslandBuildBinarySHA256</key>
+  <string>$ISLAND_BINARY_HASH</string>
+  <key>IslandBuildHelperSHA256</key>
+  <string>$ISLAND_HELPER_HASH</string>
+  <key>IslandSigningIdentity</key>
+  <string>$SIGNING_FLAG</string>
   <key>IslandBuildConfiguration</key>
   <string>$ISLAND_CONFIGURATION</string>
   <key>CFBundleIconFile</key>
@@ -131,11 +184,19 @@ cat >"$INFO_PLIST" <<PLIST
 </plist>
 PLIST
 
-# Local ad-hoc signatures keep copied resources/helpers consistent. This uses
-# no certificate, grants no entitlements and is not Developer ID distribution.
-codesign --force --sign - "$APP_CONTENTS/Helpers/linglongtaictl"
-codesign --force --sign - "$APP_BINARY"
-codesign --force --sign - "$APP_BUNDLE"
+# Keep resources/helpers sealed without adding entitlements or weakening the
+# designated requirement. Ad-hoc rebuilds may need fresh Accessibility grants.
+if [[ -z "$SIGNING_IDENTITY" ]]; then
+  echo "Signing: ad-hoc. Changed builds may require Accessibility re-authorization." >&2
+fi
+codesign --force --sign "$SIGNING_FLAG" "$APP_CONTENTS/Helpers/linglongtaictl"
+codesign --force --sign "$SIGNING_FLAG" "$APP_BINARY"
+codesign --force --sign "$SIGNING_FLAG" "$APP_BUNDLE"
+codesign --verify --deep --strict "$APP_BUNDLE"
+fi
+# The lock protects compilation and packaging, not a long-lived log/debug UI.
+rmdir "$PACKAGE_LOCK"
+trap - EXIT
 
 open_app() {
   if ((${#APP_ARGS[@]})); then
