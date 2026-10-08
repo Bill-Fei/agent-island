@@ -356,7 +356,7 @@ private struct HUDExpandedContent: View {
                             .minimumScaleFactor(0.9)
                         Spacer(minLength: 4)
                         if task.profile.kind != .custom {
-                            Button("打开应用") {
+                            Button(presence.opening.contains(task.profile.kind) ? "正在打开…" : "打开应用") {
                                 presence.open(task.profile.kind)
                             }
                             .font(HUDTypography.captionEmphasis)
@@ -366,11 +366,15 @@ private struct HUDExpandedContent: View {
                             .background(HUDColorTokens.info.opacity(0.14), in: Capsule())
                             .buttonStyle(.plain)
                             .fixedSize()
-                            .disabled(!presence.canOpen(task.profile.kind))
+                            .disabled(presence.opening.contains(task.profile.kind))
                             .help("打开桌面应用；终端和 IDE 任务请回到原会话处理。")
                         }
                     }
 
+                    if let error = presence.launchErrors[task.profile.kind] {
+                        Text(error).font(HUDTypography.caption)
+                            .foregroundStyle(HUDColorTokens.attention).padding(.top, 8)
+                    }
                     Text(conversationTitles.title(for: task))
                         .font(HUDTypography.body)
                         .foregroundStyle(.white.opacity(0.72))
