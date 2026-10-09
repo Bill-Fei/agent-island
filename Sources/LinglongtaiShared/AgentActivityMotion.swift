@@ -4,7 +4,7 @@ import Foundation
 public enum AgentActivityMotion {
     public static func isExecuting(_ task: AgentTask?, now: Date) -> Bool {
         guard let task, task.source.isLive, task.status == .running,
-              !task.requiresApproval, !["AmbiguousTurn", "DoubaoSilent", "DoubaoAbandoned"].contains(task.sourceEvent ?? "") else { return false }
+              !task.requiresApproval, !["AmbiguousTurn", "DoubaoSilent", "DoubaoAbandoned", "ClaudeChatUnknown", "SupersededTrajectory", "HookTrackingEnded"].contains(task.sourceEvent ?? "") else { return false }
         let age = now.timeIntervalSince(task.updatedAt)
         let limit = task.profile.kind == .doubao ? DoubaoTrajectory.staleAfter : 120
         return age >= -5 && age <= limit

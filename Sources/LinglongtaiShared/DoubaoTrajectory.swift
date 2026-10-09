@@ -68,7 +68,7 @@ public enum DoubaoTrajectory {
             switch self {
             case .running: return .running
             case .finished: return .completed
-            case .unknown(let quiet): return quiet >= abandonAfter ? .cancelled : .running
+            case .unknown: return .running
             }
         }
 
@@ -82,7 +82,6 @@ public enum DoubaoTrajectory {
             case .unknown(let quiet):
                 if quiet < 60 { return "正在等待可用轨迹，状态未知" }
                 let minutes = max(1, Int(quiet / 60))
-                if quiet >= abandonAfter { return "轨迹 \(minutes) 分钟未更新，已停止跟踪" }
                 return "已 \(minutes) 分钟无新记录，状态未知"
             }
         }
@@ -92,7 +91,7 @@ public enum DoubaoTrajectory {
             switch self {
             case .running: return "DoubaoTurn"
             case .finished: return "DoubaoStop"
-            case .unknown(let quiet): return quiet >= abandonAfter ? "DoubaoAbandoned" : "DoubaoSilent"
+            case .unknown: return "DoubaoSilent"
             }
         }
     }

@@ -7,6 +7,7 @@ public struct HookTurnTracker: Codable, Sendable {
         var id: UUID
         var isNative: Bool
         var isTerminal: Bool
+        var updatedAt: Date?
     }
 
     private struct Session: Codable, Sendable {
@@ -19,6 +20,21 @@ public struct HookTurnTracker: Codable, Sendable {
     private var sessions: [String: Session] = [:]
     public init() {}
 
+    /// Missing identity is unknown, not ended. Only matching terminal evidence
+    /// can remove a persisted HUD task from the unresolved count.
+    public struct LifecycleEvidence: Sendable {
+        public let isTerminal: Bool
+        public let updatedAt: Date?
+    }
+
+    public var terminalStates: [UUID: LifecycleEvidence] {
+        sessions.values.reduce(into: [:]) { result, session in
+            for turn in session.turns.values {
+                result[turn.id] = LifecycleEvidence(isTerminal: turn.isTerminal, updatedAt: turn.updatedAt)
+            }
+        }
+    }
+
     public mutating func route(_ event: AgentEvent, localTurnID: UUID = UUID()) -> [AgentEvent] {
         guard let sessionID = event.sessionID, let name = event.sourceEvent else { return [] }
         var session = sessions[sessionID] ?? Session()
@@ -29,9 +45,13 @@ public struct HookTurnTracker: Codable, Sendable {
             return [event]
         }
         if event.type == "end-session" {
-            for key in Array(session.turns.keys) { session.turns[key]?.isTerminal = true }
-            session.ambiguous = false
-            session.closed = true
+            guard let date = event.createdAt else { return [] }
+            for key in Array(session.turns.keys) where date >= (session.turns[key]?.updatedAt ?? .distantPast) {
+                session.turns[key]?.isTerminal = true
+                session.turns[key]?.updatedAt = date
+            }
+            session.ambiguous = session.active.count > 1
+            session.closed = session.active.isEmpty
             sessions[sessionID] = session
             return [event]
         }
@@ -41,6 +61,7 @@ public struct HookTurnTracker: Codable, Sendable {
         if let turnID = event.turnID {
             var routed = event
             if let previous = session.turns[turnID], previous.isTerminal { return [] }
+            if let date = event.createdAt, let previousDate = session.turns[turnID]?.updatedAt, date < previousDate { return [] }
             if session.turns[turnID] == nil, !session.ambiguous,
                name != "UserPromptSubmit", session.active.count == 1,
                let anonymous = session.active.first, !anonymous.value.isNative {
@@ -48,7 +69,7 @@ public struct HookTurnTracker: Codable, Sendable {
                 session.turns.removeValue(forKey: anonymous.key)
             }
             guard let id = routed.id else { return [] }
-            session.turns[turnID] = Turn(id: id, isNative: true, isTerminal: terminal)
+            session.turns[turnID] = Turn(id: id, isNative: true, isTerminal: terminal, updatedAt: event.createdAt)
             // Even after one explicitly identified round stops, an untagged
             // callback could still belong to that round rather than its peer.
             if session.active.count > 1 { session.ambiguous = true }
@@ -63,7 +84,7 @@ public struct HookTurnTracker: Codable, Sendable {
             let turnID = HookEventMapper.localTurnID(sessionID: sessionID, nonce: localTurnID)
             let routed = assigning(event, sessionID: sessionID, turnID: turnID)
             guard let id = routed.id else { return [] }
-            session.turns[turnID] = Turn(id: id, isNative: false, isTerminal: false)
+            session.turns[turnID] = Turn(id: id, isNative: false, isTerminal: false, updatedAt: event.createdAt)
             session.closed = false
             session.ambiguous = overlaps || session.ambiguous
             sessions[sessionID] = session
@@ -77,8 +98,10 @@ public struct HookTurnTracker: Codable, Sendable {
             return [ambiguity(from: event)]
         }
         if let active = session.active.first {
+            if let date = event.createdAt, let previousDate = active.value.updatedAt, date < previousDate { return [] }
             let routed = assigning(event, sessionID: sessionID, turnID: active.key)
             session.turns[active.key]?.isTerminal = terminal
+            session.turns[active.key]?.updatedAt = event.createdAt
             sessions[sessionID] = session
             return [routed]
         }
@@ -90,7 +113,7 @@ public struct HookTurnTracker: Codable, Sendable {
         let turnID = HookEventMapper.localTurnID(sessionID: sessionID, nonce: localTurnID)
         let routed = assigning(event, sessionID: sessionID, turnID: turnID)
         guard let id = routed.id else { return [] }
-        session.turns[turnID] = Turn(id: id, isNative: false, isTerminal: terminal)
+        session.turns[turnID] = Turn(id: id, isNative: false, isTerminal: terminal, updatedAt: event.createdAt)
         sessions[sessionID] = session
         return [routed]
     }

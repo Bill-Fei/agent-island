@@ -130,7 +130,7 @@ enum TaskStoreAcceptance {
             check("Claude Chat long-task heartbeat retains a single turn", observed.count == countBeforeHeartbeat + 1 && chatStore.tasks.count == 1)
             observer.receive(.init(diagnostic: .unreadable, sessionID: "chat-A", idle: true, scanComplete: false))
             check("Claude Chat partial tree cannot fabricate completion", observed.last?.phase == .unknown &&
-                  chatStore.tasks.first?.status == .running && chatStore.tasks.first.map { chatStore.displayedStatus(for: $0) } == "状态未知")
+                  chatStore.tasks.first?.status == .running && chatStore.tasks.first.map { chatStore.displayedStatus(for: $0) } == "等待状态更新")
             observer.receive(.init(diagnostic: .idle, sessionID: "chat-B", idle: true))
             check("Claude Chat another window cannot complete the running window", observed.last?.phase == .unknown)
             observer.receive(.init(diagnostic: .running, sessionID: "chat-B", running: true))
@@ -298,6 +298,7 @@ enum TaskStoreAcceptance {
             try runClaudeApprovalStoreChecks(check: check, emit: emit)
             try runSizingRefreshChecks(check: check, emit: emit)
             try runAmbientEvidenceChecks(check: check, emit: emit)
+            try runCurrentActivityCountChecks(check: check, emit: emit)
         } catch {
             results.append("FAIL: test harness error: \(error)")
         }
@@ -363,8 +364,8 @@ enum TaskStoreAcceptance {
         check("ambient evidence: exact freshness boundary remains active", store.presentation == .compact && store.compactCountText == "1")
         date.addTimeInterval(0.01)
         store.refreshPresentation()
-        check("ambient evidence: freshness expiry clears every ambient channel without completion", store.presentation == .collapsed &&
-              !store.hasLiveEvent && store.activeTask == nil && store.islandIconTasks.isEmpty && store.compactCountText.isEmpty &&
+        check("ambient evidence: freshness expiry preserves unresolved history without a live count", store.presentation == .compact &&
+              store.hasLiveEvent && store.activeTask?.id == active && store.islandIconTasks.count == 1 && store.compactCountText.isEmpty && !store.activeTaskIsExecuting &&
               store.tasks == beforeExpiry && store.tasks.first(where: { $0.id == active })?.status == .running)
 
         for (provider, name, status) in [("豆包", "DoubaoSilent", AgentTaskStatus.running),
@@ -375,8 +376,8 @@ enum TaskStoreAcceptance {
             try emit(AgentEvent(type: "upsert", id: id, agent: provider, status: status,
                                 createdAt: date, sourceEvent: name))
             store.consumeEvents()
-            check("ambient evidence: fresh-timestamp \(name) is not an activity pulse", store.presentation == .collapsed &&
-                  !store.hasLiveEvent && store.compactCountText.isEmpty && store.islandIconTasks.isEmpty)
+            check("ambient evidence: fresh-timestamp \(name) is not adopted as current activity", store.presentation == .compact &&
+                  store.compactCountText.isEmpty && store.ongoingTasks.map(\.id) == [active] && !store.activeTaskIsExecuting)
         }
         try emit(AgentEvent(type: "upsert", id: active, agent: "WorkBuddy", status: .running,
                             createdAt: date, sourceEvent: "PreToolUse"))
@@ -395,6 +396,68 @@ enum TaskStoreAcceptance {
         store.clearAllTasks()
     }
 
+    private static func runCurrentActivityCountChecks(check: (String, Bool) -> Void, emit: (AgentEvent) throws -> Void) throws {
+        var date = Date()
+        let store = TaskStore(now: { date })
+        store.clearAllTasks()
+        let active = UUID(), permission = UUID(), silent = UUID(), ambiguous = UUID(), chat = UUID()
+        for (id, agent) in [(active, "Codex"), (permission, "Codex"), (silent, "豆包"),
+                            (ambiguous, "Claude"), (chat, "Claude")] {
+            try emit(AgentEvent(type: "upsert", id: id, agent: agent, status: .running,
+                                createdAt: date, sourceEvent: "UserPromptSubmit"))
+        }
+        try emit(AgentEvent(type: "upsert", id: permission, status: .waiting,
+                            createdAt: date, sourceEvent: "PermissionRequest"))
+        store.consumeEvents()
+        check("current count: five observed starts count as five activities, not approvals",
+              store.compactCountText == "5" && store.waitingCount == 0)
+
+        date.addTimeInterval(121)
+        for (id, event) in [(silent, "DoubaoSilent"), (ambiguous, "AmbiguousTurn"), (chat, "ClaudeChatUnknown")] {
+            try emit(AgentEvent(type: "upsert", id: id, status: .running, createdAt: date, sourceEvent: event))
+        }
+        try emit(AgentEvent(type: "upsert", id: active, status: .running, createdAt: date, sourceEvent: "PostToolUse"))
+        store.consumeEvents()
+        let before = store.tasks
+        check("current count: five persisted unresolved IDs with one fresh task display one",
+              store.ongoingTasks.count == 5 && store.currentActivityTasks.map(\.id) == [active] && store.compactCountText == "1")
+        check("current count: unknown history does not inflate the icon stack or status",
+              store.islandIconTasks.map(\.id) == [active] && store.mediumStatusText == "处理中")
+        store.select(store.tasks.first { $0.id == permission }!)
+        check("current count: selecting historical permission cannot displace real activity",
+              store.selectedTask?.id == permission && store.activeTask?.id == active && store.waitingCount == 0)
+        check("current count: all five records remain in hover history with unchanged raw states",
+              store.sortedTasks.count == 5 && store.tasks == before)
+        let reload = TaskStore(now: { date })
+        check("current count: restart preserves five historical records but counts only one activity",
+              reload.ongoingTasks.count == 5 && reload.compactCountText == "1" && reload.islandIconTasks.map(\.id) == [active])
+
+        date.addTimeInterval(120)
+        check("current count: cached count remains one at the exact freshness boundary", store.compactCountText == "1")
+        date.addTimeInterval(0.01)
+        store.refreshPresentation()
+        check("current count: zero fresh activities show no number or execution motion",
+              store.compactCountText.isEmpty && store.currentActivityTasks.isEmpty && !store.activeTaskIsExecuting)
+        check("current count: long unknown tasks keep quiet presence and their history, not five icons",
+              store.presentation == .compact && store.islandIconTasks.count == 1 && store.sortedTasks.count == 5 && store.tasks == before)
+        check("current count: restarting unknown history cannot restore a live number",
+              TaskStore(now: { date }).compactCountText.isEmpty)
+
+        let second = UUID()
+        for id in [active, second] {
+            try emit(AgentEvent(type: "upsert", id: id, agent: "Codex", status: .running,
+                                createdAt: date, sourceEvent: "PreToolUse"))
+        }
+        store.consumeEvents()
+        date.addTimeInterval(10)
+        store.refreshPresentation()
+        store.select(store.tasks.first { $0.id == second }!)
+        check("current count: two actual tasks from the same provider retain two icons and count",
+              store.compactCountText == "2" && store.islandIconTasks.count == 2 && store.islandIconTasks.first?.id == second &&
+              store.mediumStatusText == "2项进行中")
+        store.clearAllTasks()
+    }
+
     private static func runSizingRefreshChecks(check: (String, Bool) -> Void, emit: (AgentEvent) throws -> Void) throws {
         var date = Date()
         let store = TaskStore(now: { date })
@@ -406,8 +469,8 @@ enum TaskStoreAcceptance {
         date.addTimeInterval(121)
         check("fresh activity expires even when first read bypasses sortedTasks", store.freshLiveTasks.isEmpty && store.liveTasks.count == 1)
         store.refreshPresentation()
-        check("silent task leaves ambient surface without inventing completion", store.presentation == .collapsed &&
-              store.activeTask == nil && store.compactCountText.isEmpty && !store.activeTaskIsExecuting &&
+        check("silent task retains compact presence without inventing a live count", store.presentation == .compact &&
+              store.activeTask?.id == id && store.compactCountText.isEmpty && !store.activeTaskIsExecuting &&
               store.tasks.first(where: { $0.id == id })?.status == .running)
         let waiting = UUID()
         try emit(AgentEvent(type: "upsert", id: waiting, agent: "WorkBuddy", status: .waiting, createdAt: date, sourceEvent: "Notification"))
@@ -449,19 +512,19 @@ enum TaskStoreAcceptance {
         check("icon stack leads with displayed task and excludes finished history", store.islandIconTasks.map(\.id) == [waiting, queued, running])
         date.addTimeInterval(86_401)
         store.refreshPresentation()
-        check("24h silence hides without completing or deleting", store.sortedTasks.isEmpty && store.tasks.count == 5 && store.tasks.first { $0.id == running }?.status == .running)
-        check("24h silence removes counters and ambient presentation", store.waitingCount == 0 && store.liveTasks.isEmpty && store.presentation == .collapsed)
+        check("24h retains admitted long tasks but ages out terminal history", store.sortedTasks.count == 3 && store.tasks.count == 5 && store.tasks.first { $0.id == running }?.status == .running)
+        check("24h silence retains task count without actionable approval", store.waitingCount == 0 && store.ongoingTasks.count == 3 && store.presentation == .compact)
         try emit(AgentEvent(type: "upsert", id: running, agent: "Codex", status: .running, createdAt: date, sourceEvent: "PreToolUse"))
         store.consumeEvents()
-        check("new real activity restores an old long task", store.sortedTasks.map(\.id) == [running] && store.presentation == .compact)
+        check("new real activity resumes a retained long task", store.sortedTasks.count == 3 && store.activeTask?.id == running && store.presentation == .compact)
         date.addTimeInterval(86_400)
         store.refreshPresentation()
-        check("exactly 24h remains visible", store.sortedTasks.count == 1)
+        check("exactly 24h retains all admitted long tasks", store.sortedTasks.count == 3)
         date.addTimeInterval(0.01)
         store.refreshPresentation()
-        check("only greater than 24h becomes hidden", store.sortedTasks.isEmpty)
+        check("greater than 24h does not end admitted tasks or invent a live count", store.sortedTasks.count == 3 && store.compactCountText.isEmpty)
         let reload = TaskStore(now: { date })
-        check("reload applies activity rule without altering terminal history", reload.tasks == store.tasks && reload.sortedTasks.isEmpty)
+        check("reload preserves unresolved membership without executing stale tasks", reload.tasks == store.tasks && reload.ongoingTasks.count == 3 && !reload.activeTaskIsExecuting)
         store.clearAllTasks()
 
         let first = UUID(), second = UUID(), third = UUID()
@@ -528,8 +591,8 @@ enum TaskStoreAcceptance {
               store.tasks.contains { $0.id == ended } && store.sortedTasks.contains { $0.id == ended } && !store.liveTasks.contains { $0.id == ended })
         date.addTimeInterval(86_401)
         store.refreshPresentation()
-        check("release store: all silent sources age out together without being falsely marked complete",
-              store.sortedTasks.isEmpty && store.liveTasks.isEmpty && store.waitingCount == 0 && store.presentation == .collapsed &&
+        check("release store: unresolved tasks persist while terminal and unadopted history ages out",
+              store.sortedTasks.count == 6 && store.ongoingTasks.count == 6 && store.waitingCount == 0 && store.presentation == .compact &&
               store.tasks.first { $0.id == active }?.status == .running && store.tasks.first { $0.id == olderWaiting }?.status == .waiting)
         store.clearAllTasks()
 
@@ -658,9 +721,9 @@ enum TaskStoreAcceptance {
 
         jump(to: 1_800)
         let silentTask = store.tasks.first { $0.id == longTask }
-        check("a thirty-minute silent task remains history without keeping the island open",
-              store.presentation == .collapsed && store.liveTasks.map(\.id) == [longTask] &&
-              silentTask?.status == .running && store.compactCountText.isEmpty && store.activeTask == nil)
+        check("a thirty-minute silent task retains compact presence without a live count",
+              store.presentation == .compact && store.liveTasks.map(\.id) == [longTask] &&
+              silentTask?.status == .running && store.compactCountText.isEmpty && store.activeTask?.id == longTask && !store.activeTaskIsExecuting)
         check("a silent task reports missing updates without inventing an ending",
               silentTask.map { store.displayedStatus(for: $0) == "等待状态更新" } == true &&
               store.statusSummary(for: .codex).contains("尚未收到结束"))
@@ -688,8 +751,8 @@ enum TaskStoreAcceptance {
         check("a bare permission check remains visible as a non-actionable waiting task",
               store.presentation == .compact && store.waitingCount == 0 && store.liveTasks.first?.status == .waiting)
         jump(to: 3_622)
-        check("a thirty-minute unresolved permission check is history without ambient activity",
-              store.presentation == .collapsed && store.waitingCount == 0 && store.activeTask == nil &&
+        check("a thirty-minute permission check remains visible without claiming actionable approval",
+              store.presentation == .compact && store.waitingCount == 0 && store.activeTask?.id == longTask && store.compactCountText.isEmpty &&
               store.liveTasks.first?.status == .waiting && store.liveTasks.first?.requiresApproval == true)
         jump(to: 3_623)
         try send(longTask, name: "PostToolUse", status: .running)
@@ -718,7 +781,7 @@ enum TaskStoreAcceptance {
         try send(firstConcurrent, name: "Stop", status: .completed)
         check("one terminal event highlights completion while another task remains active",
               store.presentation == .medium && store.liveTasks.map(\.id) == [remainingConcurrent] &&
-              store.activeTask?.id == firstConcurrent && store.mediumStatusText == "1项结束 · 1项有活动")
+              store.activeTask?.id == firstConcurrent && store.mediumStatusText == "1项结束 · 1项进行中")
         jump(to: 6_021.9)
         check("mixed terminal feedback remains medium at 9.9 seconds", store.presentation == .medium)
         jump(to: 6_022)

@@ -87,6 +87,16 @@ public enum ApprovalRelay {
         }
     }
 
+    /// Explicit reset of our own relay files, not provider history.
+    /// Normal startup must use cleanupExpired(), preserving live requests.
+    public static func clearPendingRequests() {
+        guard directoryIsPrivate(), let urls = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else { return }
+        for url in urls where url.pathExtension == "json" || url.pathExtension == "reply" {
+            guard let id = UUID(uuidString: url.deletingPathExtension().lastPathComponent) else { continue }
+            cleanup(id)
+        }
+    }
+
     public static func pending(_ id: UUID, taskID: UUID, now: Date = Date()) -> Request? {
         guard let request = readRequest(id), supports(request.provider), request.protocolVersion == 2, request.taskID == taskID,
               request.expiresAt > now, request.expiresAt.timeIntervalSince(now) <= 46,

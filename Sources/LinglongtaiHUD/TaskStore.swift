@@ -49,6 +49,14 @@ final class TaskStore: ObservableObject {
         return request
     }
 
+    /// Approval is a separate top-level concern from the selected/ambient
+    /// task. A stale selected row must never hide a fresh actionable request.
+    var approvalTask: AgentTask? {
+        currentActivityTasks
+            .filter { needsUserAttention($0) && approvalRequest(for: $0) != nil }
+            .max { $0.updatedAt < $1.updatedAt }
+    }
+
     func approvalFeedback(for task: AgentTask) -> String? {
         if failedApprovals.contains(task.id) { return "未提交决定 · 请在原应用核实" }
         guard let id = task.approvalRequestID, let date = submittedApprovals[id], task.status == .waiting else { return nil }
@@ -108,6 +116,13 @@ final class TaskStore: ObservableObject {
     private var sortedTasksCache: [AgentTask]?
     private var liveTasksCache: [AgentTask]?
     private var freshLiveTasksCache: [AgentTask]?
+    private var currentActivityTasksCache: [AgentTask]?
+    private var ongoingTasksCache: [AgentTask]?
+    // Lifecycle membership is independent of callback freshness. Historical
+    // unresolved rows are retained, but are not automatically re-adopted.
+    private var ongoingTaskIDs: Set<UUID> = [] {
+        didSet { invalidateTaskCache() }
+    }
     private var waitingCountCache: Int?
     private var usageCache: (day: Date, values: [AgentUsageCount])?
     private var statusSignatureCache: String?
@@ -137,6 +152,45 @@ final class TaskStore: ObservableObject {
         var eventOffset: UInt64
         var connections: [String: Date]?
         var version: Int?
+        var ongoingTaskIDs: Set<UUID>?
+    }
+
+    private struct BridgeSnapshot: Decodable {
+        var version: Int
+        var tracker: HookTurnTracker
+    }
+
+    nonisolated private static func hookTerminalStates() -> [UUID: Bool] {
+        guard let data = try? Data(contentsOf: LinglongtaiPaths.hookTurns),
+              let bridge = try? JSONDecoder().decode(BridgeSnapshot.self, from: data),
+              bridge.version == 2 else { return [:] }
+        return bridge.tracker.terminalStates.mapValues(\.isTerminal)
+    }
+
+    private func reconcileOngoingTasks(terminalStates: [UUID: Bool]) {
+        for index in tasks.indices where tasks[index].source.isLive &&
+            [.queued, .running, .waiting].contains(tasks[index].status) {
+            if terminalStates[tasks[index].id] == true {
+                ongoingTaskIDs.remove(tasks[index].id)
+                // The tracker has no terminal reason; do not invent completion.
+                tasks[index].sourceEvent = "HookTrackingEnded"
+            } else if terminalStates[tasks[index].id] == false,
+                      tasks[index].sourceEvent != "HookTrackingEnded" {
+                ongoingTaskIDs.insert(tasks[index].id)
+            }
+        }
+        let latestDoubao = Dictionary(grouping: tasks.filter {
+            $0.source.isLive && $0.profile.kind == .doubao && $0.sessionID != nil
+        }, by: { $0.sessionID! }).compactMapValues { $0.max { $0.updatedAt < $1.updatedAt }?.id }
+        for index in tasks.indices where tasks[index].profile.kind == .doubao {
+            guard let session = tasks[index].sessionID, latestDoubao[session] != tasks[index].id,
+                  [.queued, .running, .waiting].contains(tasks[index].status) else { continue }
+            ongoingTaskIDs.remove(tasks[index].id)
+            tasks[index].sourceEvent = "SupersededTrajectory"
+        }
+        ongoingTaskIDs.formIntersection(Set(tasks.filter {
+            $0.source.isLive && [.queued, .running, .waiting].contains($0.status)
+        }.map(\.id)))
     }
 
     private let autoPopKey = "dynamicIsland.autoPopOnEvent"
@@ -273,7 +327,7 @@ final class TaskStore: ObservableObject {
         let reference = now()
         let visible = candidates.filter {
             ($0.source.isLive || demoPreviewActive || isAcceptancePreview) &&
-            reference.timeIntervalSince($0.updatedAt) <= 86_400 &&
+            (ongoingTaskIDs.contains($0.id) || reference.timeIntervalSince($0.updatedAt) <= 86_400) &&
             reference.timeIntervalSince($0.updatedAt) >= -5
         }
         visibleTasksCache = visible
@@ -294,6 +348,16 @@ final class TaskStore: ObservableObject {
         return live
     }
 
+    /// Confirmed starts / resumptions remain unresolved until real terminal
+    /// evidence, explicit removal, or a source-backed superseding turn arrives.
+    var ongoingTasks: [AgentTask] {
+        refreshTaskCacheIfNeeded()
+        if let ongoingTasksCache { return ongoingTasksCache }
+        let ongoing = liveTasks.filter { ongoingTaskIDs.contains($0.id) }
+        ongoingTasksCache = ongoing
+        return ongoing
+    }
+
     /// A task can remain visible for a long time without a provider callback,
     /// but that is not evidence that it is still executing. Ambient animation
     /// must follow a fresh real task when one exists; stale rows stay available
@@ -304,6 +368,18 @@ final class TaskStore: ObservableObject {
         let fresh = liveTasks.filter { isFresh($0) }
         freshLiveTasksCache = fresh
         return fresh
+    }
+
+    /// Tasks that are allowed to contribute to the compact island's live
+    /// counter. `ongoingTasks` intentionally retains unresolved history, so
+    /// it must not be used as evidence of current activity. Fresh queued and
+    /// permission-check rows count as activity, not execution or approval.
+    var currentActivityTasks: [AgentTask] {
+        refreshTaskCacheIfNeeded()
+        if let currentActivityTasksCache { return currentActivityTasksCache }
+        let current = ongoingTasks.filter { isFresh($0) }
+        currentActivityTasksCache = current
+        return current
     }
 
     var waitingCount: Int {
@@ -319,6 +395,8 @@ final class TaskStore: ObservableObject {
         sortedTasksCache = nil
         liveTasksCache = nil
         freshLiveTasksCache = nil
+        currentActivityTasksCache = nil
+        ongoingTasksCache = nil
         waitingCountCache = nil
         usageCache = nil
         statusSignatureCache = nil
@@ -367,7 +445,7 @@ final class TaskStore: ObservableObject {
     }
 
     var hasLiveEvent: Bool {
-        !freshLiveTasks.isEmpty || highlightedFeedbackTask != nil
+        !ongoingTasks.isEmpty || highlightedFeedbackTask != nil
     }
 
     /// A historical unresolved row is not an ambient activity signal. Even a
@@ -413,8 +491,9 @@ final class TaskStore: ObservableObject {
     }
 
     func displayedStatus(for task: AgentTask) -> String {
-        if task.sourceEvent == "ClaudeChatUnknown" { return "状态未知" }
-        if task.sourceEvent == "DoubaoAbandoned" || task.sourceEvent == "DoubaoSilent" { return task.statusLabel }
+        if task.sourceEvent == "ClaudeChatUnknown" { return "等待状态更新" }
+        if task.sourceEvent == "DoubaoSilent" || task.sourceEvent == "DoubaoAbandoned" { return "等待状态更新" }
+        if task.sourceEvent == "SupersededTrajectory" || task.sourceEvent == "HookTrackingEnded" { return "历史记录 · 不再跟踪" }
         if task.sourceEvent == "AmbiguousTurn" { return "等待状态更新" }
         if task.source.isLive && !isFresh(task) && [.queued, .running, .waiting].contains(task.status) { return "等待状态更新" }
         if task.sourceEvent == "ClaudeChatStart" { return "正在生成" }
@@ -427,18 +506,23 @@ final class TaskStore: ObservableObject {
     }
 
     var activeTask: AgentTask? {
-        if let waiting = freshLiveTasks.first(where: { needsUserAttention($0) }) { return waiting }
+        if let waiting = currentActivityTasks.first(where: { needsUserAttention($0) }) { return waiting }
         if let task = highlightedFeedbackTask { return task }
         if let selectedTask, (selectedTask.source.isLive || demoPreviewActive || isAcceptancePreview),
            [.queued, .running, .waiting].contains(selectedTask.status),
-           demoPreviewActive || isAcceptancePreview || isFresh(selectedTask) {
+           demoPreviewActive || isAcceptancePreview || currentActivityTasks.contains(where: { $0.id == selectedTask.id }) {
             // Selection still controls history/detail, but only a fresh real
             // signal (or explicit QA preview) may drive the ambient surface.
             return selectedTask
         }
-        if let current = freshLiveTasks.first(where: { $0.status == .running }) ?? freshLiveTasks.first {
+        if let current = currentActivityTasks.first(where: { $0.status == .running }) ?? currentActivityTasks.first {
             return current
         }
+        // Keep an unresolved long task represented in the small island, but
+        // never let its stale/unknown row inflate the live counter or icon
+        // stack when a fresher task exists.
+        if let selectedTask, ongoingTaskIDs.contains(selectedTask.id) { return selectedTask }
+        if let current = ongoingTasks.first { return current }
         return demoPreviewActive || isAcceptancePreview ? selectedTask : nil
     }
 
@@ -454,7 +538,9 @@ final class TaskStore: ObservableObject {
     /// Finished history never creates an ambient icon or increments live counts.
     var islandIconTasks: [AgentTask] {
         guard let front = activeTask else { return [] }
-        return [front] + freshLiveTasks.filter { $0.id != front.id }.prefix(3)
+        // With no fresh activity, retain one quiet unknown-state icon for a
+        // long unresolved task, without a number or historical icon stack.
+        return [front] + currentActivityTasks.filter { $0.id != front.id }.prefix(3)
     }
 
     var mediumStatusText: String {
@@ -462,17 +548,17 @@ final class TaskStore: ObservableObject {
         if waitingCount > 0 { return "\(waitingCount)项待确认" }
         if let task = highlightedFeedbackTask,
            [.completed, .failed, .cancelled].contains(task.status) {
-            return freshLiveTasks.isEmpty ? task.statusLabel : "1项结束 · \(freshLiveTasks.count)项有活动"
+            return currentActivityTasks.isEmpty ? task.statusLabel : "1项结束 · \(currentActivityTasks.count)项进行中"
         }
-        if freshLiveTasks.count > 1 {
-            return "\(freshLiveTasks.count)项有活动"
+        if currentActivityTasks.count > 1 {
+            return "\(currentActivityTasks.count)项进行中"
         }
         guard let task = activeTask else { return "等待事件" }
         return displayedStatus(for: task)
     }
 
     var compactCountText: String {
-        waitingCount > 0 ? "\(waitingCount)" : freshLiveTasks.isEmpty ? "" : "\(freshLiveTasks.count)"
+        currentActivityTasks.isEmpty ? "" : "\(currentActivityTasks.count)"
     }
 
     // MARK: - Content-driven medium width
@@ -674,6 +760,7 @@ final class TaskStore: ObservableObject {
 
     func dismissTask(_ task: AgentTask) {
         tasks.removeAll { $0.id == task.id }
+        ongoingTaskIDs.remove(task.id)
         if selectedTaskID == task.id { selectedTaskID = sortedTasks.first?.id }
         if highlightedTaskID == task.id {
             highlightedTaskID = nil
@@ -690,6 +777,7 @@ final class TaskStore: ObservableObject {
             return
         }
         tasks.removeAll()
+        ongoingTaskIDs.removeAll()
         eventPulseUntil = .distantPast
         mediumUntil = .distantPast
         highlightedTaskID = nil
@@ -729,8 +817,12 @@ final class TaskStore: ObservableObject {
         if let data = try? Data(contentsOf: LinglongtaiPaths.state),
            let snapshot = try? JSONDecoder().decode(Snapshot.self, from: data) {
             tasks = snapshot.tasks
+            ongoingTaskIDs = snapshot.ongoingTaskIDs ?? Set(snapshot.tasks.filter {
+                $0.source.isLive && [.queued, .running, .waiting].contains($0.status) && isFresh($0)
+            }.map(\.id))
             eventOffset = snapshot.eventOffset
             connections = snapshot.connections ?? [:]
+            reconcileOngoingTasks(terminalStates: Self.hookTerminalStates())
             if snapshot.version != 2 {
                 recoverHookMetadata()
                 saveTasks()
@@ -757,6 +849,10 @@ final class TaskStore: ObservableObject {
         } else {
             tasks = filtered
         }
+        ongoingTaskIDs = Set(tasks.filter {
+            $0.source.isLive && [.queued, .running, .waiting].contains($0.status) && isFresh($0)
+        }.map(\.id))
+        reconcileOngoingTasks(terminalStates: Self.hookTerminalStates())
     }
 
     /// Earlier builds consumed live hooks but did not persist their origin.
@@ -787,7 +883,8 @@ final class TaskStore: ObservableObject {
         do {
             // One atomic checkpoint contains both data and cursor, preventing
             // a cursor from skipping events after a failed task write.
-            let snapshot = Snapshot(tasks: persistentTasks, eventOffset: eventOffset, connections: connections, version: 2)
+            let snapshot = Snapshot(tasks: persistentTasks, eventOffset: eventOffset, connections: connections, version: 2,
+                                    ongoingTaskIDs: ongoingTaskIDs)
             try checkpointQueue.sync { try Self.writeCheckpoint(snapshot) }
             checkpointNeedsRetry = false
             return true
@@ -805,6 +902,7 @@ final class TaskStore: ObservableObject {
         guard batch.end > batch.start else { return }
         eventOffset = batch.end
         for event in batch.events { _ = apply(event) }
+        reconcileOngoingTasks(terminalStates: Self.hookTerminalStates())
         _ = saveTasks()
         refreshPresentation()
     }
@@ -829,10 +927,11 @@ final class TaskStore: ObservableObject {
         let offset = eventOffset
         let url = LinglongtaiPaths.events
         Task { @MainActor [weak self] in
-            let batch = await Task.detached(priority: .utility) {
-                try? EventJournal.read(at: url, offset: offset)
+            let result = await Task.detached(priority: .utility) {
+                (try? EventJournal.read(at: url, offset: offset), Self.hookTerminalStates())
             }.value
             guard let self else { return }
+            let batch = result.0
             if batch?.blockedByOversizedLine == true { self.notice = "事件行超过 1MiB，已暂停读取；原日志未改动，请核实数据源" }
             guard let batch, batch.end > batch.start, self.eventOffset == offset else {
                 self.eventPollInFlight = false
@@ -840,6 +939,7 @@ final class TaskStore: ObservableObject {
             }
             self.eventOffset = batch.end
             for event in batch.events { _ = self.apply(event) }
+            self.reconcileOngoingTasks(terminalStates: result.1)
             self.refreshPresentation()
             self.saveTasksInBackground { [weak self] in self?.eventPollInFlight = false }
         }
@@ -850,7 +950,8 @@ final class TaskStore: ObservableObject {
         let generation = checkpointGeneration
         checkpointNeedsRetry = true
         let snapshot = Snapshot(tasks: tasks.filter { $0.source != .demo },
-                                eventOffset: eventOffset, connections: connections, version: 2)
+                                eventOffset: eventOffset, connections: connections, version: 2,
+                                ongoingTaskIDs: ongoingTaskIDs)
         checkpointQueue.async { [weak self] in
             let succeeded: Bool
             do { try Self.writeCheckpoint(snapshot); succeeded = true }
@@ -887,7 +988,7 @@ final class TaskStore: ObservableObject {
             self.doubaoPollInFlight = false
             guard !result.1.isEmpty else { return }
             var didChange = false
-            for event in result.1 { didChange = self.apply(event) || didChange }
+            for event in result.1 { didChange = self.apply(event, observedOngoing: true) || didChange }
             if didChange {
                 self.saveTasksInBackground()
                 self.refreshPresentation()
@@ -896,7 +997,7 @@ final class TaskStore: ObservableObject {
     }
 
     @discardableResult
-    private func apply(_ event: AgentEvent) -> Bool {
+    private func apply(_ event: AgentEvent, observedOngoing: Bool = false) -> Bool {
         if demoPreviewActive { endDemoPreview() }
         if event.sourceEvent != nil, let agent = event.agent, let date = event.createdAt {
             let kind = AgentKind.resolve(agent)
@@ -923,6 +1024,7 @@ final class TaskStore: ObservableObject {
                 tasks[index].sourceEvent = "SessionEnd"
                 tasks[index].detail = "会话已关闭"
                 tasks[index].updatedAt = date
+                ongoingTaskIDs.remove(tasks[index].id)
                 if abs(now().timeIntervalSince(date)) <= 120 {
                     mediumUntil = now().addingTimeInterval(10)
                     eventPulseUntil = mediumUntil
@@ -932,6 +1034,7 @@ final class TaskStore: ObservableObject {
             return true
         case "clear":
             tasks.removeAll()
+            ongoingTaskIDs.removeAll()
             eventPulseUntil = .distantPast
             mediumUntil = .distantPast
             highlightedTaskID = nil
@@ -942,6 +1045,7 @@ final class TaskStore: ObservableObject {
         case "delete":
             guard let id = event.id else { return false }
             tasks.removeAll { $0.id == id }
+            ongoingTaskIDs.remove(id)
             if highlightedTaskID == id {
                 eventPulseUntil = .distantPast
                 mediumUntil = .distantPast
@@ -956,6 +1060,7 @@ final class TaskStore: ObservableObject {
                let index = tasks.firstIndex(where: { $0.id == obsoleteID &&
                    (event.replacesTaskID != nil || $0.sessionID == nil) }),
                (event.createdAt ?? .distantPast) >= tasks[index].updatedAt {
+                if ongoingTaskIDs.remove(obsoleteID) != nil { ongoingTaskIDs.insert(id) }
                 if tasks.contains(where: { $0.id == id }) {
                     tasks.remove(at: index)
                 } else {
@@ -1043,6 +1148,25 @@ final class TaskStore: ObservableObject {
                 task.recordToolEvent(event)
                 task.approvalRequestID = event.approvalRequestID
                 tasks.append(task)
+            }
+            if let current = tasks.first(where: { $0.id == id }) {
+                if [.completed, .failed, .cancelled].contains(current.status) {
+                    ongoingTaskIDs.remove(id)
+                } else if isFresh(current) || observedOngoing {
+                    ongoingTaskIDs.insert(id)
+                }
+                // Doubao's trajectory represents one current turn per session.
+                // A newer boundary supersedes old unresolved rows, but is NOT
+                // proof that those old rows completed or were cancelled.
+                if current.profile.kind == .doubao, let session = current.sessionID {
+                    for index in tasks.indices where tasks[index].id != id &&
+                        tasks[index].profile.kind == .doubao && tasks[index].sessionID == session &&
+                        tasks[index].updatedAt < current.updatedAt &&
+                        [.queued, .running, .waiting].contains(tasks[index].status) {
+                        ongoingTaskIDs.remove(tasks[index].id)
+                        tasks[index].sourceEvent = "SupersededTrajectory"
+                    }
+                }
             }
             demoPreviewActive = false
             let important = previousStatus == nil || event.sourceEvent == "UserPromptSubmit" ||
@@ -1156,7 +1280,7 @@ final class TaskStore: ObservableObject {
 
     private func isFresh(_ task: AgentTask) -> Bool {
         let age = now().timeIntervalSince(task.updatedAt)
-        guard !["DoubaoSilent", "DoubaoAbandoned", "AmbiguousTurn", "ClaudeChatUnknown"].contains(task.sourceEvent ?? "") else { return false }
+        guard !["DoubaoSilent", "DoubaoAbandoned", "AmbiguousTurn", "ClaudeChatUnknown", "SupersededTrajectory", "HookTrackingEnded"].contains(task.sourceEvent ?? "") else { return false }
         let limit = task.profile.kind == .doubao ? DoubaoTrajectory.staleAfter : 120
         return age >= -5 && age <= limit
     }

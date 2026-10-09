@@ -55,7 +55,7 @@ func runDoubaoRevisionChecks(check: (String, Bool) -> Void) {
         check("doubao: an unreturned assistant tool becomes unknown after four minutes",
               pendingObservation.map { DoubaoTrajectory.phase(of: $0, now: now.addingTimeInterval(240)) } == .unknown(quiet: 245))
         check("doubao: an unreturned tool stops tracking without claiming completion",
-              pendingObservation.map { DoubaoTrajectory.event(for: $0, now: now.addingTimeInterval(1_200)).sourceEvent } == "DoubaoAbandoned")
+              pendingObservation.map { DoubaoTrajectory.event(for: $0, now: now.addingTimeInterval(1_200)).sourceEvent } == "DoubaoSilent")
         check("doubao: a tool call is reported by classified label, never raw name",
               pendingDetail.contains("执行命令") && !pendingDetail.contains("Bash"))
 
@@ -78,8 +78,8 @@ func runDoubaoRevisionChecks(check: (String, Bool) -> Void) {
         let abandoned = write(root, session: "s-abandoned", rows: [user()], age: 1_300, now: now)
         let abandonedEvent = DoubaoTrajectory.observation(sessionKey: "s-abandoned", url: abandoned)
             .map { DoubaoTrajectory.event(for: $0, now: now) }
-        check("doubao: long silence stops tracking instead of staying live",
-              abandonedEvent?.status == .cancelled)
+        check("doubao: long silence remains unresolved instead of fabricating cancellation",
+              abandonedEvent?.status == .running && abandonedEvent?.sourceEvent == "DoubaoSilent")
         let unknown = write(root, session: "s-unknown", rows: [user(), ["role": "unexpected"]], age: 5, now: now)
         check("doubao: unrecognized role is unknown, never completed", DoubaoTrajectory.observation(sessionKey: "s-unknown", url: unknown).map { DoubaoTrajectory.event(for: $0, now: now).status } != .completed)
         let abandonedTask = AgentTask(agent: "豆包", title: "fixture", status: .cancelled, detail: "", model: "", sourceEvent: "DoubaoAbandoned")
