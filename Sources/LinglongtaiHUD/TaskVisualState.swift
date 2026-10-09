@@ -4,14 +4,12 @@ import LinglongtaiShared
 /// Display-only hierarchy. The store remains the authority for lifecycle,
 /// freshness and approval; no task is completed or resumed by this mapping.
 enum TaskVisualGroup: Int, CaseIterable, Identifiable {
-    case attention, active, unknown, ended
+    case active, ended
 
     var id: Int { rawValue }
     var title: String {
         switch self {
-        case .attention: return "需你处理"
         case .active: return "进行中"
-        case .unknown: return "待更新 · 状态未知"
         case .ended: return "已结束"
         }
     }
@@ -41,9 +39,8 @@ enum TaskVisualState: Hashable {
 
     var group: TaskVisualGroup {
         switch self {
-        case .attention: return .attention
-        case .executing, .queued, .checkingPermission, .awaitingReceipt: return .active
-        case .unknown, .untracked: return .unknown
+        case .attention, .executing, .queued, .checkingPermission, .awaitingReceipt: return .active
+        case .unknown, .untracked: return .ended
         case .completed, .failed, .cancelled: return .ended
         }
     }
@@ -67,7 +64,7 @@ enum TaskVisualState: Hashable {
         case .queued: return "排队中"
         case .checkingPermission: return "核对权限"
         case .awaitingReceipt: return "等待回执"
-        case .unknown: return "状态待更新"
+        case .unknown: return "结果未知"
         case .untracked: return "不再跟踪"
         case .completed: return "本轮结束"
         case .failed: return "响应失败"

@@ -127,7 +127,7 @@ private struct HUDActivityContent: View {
             .accessibilityLabel("展开 \(store.primaryAgentName) 任务详情")
             Color.clear.frame(width: layout.centerExclusionWidth)
             Group {
-                if let task = store.activeTask, store.approvalRequest(for: task) != nil {
+                if let task = store.approvalTask {
                     Button { store.reviewApproval(for: task) } label: {
                         activityWing(for: .compact, alignment: .trailing) {
                             CompactTaskIndicator(symbol: "hand.raised", count: "", needsAttention: true,
@@ -202,10 +202,12 @@ private struct HUDActivityContent: View {
 
     private var mediumStatus: some View {
         Group {
+            // A failed decision has no live relay request, so approvalTask is
+            // nil by then; the feedback must follow the highlighted task.
             if let task = store.activeTask, store.failedApprovals.contains(task.id) {
                 detailButton(title: "未提交决定", tint: HUDColorTokens.attention)
                     .help("请在原应用核实；没有自动批准")
-            } else if let task = store.activeTask, store.approvalRequest(for: task) != nil,
+            } else if let task = store.approvalTask, store.approvalRequest(for: task) != nil,
                       store.calibrationPreview == nil {
                 Button("批准…") { store.reviewApproval(for: task) }
                     .buttonStyle(.plain).foregroundStyle(HUDColorTokens.attention)
@@ -260,8 +262,7 @@ private struct HUDExpandedContent: View {
                 }
                 Spacer()
                 Metric(value: String(sections.first { $0.group == .active }?.items.count ?? 0), label: "进行中", tint: HUDColorTokens.info)
-                Metric(value: String(sections.first { $0.group == .unknown }?.items.count ?? 0), label: "待更新", tint: HUDColorTokens.neutral)
-                Metric(value: String(sections.first { $0.group == .attention }?.items.count ?? 0), label: "待处理", tint: HUDColorTokens.attention)
+                Metric(value: String(sections.first { $0.group == .ended }?.items.count ?? 0), label: "已结束", tint: HUDColorTokens.neutral)
                 Button(action: store.toggleExpanded) {
                     Image(systemName: "chevron.up")
                         .font(.system(size: 12, weight: .semibold))
@@ -424,7 +425,7 @@ private struct HUDExpandedContent: View {
                     }.font(HUDTypography.caption).foregroundStyle(.secondary).padding(.top, 6)
                     ScrollView {
                         VStack(alignment: .leading, spacing: 12) {
-                            Text(state.group == .unknown ? "状态说明" : state.group == .ended ? "最后状态" : "当前步骤")
+                            Text(state == .unknown || state == .untracked ? "状态说明" : state.group == .ended ? "最后状态" : "当前步骤")
                                 .font(HUDTypography.captionEmphasis).foregroundStyle(.secondary)
                             Text(state.unknownExplanation ?? store.currentStepText(for: task))
                                 .font(HUDTypography.bodyEmphasis)
@@ -590,19 +591,19 @@ private struct TaskRow: View {
     let onSelect: () -> Void
 
     private var isEnded: Bool { state.group == .ended }
-    private var isEmphasized: Bool { state.group == .active || state.group == .attention }
+    private var isEmphasized: Bool { state.group == .active }
 
     var body: some View {
         Button(action: onSelect) {
             HStack(alignment: .top, spacing: 10) {
                 AgentAvatar(task: task, size: 28)
-                    .opacity(isEnded ? 0.56 : state.group == .unknown ? 0.72 : 1)
+                    .opacity(isEnded ? 0.56 : state == .unknown || state == .untracked ? 0.72 : 1)
                     .padding(.top, 2)
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(spacing: 6) {
                         Text(task.agent)
                             .font(.system(size: 12, weight: isEmphasized ? .semibold : .medium))
-                            .foregroundStyle(.white.opacity(isEnded ? 0.58 : state.group == .unknown ? 0.76 : 1))
+                            .foregroundStyle(.white.opacity(isEnded ? 0.58 : state == .unknown || state == .untracked ? 0.76 : 1))
                         Spacer(minLength: 4)
                         Text(task.updatedAt, style: .time)
                             .font(.system(size: 9)).monospacedDigit()

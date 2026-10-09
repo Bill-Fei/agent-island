@@ -44,13 +44,16 @@ struct TaskVisualAcceptance {
         check("visual mapping never mutates raw lifecycle", original.status == .running && original.sourceEvent == "ClaudeChatUnknown")
         let first = TaskVisualItem(task: task(.running), state: .executing)
         let second = TaskVisualItem(task: task(.running), state: .executing)
+        let attention = TaskVisualItem(task: task(.waiting), state: .attention)
         let sections = TaskVisualSection.grouped([
             TaskVisualItem(task: task(.completed), state: .completed),
             TaskVisualItem(task: task(.running), state: .unknown),
-            first, TaskVisualItem(task: task(.waiting), state: .attention), second
+            first, attention, second
         ])
-        check("display groups prioritize attention, active, unknown, ended", sections.map(\.group) == [.attention, .active, .unknown, .ended])
-        check("same-group ordering is stable", sections.first { $0.group == .active }?.items.map(\.id) == [first.id, second.id])
+        check("only two display groups: active, ended", sections.map(\.group) == [.active, .ended])
+        check("attention stays in the active group", TaskVisualState.attention.group == .active)
+        check("unknown is never shown as active execution", TaskVisualState.unknown.group == .ended && TaskVisualState.untracked.group == .ended)
+        check("same-group ordering is stable", sections.first { $0.group == .active }?.items.map(\.id) == [first.id, attention.id, second.id])
         check("empty groups are omitted", TaskVisualSection.grouped([first]).map(\.group) == [.active])
         check("empty list creates no placeholder task", TaskVisualSection.grouped([]).isEmpty)
         check("all nonexecution states stay static", [TaskVisualState.attention, .queued, .checkingPermission, .awaitingReceipt, .unknown, .untracked, .completed, .failed, .cancelled].allSatisfy { !$0.animates })
