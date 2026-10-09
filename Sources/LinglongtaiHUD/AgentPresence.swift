@@ -93,12 +93,14 @@ final class AgentPresence: ObservableObject {
 
     private func verifyVisibleWindow(of app: NSRunningApplication, kind: AgentKind) async {
         defer { opening.remove(kind) }
-        if Self.hasVisibleWindow(pid: app.processIdentifier) { return }
         let pid = app.processIdentifier
         // A background panel cannot activate another app on recent macOS
-        // (cooperative activation), so the window may sit on another desktop.
-        // Accessibility can bring the app frontmost, which also switches there.
-        if await Task.detached(priority: .userInitiated, operation: { Self.bringFrontmost(pid: pid) }).value {
+        // (cooperative activation): an open window stays behind others or on
+        // another desktop. Always bring the app frontmost through Accessibility,
+        // even when a window is already on screen, which also switches desktops.
+        let frontmost = await Task.detached(priority: .userInitiated, operation: { Self.bringFrontmost(pid: pid) }).value
+        if Self.hasVisibleWindow(pid: pid) { return }
+        if frontmost {
             for _ in 0..<4 {
                 if Self.hasVisibleWindow(pid: pid) { return }
                 try? await Task.sleep(nanoseconds: 250_000_000)
