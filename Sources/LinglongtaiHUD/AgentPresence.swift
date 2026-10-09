@@ -94,10 +94,10 @@ final class AgentPresence: ObservableObject {
         let pid = app.processIdentifier
         func reached(polls: Int) async -> Bool {
             for _ in 0..<polls {
-                if Self.isFrontmost(pid: pid) && Self.hasVisibleWindow(pid: pid) { Self.trace("reached"); return true }
+                if Self.isFrontmost(pid: pid) && Self.frontWindowIsOwn(pid: pid) { Self.trace("reached"); return true }
                 try? await Task.sleep(nanoseconds: 250_000_000)
             }
-            Self.trace("not reached front=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "nil") visible=\(Self.hasVisibleWindow(pid: pid))")
+            Self.trace("not reached front=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "nil") visible=\(Self.hasVisibleWindow(pid: pid)) onTop=\(Self.frontWindowIsOwn(pid: pid))")
             return false
         }
         // 1. Bring the app forward (switches to the desktop holding its window).
@@ -139,7 +139,7 @@ final class AgentPresence: ObservableObject {
         } else {
             app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
         }
-        Self.trace("axFrontmost=\(Self.bringFrontmost(pid: app.processIdentifier))")
+        Self.trace("axFrontmost=\(Self.bringFrontmost(pid: app.processIdentifier)) raised=\(Self.raiseMainWindow(pid: app.processIdentifier))")
     }
 
     /// Temporary open-app diagnostics: only app IDs, flags and step results,
@@ -160,7 +160,15 @@ final class AgentPresence: ObservableObject {
     }
 
     private static func hasVisibleWindow(pid: pid_t) -> Bool {
-        visibleWindowExists(pid: pid, windows: CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]])
+        visibleWindowExists(pid: pid, windows: onScreenWindows())
+    }
+
+    private static func frontWindowIsOwn(pid: pid_t) -> Bool {
+        frontWindowBelongs(to: pid, windows: onScreenWindows())
+    }
+
+    private static func onScreenWindows() -> [[String: Any]]? {
+        CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
     }
 
     enum WindowRestoration: Sendable { case permissionRequired, attempted, noWindow, unavailable }
@@ -172,6 +180,36 @@ final class AgentPresence: ObservableObject {
         let application = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(application, 0.2)
         return AXUIElementSetAttributeValue(application, kAXFrontmostAttribute as CFString, true as CFBoolean) == .success
+    }
+
+    /// Activation alone can leave another app's window on top; raise this app's
+    /// main window explicitly. Only window order changes; titles are never read.
+    private nonisolated static func raiseMainWindow(pid: pid_t) -> Bool {
+        guard AXIsProcessTrusted() else { return false }
+        let application = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(application, 0.2)
+        var candidates: [AXUIElement] = []
+        for attribute in [kAXMainWindowAttribute, kAXFocusedWindowAttribute] {
+            var value: CFTypeRef?
+            if AXUIElementCopyAttributeValue(application, attribute as CFString, &value) == .success,
+               let value, CFGetTypeID(value) == AXUIElementGetTypeID() {
+                candidates.append(value as! AXUIElement)
+            }
+        }
+        var rawWindows: CFTypeRef?
+        if AXUIElementCopyAttributeValue(application, kAXWindowsAttribute as CFString, &rawWindows) == .success,
+           let windows = rawWindows as? [AXUIElement] {
+            candidates.append(contentsOf: windows.prefix(4))
+        }
+        for window in candidates {
+            AXUIElementSetMessagingTimeout(window, 0.2)
+            var subrole: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(window, kAXSubroleAttribute as CFString, &subrole) == .success,
+                  subrole as? String == kAXStandardWindowSubrole else { continue }
+            AXUIElementSetAttributeValue(window, kAXMainAttribute as CFString, true as CFBoolean)
+            return AXUIElementPerformAction(window, kAXRaiseAction as CFString) == .success
+        }
+        return false
     }
 
     private nonisolated static func launchServicesReopen(bundleID: String) {
@@ -226,15 +264,23 @@ final class AgentPresence: ObservableObject {
 
     static func visibleWindowExists(pid: pid_t, windows: [[String: Any]]?) -> Bool {
         guard let windows else { return false }
-        return windows.contains { window in
-            guard (window[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == pid,
-                  (window[kCGWindowLayer as String] as? NSNumber)?.intValue == 0,
-                  (window[kCGWindowAlpha as String] as? NSNumber)?.doubleValue ?? 0 > 0,
-                  let bounds = window[kCGWindowBounds as String] as? [String: Any],
-                  let width = (bounds["Width"] as? NSNumber)?.doubleValue,
-                  let height = (bounds["Height"] as? NSNumber)?.doubleValue else { return false }
-            return width >= 100 && height >= 100
-        }
+        return windows.contains { isNormalWindow($0) && ($0[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == pid }
+    }
+
+    /// On-screen windows are listed front to back, so the first normal window is
+    /// the one the user sees on top. Overlays such as the island are skipped.
+    static func frontWindowBelongs(to pid: pid_t, windows: [[String: Any]]?) -> Bool {
+        guard let front = windows?.first(where: isNormalWindow) else { return false }
+        return (front[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == pid
+    }
+
+    private static func isNormalWindow(_ window: [String: Any]) -> Bool {
+        guard (window[kCGWindowLayer as String] as? NSNumber)?.intValue == 0,
+              (window[kCGWindowAlpha as String] as? NSNumber)?.doubleValue ?? 0 > 0,
+              let bounds = window[kCGWindowBounds as String] as? [String: Any],
+              let width = (bounds["Width"] as? NSNumber)?.doubleValue,
+              let height = (bounds["Height"] as? NSNumber)?.doubleValue else { return false }
+        return width >= 100 && height >= 100
     }
 
     private func applicationURL(for kind: AgentKind) -> URL? {
