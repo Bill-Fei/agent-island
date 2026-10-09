@@ -98,6 +98,8 @@ final class AgentPresence: ObservableObject {
         let restoration = await Task.detached(priority: .userInitiated) {
             Self.restoreAccessibleWindow(pid: pid)
         }.value
+        // A restored window only comes forward once the app is activated again.
+        if restoration == .attempted { app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps]) }
         // Observe only window geometry and PID, never titles or window contents.
         // Reopening is asynchronous; allow a short bounded creation interval.
         for _ in 0..<12 {
@@ -118,7 +120,11 @@ final class AgentPresence: ObservableObject {
     enum WindowRestoration: Sendable { case permissionRequired, attempted, unavailable }
 
     private nonisolated static func restoreAccessibleWindow(pid: pid_t) -> WindowRestoration {
-        guard AXIsProcessTrusted() else { return .permissionRequired }
+        // Asking (instead of only checking) adds the island to System Settings →
+        // Accessibility and shows the system prompt; without it the app is absent
+        // from that list and cannot be enabled there.
+        let prompt = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        guard AXIsProcessTrustedWithOptions(prompt) else { return .permissionRequired }
         let application = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(application, 0.1)
         var rawWindows: CFTypeRef?
@@ -140,7 +146,7 @@ final class AgentPresence: ObservableObject {
 
     static func windowUnavailableMessage(kind: AgentKind, restoration: WindowRestoration) -> String {
         if restoration == .permissionRequired {
-            return "\(kind.displayName) 已激活，但窗口未出现。灵动岛尚无辅助功能权限，无法恢复最小化窗口；请从程序坞打开，或在系统设置中授权灵动岛。"
+            return "\(kind.displayName) 已激活，但窗口未出现。灵动岛尚无辅助功能权限，无法恢复最小化窗口：请在系统设置 → 隐私与安全性 → 辅助功能中打开「Agent 灵动岛」后再点一次；若已打开仍无效，先用 − 删除该项再重试。"
         }
         return "\(kind.displayName) 已激活，但窗口仍未出现在当前桌面。请点击程序坞图标恢复窗口，或检查其他桌面。"
     }
