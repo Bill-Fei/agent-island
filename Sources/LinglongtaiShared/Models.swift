@@ -30,11 +30,11 @@ public enum AgentKind: String, Codable, CaseIterable, Hashable, Sendable {
 
     public var colorHex: String {
         switch self {
-        case .codex: return "#8FAEFF"
-        case .claude: return "#F5A97F"
-        case .doubao: return "#B794FF"
-        case .workBuddy: return "#79D6B1"
-        case .custom: return "#A7B0C5"
+        case .codex: return "#7AA8FF"
+        case .claude: return "#AD7DFF"
+        case .doubao: return "#FF6E47"
+        case .workBuddy: return "#33D69F"
+        case .custom: return "#9EA8B9"
         }
     }
 
@@ -139,7 +139,7 @@ public enum AgentTaskStatus: String, Codable, CaseIterable, Sendable {
     public var symbolName: String {
         switch self {
         case .queued: return "clock"
-        case .running: return "waveform.path.ecg"
+        case .running: return "sparkles"
         case .waiting: return "hand.raised"
         case .completed: return "checkmark.circle.fill"
         case .failed: return "exclamationmark.triangle.fill"
