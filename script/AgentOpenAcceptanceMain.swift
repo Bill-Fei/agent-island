@@ -41,7 +41,6 @@ struct AgentOpenAcceptance {
         check("attempted restoration is not claimed as success", AgentPresence.windowUnavailableMessage(kind: .claude, restoration: .attempted).contains("窗口仍未出现"))
         check("unreadable window keeps recovery guidance", AgentPresence.windowUnavailableMessage(kind: .claude, restoration: .unavailable).contains("程序坞"))
         check("closed window explains the missing window, not permission", AgentPresence.windowUnavailableMessage(kind: .claude, restoration: .noWindow).contains("没有打开的窗口"))
-        check("denied reopen points at Automation settings", AgentPresence.windowUnavailableMessage(kind: .claude, restoration: .automationDenied).contains("自动化"))
         print("\(count) open-app checks passed; no provider or GUI action.")
     }
 }
