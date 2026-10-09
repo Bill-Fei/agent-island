@@ -94,7 +94,7 @@ final class AgentPresence: ObservableObject {
         let pid = app.processIdentifier
         func reached(polls: Int) async -> Bool {
             for _ in 0..<polls {
-                if Self.isFrontmost(pid: pid) && Self.frontWindowIsOwn(pid: pid) { Self.trace("reached"); return true }
+                if Self.isFrontmost(pid: pid) && Self.frontWindowIsOwn(pid: pid) { Self.trace("reached top=\(Self.frontWindowsSummary())"); return true }
                 try? await Task.sleep(nanoseconds: 250_000_000)
             }
             Self.trace("not reached front=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "nil") visible=\(Self.hasVisibleWindow(pid: pid)) onTop=\(Self.frontWindowIsOwn(pid: pid))")
@@ -144,7 +144,7 @@ final class AgentPresence: ObservableObject {
 
     /// Temporary open-app diagnostics: only app IDs, flags and step results,
     /// never window titles or content. Remove once opening is verified.
-    private static func trace(_ line: String) {
+    nonisolated private static func trace(_ line: String) {
         let url = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/LinglongtaiHUD/open-trace.log")
         let entry = ISO8601DateFormatter().string(from: Date()) + " " + line + "\n"
@@ -165,6 +165,19 @@ final class AgentPresence: ObservableObject {
 
     private static func frontWindowIsOwn(pid: pid_t) -> Bool {
         frontWindowBelongs(to: pid, windows: onScreenWindows())
+    }
+
+    /// Diagnostics only: owner app name, layer, alpha and size of the first
+    /// on-screen windows. Window titles are never requested.
+    private static func frontWindowsSummary() -> String {
+        (onScreenWindows() ?? []).prefix(5).map { window in
+            let owner = window[kCGWindowOwnerName as String] as? String ?? "?"
+            let layer = (window[kCGWindowLayer as String] as? NSNumber)?.intValue ?? -1
+            let alpha = (window[kCGWindowAlpha as String] as? NSNumber)?.doubleValue ?? -1
+            let bounds = window[kCGWindowBounds as String] as? [String: Any]
+            let w = (bounds?["Width"] as? NSNumber)?.intValue ?? 0, h = (bounds?["Height"] as? NSNumber)?.intValue ?? 0
+            return "\(owner)/L\(layer)/a\(alpha)/\(w)x\(h)"
+        }.joined(separator: ", ")
     }
 
     private static func onScreenWindows() -> [[String: Any]]? {
@@ -201,15 +214,29 @@ final class AgentPresence: ObservableObject {
            let windows = rawWindows as? [AXUIElement] {
             candidates.append(contentsOf: windows.prefix(4))
         }
+        // Some apps (Doubao) expose no standard-subrole window, so prefer a
+        // standard one but fall back to any window that is not minimized.
+        var fallback: AXUIElement?
+        var seen: [String] = []
         for window in candidates {
             AXUIElementSetMessagingTimeout(window, 0.2)
             var subrole: CFTypeRef?
-            guard AXUIElementCopyAttributeValue(window, kAXSubroleAttribute as CFString, &subrole) == .success,
-                  subrole as? String == kAXStandardWindowSubrole else { continue }
-            AXUIElementSetAttributeValue(window, kAXMainAttribute as CFString, true as CFBoolean)
-            return AXUIElementPerformAction(window, kAXRaiseAction as CFString) == .success
+            var minimized: CFTypeRef?
+            AXUIElementCopyAttributeValue(window, kAXSubroleAttribute as CFString, &subrole)
+            AXUIElementCopyAttributeValue(window, kAXMinimizedAttribute as CFString, &minimized)
+            seen.append((subrole as? String ?? "nil") + ((minimized as? Bool) == true ? "/min" : ""))
+            if (minimized as? Bool) == true { continue }
+            if subrole as? String == kAXStandardWindowSubrole {
+                trace("ax windows=\(seen) raise=standard")
+                AXUIElementSetAttributeValue(window, kAXMainAttribute as CFString, true as CFBoolean)
+                return AXUIElementPerformAction(window, kAXRaiseAction as CFString) == .success
+            }
+            if fallback == nil { fallback = window }
         }
-        return false
+        trace("ax windows=\(seen) raise=\(fallback == nil ? "none" : "fallback")")
+        guard let fallback else { return false }
+        AXUIElementSetAttributeValue(fallback, kAXMainAttribute as CFString, true as CFBoolean)
+        return AXUIElementPerformAction(fallback, kAXRaiseAction as CFString) == .success
     }
 
     private nonisolated static func launchServicesReopen(bundleID: String) {
