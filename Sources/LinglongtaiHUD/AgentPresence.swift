@@ -56,13 +56,7 @@ final class AgentPresence: ObservableObject {
                     self.launchErrors[kind] = "未能打开 \(kind.displayName)，请重试或从访达打开。"
                     self.opening.remove(kind)
                 } else if let app {
-                    app.unhide()
-                    if !app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps]) {
-                        self.launchErrors[kind] = "\(kind.displayName) 已运行，但未能切到前台，请从程序坞打开。"
-                        self.opening.remove(kind)
-                    } else {
-                        await self.verifyVisibleWindow(of: app, kind: kind)
-                    }
+                    await self.verifyVisibleWindow(of: app, kind: kind)
                 }
                 self.refresh()
             }
@@ -91,48 +85,59 @@ final class AgentPresence: ObservableObject {
         return configuration
     }
 
+    /// Done only when the app is frontmost *and* shows a window; either alone
+    /// leaves the user looking at the same screen as before the click.
     private func verifyVisibleWindow(of app: NSRunningApplication, kind: AgentKind) async {
         defer { opening.remove(kind) }
         let pid = app.processIdentifier
-        // A background panel cannot activate another app on recent macOS
-        // (cooperative activation): an open window stays behind others or on
-        // another desktop. Always bring the app frontmost through Accessibility,
-        // even when a window is already on screen, which also switches desktops.
-        let frontmost = await Task.detached(priority: .userInitiated, operation: { Self.bringFrontmost(pid: pid) }).value
-        if Self.hasVisibleWindow(pid: pid) { return }
-        if frontmost {
-            for _ in 0..<4 {
-                if Self.hasVisibleWindow(pid: pid) { return }
+        func reached(polls: Int) async -> Bool {
+            for _ in 0..<polls {
+                if Self.isFrontmost(pid: pid) && Self.hasVisibleWindow(pid: pid) { return true }
                 try? await Task.sleep(nanoseconds: 250_000_000)
             }
+            return false
         }
-        // Then ask LaunchServices to reopen it, the same request as `open -b`
-        // from Terminal; an app with its window closed recreates it on reopen.
+        // 1. Bring the app forward (switches to the desktop holding its window).
+        bringForward(app)
+        if await reached(polls: 4) { return }
+        // 2. Frontmost without a window: ask it to reopen one, like a Dock click.
         if let bundleID = app.bundleIdentifier {
             await Task.detached(priority: .userInitiated) { Self.launchServicesReopen(bundleID: bundleID) }.value
-            for _ in 0..<6 {
-                if Self.hasVisibleWindow(pid: pid) { return }
-                try? await Task.sleep(nanoseconds: 250_000_000)
-            }
+            bringForward(app)
+            if await reached(polls: 6) { return }
         }
+        // 3. Still nothing: un-minimize a window through Accessibility.
         let restoration = await Task.detached(priority: .userInitiated) {
             Self.restoreAccessibleWindow(pid: pid)
         }.value
-        // A restored window only comes forward once the app is frontmost again.
-        if restoration == .attempted, !Self.bringFrontmost(pid: pid) {
+        bringForward(app)
+        if await reached(polls: 8) { return }
+        if app.isTerminated {
+            launchErrors[kind] = "\(kind.displayName) 在打开窗口时已退出，请重新打开。"
+        } else if Self.hasVisibleWindow(pid: pid) && !Self.isFrontmost(pid: pid) {
+            launchErrors[kind] = "\(kind.displayName) 的窗口已打开，但系统未允许切到前台，请点击程序坞图标。"
+        } else {
+            launchErrors[kind] = Self.windowUnavailableMessage(kind: kind, restoration: restoration)
+        }
+    }
+
+    /// A non-activating panel cannot activate another app on macOS 14+
+    /// (cooperative activation). Take activation from the user's click first,
+    /// then hand it to the target; Accessibility frontmost covers older paths.
+    private func bringForward(_ app: NSRunningApplication) {
+        app.unhide()
+        if #available(macOS 14.0, *) {
+            NSApp.activate()
+            NSApp.yieldActivation(to: app)
+            app.activate(from: .current, options: [.activateAllWindows])
+        } else {
             app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
         }
-        // Observe only window geometry and PID, never titles or window contents.
-        // Reopening is asynchronous; allow a short bounded creation interval.
-        for _ in 0..<12 {
-            if app.isTerminated {
-                launchErrors[kind] = "\(kind.displayName) 在打开窗口时已退出，请重新打开。"
-                return
-            }
-            if Self.hasVisibleWindow(pid: app.processIdentifier) { return }
-            try? await Task.sleep(nanoseconds: 250_000_000)
-        }
-        launchErrors[kind] = Self.windowUnavailableMessage(kind: kind, restoration: restoration)
+        _ = Self.bringFrontmost(pid: app.processIdentifier)
+    }
+
+    private static func isFrontmost(pid: pid_t) -> Bool {
+        NSWorkspace.shared.frontmostApplication?.processIdentifier == pid
     }
 
     private static func hasVisibleWindow(pid: pid_t) -> Bool {
