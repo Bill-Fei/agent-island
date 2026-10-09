@@ -187,7 +187,7 @@ public struct AgentTask: Codable, Identifiable, Equatable, Sendable {
             return sourceEvent == nil ? status.label : "本轮已中断"
         case .queued, .running, .waiting:
             if sourceEvent == "DoubaoSilent" { return "状态未知" }
-            if sourceEvent == "AmbiguousTurn" { return "等待状态更新" }
+            if sourceEvent == "AmbiguousTurn" { return "结果未知" }
             if status == .waiting { return "等待确认" }
             if status == .queued { return status.label }
             if sourceEvent == "PreToolUse" { return "执行工具" }

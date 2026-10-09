@@ -2,11 +2,15 @@ import Foundation
 
 /// Indeterminate activity only; never a fabricated completion percentage.
 public enum AgentActivityMotion {
+    /// A started turn keeps counting as running through quiet tool runs; past
+    /// this long with no event at all, a lost Stop is assumed (结果未知).
+    public static let unresolvedLimit: TimeInterval = 1800
+
     public static func isExecuting(_ task: AgentTask?, now: Date) -> Bool {
         guard let task, task.source.isLive, task.status == .running,
               !task.requiresApproval, !["AmbiguousTurn", "DoubaoSilent", "DoubaoAbandoned", "ClaudeChatUnknown", "SupersededTrajectory", "HookTrackingEnded"].contains(task.sourceEvent ?? "") else { return false }
         let age = now.timeIntervalSince(task.updatedAt)
-        let limit = task.profile.kind == .doubao ? DoubaoTrajectory.staleAfter : 120
+        let limit = task.profile.kind == .doubao ? DoubaoTrajectory.staleAfter : unresolvedLimit
         return age >= -5 && age <= limit
     }
 

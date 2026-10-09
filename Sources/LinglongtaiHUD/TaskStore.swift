@@ -67,7 +67,7 @@ final class TaskStore: ObservableObject {
         if task.sourceEvent == "ClaudeChatUnknown" { return task.detail }
         if let feedback = approvalFeedback(for: task) { return feedback }
         if approvalRequest(for: task) != nil { return "请求单次批准 · 请核对本次工具操作" }
-        if displayedStatus(for: task) == "等待状态更新" { return "等待真实活动更新" }
+        if displayedStatus(for: task) == "结果未知" { return "未收到结束信号，无法确认结果" }
         if task.status == .waiting && task.sourceEvent == "PermissionRequest" {
             return "应用正在核对工具权限，灵动岛不接管审批"
         }
@@ -370,14 +370,14 @@ final class TaskStore: ObservableObject {
         return fresh
     }
 
-    /// Tasks that are allowed to contribute to the compact island's live
-    /// counter. `ongoingTasks` intentionally retains unresolved history, so
-    /// it must not be used as evidence of current activity. Fresh queued and
-    /// permission-check rows count as activity, not execution or approval.
+    /// Tasks counted as running: the island shows exactly this many, and 0
+    /// once every task has ended. A started task keeps counting through quiet
+    /// stretches until terminal evidence arrives; rows whose source reports an
+    /// unknown result count as ended (结果未知), never as running.
     var currentActivityTasks: [AgentTask] {
         refreshTaskCacheIfNeeded()
         if let currentActivityTasksCache { return currentActivityTasksCache }
-        let current = ongoingTasks.filter { isFresh($0) }
+        let current = ongoingTasks.filter { isRunning($0) }
         currentActivityTasksCache = current
         return current
     }
@@ -419,6 +419,7 @@ final class TaskStore: ObservableObject {
                 task.updatedAt,
                 task.updatedAt.addingTimeInterval(120),
                 task.updatedAt.addingTimeInterval(DoubaoTrajectory.staleAfter),
+                task.updatedAt.addingTimeInterval(AgentActivityMotion.unresolvedLimit),
                 task.updatedAt.addingTimeInterval(86_400)
             ]
         }.filter { $0 >= reference }
@@ -445,7 +446,7 @@ final class TaskStore: ObservableObject {
     }
 
     var hasLiveEvent: Bool {
-        !ongoingTasks.isEmpty || highlightedFeedbackTask != nil
+        !currentActivityTasks.isEmpty || highlightedFeedbackTask != nil
     }
 
     /// A historical unresolved row is not an ambient activity signal. Even a
@@ -474,8 +475,8 @@ final class TaskStore: ObservableObject {
         }
         let age = max(0, now().timeIntervalSince(task.updatedAt))
         let freshness = age < 120 ? "刚刚" : "更新于 " + Self.relativeAge(age)
-        if !isFresh(task) && [.queued, .running, .waiting].contains(task.status) {
-            return "尚未收到结束 · \(freshness)"
+        if [.queued, .running, .waiting].contains(task.status) && !isRunning(task) {
+            return "结果未知 · \(freshness)"
         }
         if task.status == .running || task.status == .queued {
             let progress = task.progressKnown ? " · \(Int(task.progress * 100))%" : ""
@@ -491,11 +492,11 @@ final class TaskStore: ObservableObject {
     }
 
     func displayedStatus(for task: AgentTask) -> String {
-        if task.sourceEvent == "ClaudeChatUnknown" { return "等待状态更新" }
-        if task.sourceEvent == "DoubaoSilent" || task.sourceEvent == "DoubaoAbandoned" { return "等待状态更新" }
+        // Only two dimensions: running or ended. A row the source cannot
+        // resolve is shown as ended with an unknown result, never completed.
         if task.sourceEvent == "SupersededTrajectory" || task.sourceEvent == "HookTrackingEnded" { return "历史记录 · 不再跟踪" }
-        if task.sourceEvent == "AmbiguousTurn" { return "等待状态更新" }
-        if task.source.isLive && !isFresh(task) && [.queued, .running, .waiting].contains(task.status) { return "等待状态更新" }
+        if Self.unknownResultEvents.contains(task.sourceEvent ?? "") { return "结果未知" }
+        if task.source.isLive && [.queued, .running, .waiting].contains(task.status) && !isRunning(task) { return "结果未知" }
         if task.sourceEvent == "ClaudeChatStart" { return "正在生成" }
         if task.status == .waiting && !needsUserAttention(task) {
             if task.sourceEvent == "PermissionRequest" { return "权限检查中" }
@@ -518,11 +519,7 @@ final class TaskStore: ObservableObject {
         if let current = currentActivityTasks.first(where: { $0.status == .running }) ?? currentActivityTasks.first {
             return current
         }
-        // Keep an unresolved long task represented in the small island, but
-        // never let its stale/unknown row inflate the live counter or icon
-        // stack when a fresher task exists.
-        if let selectedTask, ongoingTaskIDs.contains(selectedTask.id) { return selectedTask }
-        if let current = ongoingTasks.first { return current }
+        // Unknown-result rows count as ended and never hold the island open.
         return demoPreviewActive || isAcceptancePreview ? selectedTask : nil
     }
 
@@ -538,8 +535,6 @@ final class TaskStore: ObservableObject {
     /// Finished history never creates an ambient icon or increments live counts.
     var islandIconTasks: [AgentTask] {
         guard let front = activeTask else { return [] }
-        // With no fresh activity, retain one quiet unknown-state icon for a
-        // long unresolved task, without a number or historical icon stack.
         return [front] + currentActivityTasks.filter { $0.id != front.id }.prefix(3)
     }
 
@@ -1276,6 +1271,22 @@ final class TaskStore: ObservableObject {
             prefersMedium: now() < mediumUntil
         )
         if presentation != next { presentation = next }
+    }
+
+    /// Sources that report they cannot resolve a turn; shown as 结果未知.
+    private static let unknownResultEvents: Set<String> = ["DoubaoSilent", "DoubaoAbandoned", "AmbiguousTurn", "ClaudeChatUnknown"]
+
+    /// Started, without terminal evidence, and not reported unknown. Hook
+    /// providers stay quiet during long tool runs, so silence alone does not
+    /// end a task until the unresolved limit guards against a lost Stop.
+    private func isRunning(_ task: AgentTask) -> Bool {
+        guard task.source.isLive, ongoingTaskIDs.contains(task.id),
+              [.queued, .running, .waiting].contains(task.status),
+              !Self.unknownResultEvents.contains(task.sourceEvent ?? ""),
+              !["SupersededTrajectory", "HookTrackingEnded"].contains(task.sourceEvent ?? "") else { return false }
+        let age = now().timeIntervalSince(task.updatedAt)
+        let limit = task.profile.kind == .doubao ? DoubaoTrajectory.staleAfter : AgentActivityMotion.unresolvedLimit
+        return age >= -5 && age <= limit
     }
 
     private func isFresh(_ task: AgentTask) -> Bool {

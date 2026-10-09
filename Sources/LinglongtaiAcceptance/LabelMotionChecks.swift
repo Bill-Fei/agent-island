@@ -29,7 +29,7 @@ func runLabelMotionChecks(check: (String, Bool) -> Void) {
           IslandLabelMotion.offset(elapsed: 3, textWidth: 90, viewportWidth: 0) == 0)
 
     let statusFont = NSFont.systemFont(ofSize: 12, weight: .medium)
-    for title in ["执行工具", "等待状态更新", "1项结束 · 12项进行", "正在处理较长的任务状态描述"] {
+    for title in ["执行工具", "结果未知", "1项结束 · 12项进行", "正在处理较长的任务状态描述"] {
         let measured = ceil((title as NSString).size(withAttributes: [.font: statusFont]).width) + 1
         for width in [200.0, 228, 300] {
             let metrics = IslandMetrics(activityWidth: width)
@@ -63,10 +63,10 @@ func runLabelMotionChecks(check: (String, Bool) -> Void) {
               AgentActivityMotion.isExecuting(task, now: now) == source.isLive)
     }
     task.source = .liveEvent
-    for age in [-6.0, -5, 0, 120, 120.01, 600] {
+    for age in [-6.0, -5, 0, 120, 600, 1800, 1800.01] {
         task.updatedAt = now.addingTimeInterval(-age)
         check("activity freshness boundary \(age)",
-              AgentActivityMotion.isExecuting(task, now: now) == (age >= -5 && age <= 120))
+              AgentActivityMotion.isExecuting(task, now: now) == (age >= -5 && age <= AgentActivityMotion.unresolvedLimit))
     }
     task.updatedAt = now
     task.sourceEvent = "AmbiguousTurn"

@@ -24,7 +24,7 @@ enum TaskVisualState: Hashable {
         if ["SupersededTrajectory", "HookTrackingEnded"].contains(task.sourceEvent ?? "") ||
             displayedStatus == "历史记录 · 不再跟踪" { return .untracked }
         if ["DoubaoSilent", "DoubaoAbandoned", "AmbiguousTurn", "ClaudeChatUnknown"].contains(task.sourceEvent ?? "") ||
-            ["等待状态更新", "状态未知", "已停止跟踪 · 状态未知"].contains(displayedStatus) { return .unknown }
+            ["结果未知", "状态未知", "已停止跟踪 · 状态未知"].contains(displayedStatus) { return .unknown }
         switch task.status {
         case .completed: return .completed
         case .failed: return .failed

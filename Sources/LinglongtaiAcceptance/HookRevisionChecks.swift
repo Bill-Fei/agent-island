@@ -55,8 +55,8 @@ func runHookRevisionChecks(check: (String, Bool) -> Void) {
               task(.failed, "UserPromptSubmit").statusLabel == "本轮响应失败" &&
               task(.cancelled, "PostToolUse").statusLabel == "本轮已中断")
         check("ambiguous active phases never claim current execution",
-              task(.running, "AmbiguousTurn").statusLabel == "等待状态更新" &&
-              task(.waiting, "AmbiguousTurn").statusLabel == "等待状态更新")
+              task(.running, "AmbiguousTurn").statusLabel == "结果未知" &&
+              task(.waiting, "AmbiguousTurn").statusLabel == "结果未知")
 
         var concurrent = HookTurnTracker()
         let turnA = route(&concurrent, "UserPromptSubmit", turn: "turn-a").first

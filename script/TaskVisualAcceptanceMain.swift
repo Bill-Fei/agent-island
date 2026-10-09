@@ -27,7 +27,7 @@ struct TaskVisualAcceptance {
         check("finished outcome has a static checkmark", state(.completed, label: "本轮已结束") == .completed && TaskVisualState.completed.symbol == "checkmark.circle")
         check("failure retains a distinct warning", state(.failed, label: "失败") == .failed)
         check("cancellation is not success", state(.cancelled, label: "本轮已中断") == .cancelled)
-        for label in ["等待状态更新", "状态未知", "已停止跟踪 · 状态未知"] {
+        for label in ["结果未知", "状态未知", "已停止跟踪 · 状态未知"] {
             check("unknown label \(label) cannot inherit running motion", state(.running, label: label) == .unknown)
         }
         for event in ["DoubaoSilent", "DoubaoAbandoned", "AmbiguousTurn", "ClaudeChatUnknown"] {
@@ -40,7 +40,7 @@ struct TaskVisualAcceptance {
         check("unknown has question marker, never a progress glyph", TaskVisualState.unknown.symbol == "questionmark.circle" && !TaskVisualState.unknown.animates)
         check("untracked explanation does not claim completion", TaskVisualState.untracked.unknownExplanation?.contains("结果未知") == true)
         let original = task(.running, event: "ClaudeChatUnknown")
-        _ = TaskVisualState.resolve(original, displayedStatus: "等待状态更新", needsAttention: false)
+        _ = TaskVisualState.resolve(original, displayedStatus: "结果未知", needsAttention: false)
         check("visual mapping never mutates raw lifecycle", original.status == .running && original.sourceEvent == "ClaudeChatUnknown")
         let first = TaskVisualItem(task: task(.running), state: .executing)
         let second = TaskVisualItem(task: task(.running), state: .executing)
@@ -69,7 +69,7 @@ struct TaskVisualAcceptance {
             let fixtures: [(String, AgentTaskStatus, String, String)] = [
                 ("Codex", .running, "PreToolUse", "验收预览 · 正在检查界面层级"),
                 ("Claude", .completed, "Stop", "验收预览 · 本轮已经结束"),
-                ("WorkBuddy", .running, "ClaudeChatUnknown", "验收预览 · 等待真实状态更新"),
+                ("WorkBuddy", .running, "ClaudeChatUnknown", "验收预览 · 结果未知"),
                 ("豆包", .running, "SupersededTrajectory", "验收预览 · 不再跟踪的历史记录"),
                 ("Claude", .failed, "StopFailure", "验收预览 · 本轮响应失败"),
                 ("WorkBuddy", .cancelled, "Interrupt", "验收预览 · 本轮已中断")

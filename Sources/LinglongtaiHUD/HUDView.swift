@@ -156,7 +156,7 @@ private struct HUDActivityContent: View {
     private var compactSymbol: String {
         guard let task = store.activeTask else { return "ellipsis" }
         if store.needsUserAttention(task) { return "hand.raised" }
-        if task.status == .waiting || store.displayedStatus(for: task) == "等待状态更新" { return "clock" }
+        if task.status == .waiting || store.displayedStatus(for: task) == "结果未知" { return "clock" }
         switch task.status {
         case .running: return "ellipsis"
         case .queued: return "clock"
@@ -494,7 +494,7 @@ private struct HUDExpandedContent: View {
                 }
             }
             HStack(alignment: .bottom, spacing: 8) {
-                if store.displayedStatus(for: task) == "等待状态更新" {
+                if store.displayedStatus(for: task) == "结果未知" {
                     Button("从岛上移除") { store.dismissTask(task) }
                         .font(HUDTypography.caption)
                         .buttonStyle(.plain)
