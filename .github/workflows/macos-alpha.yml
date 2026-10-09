@@ -1,0 +1,26 @@
+name: macOS Alpha build
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-check:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Swift toolchain
+        run: xcode-select -p
+      - name: Build all products
+        run: swift build --build-system swiftbuild -c debug
+      - name: Run shared acceptance checks
+        run: swift run --build-system swiftbuild linglongtai-acceptance
+      - name: Check formatting and tracked-file hygiene
+        run: |
+          git diff --check
+          test ! -d dist
+          test ! -f .DS_Store

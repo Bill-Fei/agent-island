@@ -1,8 +1,31 @@
 # 灵动岛：独立视觉与交互验收
 
+## 2026-10-09 多会话改动整合
+
+- 展开态只保留「进行中 / 已结束」两组；未知、不再跟踪归入「已结束」，行内显示“结果未知”，不当作完成。
+- 审批入口跟随 `approvalTask`；决定提交失败时的“未提交决定”提示改为跟随当前高亮任务，此前因审批请求已结束而永远不显示。
+- 接入向导重装时保留用户已用 `install_hooks.py --approval-relay` 开启的 Claude Code 审批，不再静默降级为只观察；向导自身仍从不新增审批。
+- 补提交 HEAD 已引用但未入库的 `HUDColorTokens`、`HUDSectionDivider`、`LinglongtaiBrandMark`、`TodayUsageBar`，此前干净克隆无法编译。
+- 隔离检查：520 项 acceptance、236 项 TaskStore、3 项后台 store、61 项 Claude 审批、Alpha 向导、30 项视觉分组全部通过（沙盒内临时目录改到可写路径后运行，检查逻辑未改）。
+- **NOT VERIFIED**：重新打包后的真机审批闭环、`swift build`（本环境 SwiftPM 无法写构建目录，改用 swiftc 逐 target 编译通过）。
+
+## 2026-10-08 用户实机验收：真实 Hover、物理合缝、Claude Code 正常完成
+
+- **真实连续 Hover 顺滑**：PASS（用户实机确认）。此前受桌面自动化限制无法注入连续鼠标轨迹，本轮由用户亲手连续划过并确认流畅，不再列入未验证项。
+- **物理刘海合缝与逐帧回弹**：PASS（用户实机确认）。轮廓与真实刘海贴合、快速进出无残字与瞬移，用户实机复核通过。
+- **Claude Code 真实任务正常完成**：PASS。历史 401 为旧账户/接口配置问题，**非产品缺陷**；当前 `events.jsonl` 中 `agent:"Claude"` 已具备完整生命周期（UserPromptSubmit → PreToolUse → PostToolUse → Stop），最近三次 `Stop/completed` 为 10-08 20:12、20:31、20:34。此前「Claude Code 正常完成未验证」的结论作废。
+- Claude 事件全量分布：PreToolUse 78、PostToolUse 74、PermissionRequest 38、SessionStart 29、SessionEnd 22、Notification 22、UserPromptSubmit 16、Stop 10、StopFailure 5、PostToolUseFailure 3；`StopFailure` 全部集中在 10-04～10-06 的旧配置期，10-08 无新增。
+- 本轮为**用户实机确认，无逐帧录屏存档**；120FPS、快速逆转极限、多屏切换、锁屏/睡眠恢复仍未验证，保持 NOT VERIFIED。
+
 ## 2026-10-07 七项优化
 
 本轮实现、重新编译的隔离结果、真机尺寸证据与未验证项见 [七项优化验收记录](REVISION_20261007.md)。数学/状态回归与独立源审通过不代表Hover/FPS/公开发布已验收；保留120Hz采样。
+
+## 2026-10-07 审批观察模式（历史，已被 10-08 恢复的 Claude Code 单次审批取代，见 [CLAUDE_APPROVAL_FIX_20261008.md](CLAUDE_APPROVAL_FIX_20261008.md)）
+
+- 所有 `PermissionRequest` 均为 observer-only：写入最小生命周期状态，不创建岛内批准请求，不等待 relay，不向 provider Hook stdout 输出决定。
+- Codex、Claude Code、WorkBuddy 的原生权限/信任界面保持唯一决策来源；岛内只有 provider 明确发出的确认通知才计入“待确认”。
+- 旧的 `--approval-relay` 参数保留为兼容参数，但安装脚本不会再把任何 PermissionRequest 改成 relay。未来恢复快捷批准前，必须分别完成每个 provider 的真实闭环验收。
 
 ## 2026-10-06 无边框图标、24小时列表与多任务叠放（20261006.7）
 
@@ -189,6 +212,13 @@
 - 真实构建与启动：`./script/build_and_run.sh --verify` 通过，当前包为 `dist/Agent 灵动岛.app`，版本构建号 `20261006.7`。
 - 聚焦 L2 检查：115 项 Hover、弹簧、翼布局与内容宽度检查通过；通过 CUA 打开任务详情并收起，确认收起后只保留小态，无重态残留。
 - 当前结论：**源码结构与构建 PASS；实际 Hover 帧率仍 NOT VERIFIED**。桌面自动化当前不能注入连续鼠标轨迹，因此没有把静态截图或源码检查当作流畅度证明。
+
+### 2026-10-07：品牌标志与今日调用概览
+
+- 新增统一的 Linglongtai 品牌标志：黑色刘海轮廓 + 三道信号柱，接入大展开态头部、设置页和无任务占位；任务进行中的 Codex / Claude / 豆包 / WorkBuddy 图标仍保持各自真实应用图标。
+- 更新 `Resources/AppIcon.icns`，启动 App 与 hover 大展开态使用同一套产品识别。
+- 大展开态新增低占比环形概览：只统计当天 `liveEvent` 任务轮次，按 Agent 分组显示调用次数；无真实调用时显示空状态，不读演示预览数据。
+- `swift build` 与 `./script/build_and_run.sh --verify` 通过；当前只完成代码与启动验收，未把静态界面截图当作连续 Hover 流畅度证明。
 
 ### 2026-10-06：Hover 卡顿专项第二轮
 

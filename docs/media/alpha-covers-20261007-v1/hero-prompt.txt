@@ -1,0 +1,7 @@
+Use case: text-free photographic base for Agent Dynamic Island, a macOS local multi-agent status companion. Final use: right-side square image in a 1920x1080 Chinese product cover; exact typography added locally.
+Primary request: refined frontal close-up of the upper region of a premium graphite MacBook display. Real black hardware camera notch attached to its upper edge. Software status island extends modestly horizontally from both sides of the notch. Camera core fully black and unobstructed. Tiny pale blue activity light left and mint three-bar signal right. No progress percent.
+Backdrop: seamless warm porcelain #F4F5F1 studio background, pale sage neutral wallpaper, no windows. Screen rim horizontal at y=32%; camera centered x=60%. Device cropped at right and bottom. Leftmost 20% uninterrupted porcelain background for blending into typography area.
+Style: exceptional restrained editorial product photography, dark anodized aluminum, fine satin highlights, subtle contact shadow, almost flat frontal view, not isometric. Quiet future-facing aesthetic.
+Framing: 1024x1024 square master, later used without stretching at 1080x1080. No detached floating pill; status island seamlessly joins the physical notch.
+Constraints: all text-free; only hardware, wallpaper, physical notch and small status lights. No generated app UI, vendor icons, personal data, charts, counts, rings, progress bars or approval controls.
+Avoid: text, letters, numbers, logos, watermark, floating panels, neon, rainbow gradients, cyberpunk, clutter, jagged edges, obscured camera, iPhone.

@@ -1,5 +1,7 @@
 # Agent 灵动岛 / Agent Dynamic Island
 
+> GitHub Alpha：面向愿意自己构建、理解本地 Hook 和 macOS 权限边界的早期体验者。当前没有 Developer ID 公证包，也不承诺所有 Agent / Mac 机型开箱即用。
+
 你的 Agent 管家。运行在 macOS 刘海区域的本地动态状态层：空闲时归入物理刘海，事件到达时保持刘海高度并横向展开，连续悬停 0.2 秒查看详情。状态来自真实事件，不推测进度。默认只观察状态；Claude Code 可显式开启经参数审阅的单次审批，其余待确认操作回原应用处理。不在岛上停止或重试任务。
 
 内置四个一级 Agent 身份：
@@ -70,9 +72,18 @@ swift build --build-system swiftbuild --product linglongtai-acceptance
 
 应用会构建到 `dist/Agent 灵动岛.app`，启动后显示顶部灵动岛，并在菜单栏保留一个灵动岛入口。首次启动默认不注入演示任务；可以从菜单栏打开「灵动岛设置…」，在「本地任务数据」中载入演示任务。
 
+## GitHub Alpha 快速开始
+
+1. macOS 13 或更高版本、Apple 芯片（当前候选包未验证 Intel）；安装匹配版本的 Xcode Command Line Tools。
+2. 克隆仓库后运行 `./script/build_and_run.sh`。脚本只构建并启动本地 App，不上传数据。
+3. 从菜单栏打开「接入与验证…」，只勾选你真正使用的 Agent。向导会先展示配置路径，用户确认后才写入，并保留本地备份。
+4. 在原应用发起一轮真实任务，回到灵动岛确认收到状态。看到“已安装”不等于连接健康；Claude Code 需要单独验证，Claude Chat 和豆包属于实验性/只读边界。
+
+Alpha 反馈请附 macOS 版本、芯片架构、Agent 应用版本和脱敏后的状态描述；不要上传 `events.jsonl`、`hook-turns.json`、会话标题、提示词、工具参数、日志原文或任何凭据。发布前请先阅读 [隐私说明](docs/PRIVACY.md)、[安全反馈](SECURITY.md) 和 [Alpha 发布清单](docs/ALPHA_RELEASE.md)。
+
 ## 本地 Agent 接入
 
-现已提供 Codex、Claude Code、WorkBuddy 的生命周期 Hook；Claude Code 不等于 Claude Chat。豆包只读本地 Agent 模式轨迹，普通聊天不可见。接入只记录开始、等待、执行、结束和失败等元数据，不保存输入内容、工具内容、聊天文件路径或凭据，不推测百分比。“收到过回调”只证明历史接入，不保证当前连接健康。打开应用不保证定位到原会话。
+现已提供 Codex、Claude Code、WorkBuddy 的生命周期 Hook；Claude Chat 的辅助功能只读观察仍属于实验性能力，未列入 Alpha 的兼容保证。豆包只读本地 Agent 模式轨迹，普通聊天不可见。接入只记录开始、等待、执行、结束和失败等元数据，不保存输入内容、工具内容、聊天正文、聊天文件路径或凭据，不推测百分比。“收到过回调”只证明历史接入，不保证当前连接健康。打开应用不保证定位到原会话。
 
 ```bash
 swift build --build-system swiftbuild --product linglongtaictl
@@ -80,9 +91,11 @@ python3 script/install_hooks.py --binary .build/out/Products/Debug/linglongtaict
 python3 script/install_hooks.py --binary .build/out/Products/Debug/linglongtaictl --apply
 ```
 
+Alpha 用户优先从菜单栏打开“接入与验证…”。向导只在用户确认后合并所选配置，使用带内容指纹的桥接文件，旧配置先备份；不会修改信任策略、不会提交批准决定、不会启动任务。命令行安装器仍保留给开发者使用。
+
 安装器保留已有设置并备份，合并到 `~/.codex/hooks.json`、`~/.claude/settings.json`、`~/.workbuddy/settings.json`。稳定桥接程序位于应用支持目录的 `bin/linglongtaictl`。不会修改 Codex 的信任策略；需要时在官方 `/hooks` 页面审阅。卸载仅移除本项目命令：安装命令追加 `--uninstall`。
 
-2026-10-04 实机结果：Codex 当前桌面会话已有真实工具/审批/结束回调；WorkBuddy 桌面内置引擎最小请求正常完成；Claude Code 收到开始和失败回调，但当前账户/接口返回 401，尚未验证正常完成。Claude Code 接入不覆盖普通 Claude Chat。
+2026-10-08 实机结果：Codex、Claude Code、WorkBuddy 均已收到真实生命周期事件并正常完成。Claude Code 历史上曾被账户/接口配置问题阻挡（401，非产品缺陷），当前已完成 UserPromptSubmit → PreToolUse → PostToolUse → Stop 全链路验证。Claude Chat 观察代码存在但仍需单独的辅助功能权限、窗口变化和误报实测，不作为 Alpha 的正常路径承诺。
 
 以下 CLI 为自定义事件接入工具，手工调用不等于对应厂商已经接入：
 
