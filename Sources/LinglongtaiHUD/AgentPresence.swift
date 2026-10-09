@@ -95,9 +95,20 @@ final class AgentPresence: ObservableObject {
         defer { opening.remove(kind) }
         if Self.hasVisibleWindow(pid: app.processIdentifier) { return }
         let pid = app.processIdentifier
-        let restoration = await Task.detached(priority: .userInitiated) {
+        // Send the Dock-click reopen straight to the process: a running app may
+        // never receive the event attached to the workspace open request, and
+        // with its window closed it then only takes the menu bar.
+        let reopenDenied = await Task.detached(priority: .userInitiated) {
+            Self.sendReopen(to: pid)
+        }.value
+        for _ in 0..<4 {
+            if Self.hasVisibleWindow(pid: pid) { return }
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+        var restoration = await Task.detached(priority: .userInitiated) {
             Self.restoreAccessibleWindow(pid: pid)
         }.value
+        if restoration == .noWindow && reopenDenied { restoration = .automationDenied }
         // A restored window only comes forward once the app is activated again.
         if restoration == .attempted { app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps]) }
         // Observe only window geometry and PID, never titles or window contents.
@@ -117,7 +128,22 @@ final class AgentPresence: ObservableObject {
         visibleWindowExists(pid: pid, windows: CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]])
     }
 
-    enum WindowRestoration: Sendable { case permissionRequired, attempted, unavailable }
+    enum WindowRestoration: Sendable { case permissionRequired, attempted, noWindow, automationDenied, unavailable }
+
+    /// Returns true only when the system refused the event (Automation denied).
+    private nonisolated static func sendReopen(to pid: pid_t) -> Bool {
+        let event = NSAppleEventDescriptor(
+            eventClass: AEEventClass(kCoreEventClass), eventID: AEEventID(kAEReopenApplication),
+            targetDescriptor: NSAppleEventDescriptor(processIdentifier: pid),
+            returnID: AEReturnID(kAutoGenerateReturnID), transactionID: AETransactionID(kAnyTransactionID)
+        )
+        do {
+            _ = try event.sendEvent(options: [.noReply], timeout: 2)
+            return false
+        } catch {
+            return (error as NSError).code == Int(errAEEventNotPermitted)
+        }
+    }
 
     private nonisolated static func restoreAccessibleWindow(pid: pid_t) -> WindowRestoration {
         // Asking (instead of only checking) adds the island to System Settings →
@@ -130,6 +156,7 @@ final class AgentPresence: ObservableObject {
         var rawWindows: CFTypeRef?
         guard AXUIElementCopyAttributeValue(application, kAXWindowsAttribute as CFString, &rawWindows) == .success,
               let windows = rawWindows as? [AXUIElement] else { return .unavailable }
+        if windows.isEmpty { return .noWindow }
         for window in windows.prefix(4) {
             AXUIElementSetMessagingTimeout(window, 0.1)
             var subrole: CFTypeRef?
@@ -148,7 +175,14 @@ final class AgentPresence: ObservableObject {
         if restoration == .permissionRequired {
             return "\(kind.displayName) 已激活，但窗口未出现。灵动岛尚无辅助功能权限，无法恢复最小化窗口：请在系统设置 → 隐私与安全性 → 辅助功能中打开「Agent 灵动岛」后再点一次；若已打开仍无效，先用 − 删除该项再重试。"
         }
-        return "\(kind.displayName) 已激活，但窗口仍未出现在当前桌面。请点击程序坞图标恢复窗口，或检查其他桌面。"
+        switch restoration {
+        case .noWindow:
+            return "\(kind.displayName) 在运行，但没有打开的窗口，重新打开请求未被响应。请点击程序坞图标，或在 \(kind.displayName) 菜单中新建窗口。"
+        case .automationDenied:
+            return "\(kind.displayName) 没有打开的窗口，且系统拒绝了重新打开请求：请在系统设置 → 隐私与安全性 → 自动化中允许「Agent 灵动岛」控制 \(kind.displayName) 后再点一次。"
+        default:
+            return "\(kind.displayName) 已激活，但窗口仍未出现在当前桌面，可能在其他桌面或全屏空间。请点击程序坞图标恢复窗口，或检查其他桌面。"
+        }
     }
 
     static func visibleWindowExists(pid: pid_t, windows: [[String: Any]]?) -> Bool {
