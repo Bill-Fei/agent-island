@@ -48,10 +48,12 @@ final class AgentPresence: ObservableObject {
             return
         }
         opening.insert(kind)
+        Self.trace("click \(kind.rawValue) running=\(running.contains(kind)) ax=\(AXIsProcessTrusted())")
         let configuration = Self.openConfiguration(bundleID: Self.bundleIDs[kind], isRunning: running.contains(kind))
         NSWorkspace.shared.openApplication(at: url, configuration: configuration) { [weak self] app, error in
             Task { @MainActor in
                 guard let self else { return }
+                Self.trace("openApplication error=\(error.map { String(describing: $0) } ?? "nil") app=\(app?.processIdentifier ?? -1)")
                 if error != nil || app == nil {
                     self.launchErrors[kind] = "未能打开 \(kind.displayName)，请重试或从访达打开。"
                     self.opening.remove(kind)
@@ -92,9 +94,10 @@ final class AgentPresence: ObservableObject {
         let pid = app.processIdentifier
         func reached(polls: Int) async -> Bool {
             for _ in 0..<polls {
-                if Self.isFrontmost(pid: pid) && Self.hasVisibleWindow(pid: pid) { return true }
+                if Self.isFrontmost(pid: pid) && Self.hasVisibleWindow(pid: pid) { Self.trace("reached"); return true }
                 try? await Task.sleep(nanoseconds: 250_000_000)
             }
+            Self.trace("not reached front=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "nil") visible=\(Self.hasVisibleWindow(pid: pid))")
             return false
         }
         // 1. Bring the app forward (switches to the desktop holding its window).
@@ -112,6 +115,7 @@ final class AgentPresence: ObservableObject {
         }.value
         bringForward(app)
         if await reached(polls: 8) { return }
+        Self.trace("give up restoration=\(restoration)")
         if app.isTerminated {
             launchErrors[kind] = "\(kind.displayName) 在打开窗口时已退出，请重新打开。"
         } else if Self.hasVisibleWindow(pid: pid) && !Self.isFrontmost(pid: pid) {
@@ -128,12 +132,27 @@ final class AgentPresence: ObservableObject {
         app.unhide()
         if #available(macOS 14.0, *) {
             NSApp.activate()
+            let islandActive = NSApp.isActive
             NSApp.yieldActivation(to: app)
-            app.activate(from: .current, options: [.activateAllWindows])
+            let handed = app.activate(from: .current, options: [.activateAllWindows])
+            Self.trace("bringForward islandActive=\(islandActive) handed=\(handed)")
         } else {
             app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
         }
-        _ = Self.bringFrontmost(pid: app.processIdentifier)
+        Self.trace("axFrontmost=\(Self.bringFrontmost(pid: app.processIdentifier))")
+    }
+
+    /// Temporary open-app diagnostics: only app IDs, flags and step results,
+    /// never window titles or content. Remove once opening is verified.
+    private static func trace(_ line: String) {
+        let url = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/LinglongtaiHUD/open-trace.log")
+        let entry = ISO8601DateFormatter().string(from: Date()) + " " + line + "\n"
+        if let handle = try? FileHandle(forWritingTo: url) {
+            handle.seekToEndOfFile(); handle.write(Data(entry.utf8)); try? handle.close()
+        } else {
+            try? Data(entry.utf8).write(to: url)
+        }
     }
 
     private static func isFrontmost(pid: pid_t) -> Bool {
