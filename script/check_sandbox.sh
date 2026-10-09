@@ -23,6 +23,10 @@ COMPILER=(swiftc -target "$(uname -m)-apple-macosx13.0")
   Sources/LinglongtaiHUD/TaskStoreAcceptance.swift Sources/LinglongtaiHUD/ClaudeApprovalAcceptance.swift script/StoreAcceptanceMain.swift \
   "$VALIDATION_DIR/LinglongtaiShared.o" -o "$VALIDATION_DIR/store-acceptance"
 "$VALIDATION_DIR/linglongtai-acceptance"
+"${COMPILER[@]}" -parse-as-library -module-cache-path "$VALIDATION_DIR/module-cache" \
+  -I "$VALIDATION_DIR" Sources/LinglongtaiHUD/AlphaIntegrationSetup.swift script/AlphaSetupAcceptanceMain.swift \
+  "$VALIDATION_DIR/LinglongtaiShared.o" -o "$VALIDATION_DIR/alpha-setup-acceptance"
+"$VALIDATION_DIR/alpha-setup-acceptance"
 ISLAND_QA_DIRECTORY="$(mktemp -d /private/tmp/island-contained-store.XXXXXX)"
 "$VALIDATION_DIR/store-acceptance" --data-dir "$ISLAND_QA_DIRECTORY"
 "${COMPILER[@]}" -parse-as-library -module-cache-path "$VALIDATION_DIR/module-cache" \

@@ -249,6 +249,7 @@ private final class HUDPanel: NSPanel {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hudController: HUDController?
     private var statusItem: NSStatusItem?
+    private var onboarding: AlphaOnboardingController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -260,6 +261,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hudController = HUDController()
         hudController?.show()
         configureStatusItem()
+        let args = ProcessInfo.processInfo.arguments
+        if !args.contains("--qa-empty") && !args.contains("--qa-demo") && !args.contains("--data-dir") {
+            onboarding = AlphaOnboardingController(store: TaskStore.shared)
+            if !UserDefaults.standard.bool(forKey: "alpha.hasSeenSetup") {
+                onboarding?.show()
+                UserDefaults.standard.set(true, forKey: "alpha.hasSeenSetup")
+            }
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -268,10 +277,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func configureStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: "Agent 灵动岛")
+        if let appIcon = NSApp.applicationIconImage?.copy() as? NSImage {
+            // The AppIcon has a transparent safety margin around the mark;
+            // 24pt gives it the same visual weight as neighboring menu-bar apps.
+            appIcon.size = NSSize(width: 24, height: 24)
+            appIcon.isTemplate = false
+            appIcon.accessibilityDescription = "Agent 灵动岛"
+            item.button?.image = appIcon
+        } else {
+            item.button?.image = NSImage(systemSymbolName: "circle.dashed", accessibilityDescription: "Agent 灵动岛")
+        }
         item.button?.toolTip = "Agent 灵动岛 · 你的 Agent 管家"
 
         let menu = NSMenu()
+        let setup = NSMenuItem(title: "接入与验证…", action: #selector(showIntegrationSetup), keyEquivalent: "")
+        setup.target = self
+        menu.addItem(setup)
         let details = NSMenuItem(title: "查看任务", action: #selector(showTasks), keyEquivalent: "")
         details.target = self
         menu.addItem(details)
@@ -299,6 +320,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func showSettings() {
         IslandAppActions.showSettings()
+    }
+
+    @objc private func showIntegrationSetup() {
+        if onboarding == nil { onboarding = AlphaOnboardingController(store: TaskStore.shared) }
+        onboarding?.show()
     }
 
     @objc private func quitApp() {

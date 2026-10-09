@@ -1,5 +1,6 @@
 import Foundation
 import LinglongtaiShared
+import SQLite3
 
 @main
 struct LinglongtaiAcceptance {
@@ -16,6 +17,33 @@ struct LinglongtaiAcceptance {
         }
 
         var state = IslandInteraction()
+        runAlphaSetupRevisionChecks { name, result in check(name, result) }
+        check("conversation titles accept title metadata", ConversationTitles.clean("  实际会话标题  ") == "实际会话标题")
+        check("conversation titles never use multiline prompt fallback", ConversationTitles.clean("prompt\nbody") == nil)
+        check("conversation titles reject empty and oversized names", ConversationTitles.clean("  ") == nil && ConversationTitles.clean(String(repeating: "x", count: 4097)) == nil)
+        let titleSession = ConversationTitles.sessionKey(provider: .codex, rawID: "title-fixture")
+        check("conversation title key is identical to hook session key", HookEventMapper.map(provider: .codex, payload: Data("{\"hook_event_name\":\"UserPromptSubmit\",\"session_id\":\"title-fixture\"}".utf8))?.sessionID == titleSession)
+        check("conversation titles cannot cross provider identities", titleSession != ConversationTitles.sessionKey(provider: .claude, rawID: "title-fixture"))
+        let titleTask = AgentTask(agent: "Codex", title: "Codex 会话", status: .running, detail: "fixture", model: "fixture", sessionID: titleSession)
+        check("existing generic tasks resolve their exact session title", ConversationTitles.display(task: titleTask, titles: [titleSession: "真实名称"]) == "真实名称")
+        check("unmatched session never borrows another conversation title", ConversationTitles.display(task: titleTask, titles: ["another": "错误名称"]).hasPrefix("未提供会话标题"))
+        var customTitleTask = titleTask
+        customTitleTask.agent = "WorkBuddy"
+        customTitleTask.title = "明确提供的任务名称"
+        check("explicit titles from other providers are retained", ConversationTitles.display(task: customTitleTask, titles: [titleSession: "错误名称"]) == "明确提供的任务名称")
+        check("missing title database fails closed", ConversationTitles.codex(database: URL(fileURLWithPath: "/private/tmp/nonexistent-island-title-fixture.sqlite")).isEmpty)
+        let titleFixture = FileManager.default.temporaryDirectory.appendingPathComponent("island-title-" + UUID().uuidString + ".sqlite")
+        var titleDB: OpaquePointer?
+        check("title fixture database opens", sqlite3_open(titleFixture.path, &titleDB) == SQLITE_OK)
+        check("title fixture schema and metadata insert", sqlite3_exec(titleDB, "CREATE TABLE threads(id TEXT, name TEXT, title TEXT, updated_at INTEGER); INSERT INTO threads VALUES('title-fixture','桌面端重命名','raw prompt must not be read',1);", nil, nil, nil) == SQLITE_OK)
+        check("title resolver reads desktop name not raw prompt", ConversationTitles.codex(database: titleFixture)[titleSession] == "桌面端重命名")
+        check("title rename fixture updates", sqlite3_exec(titleDB, "UPDATE threads SET name='新的真实标题'", nil, nil, nil) == SQLITE_OK)
+        check("title resolver reflects renamed conversations", ConversationTitles.codex(database: titleFixture)[titleSession] == "新的真实标题")
+        sqlite3_close(titleDB)
+        try? FileManager.default.removeItem(at: titleFixture)
+        let permissionPayload = Data("{\"tool_name\":\"Bash\",\"cwd\":\"/tmp/fixture\",\"tool_input\":{\"command\":\"printf fixture\"}}".utf8)
+        let codexPermission = AgentEvent(type: "upsert", id: UUID(), agent: "Codex", status: .waiting, requiresApproval: true, sourceEvent: "PermissionRequest")
+        check("Codex cannot construct an island approval even with an old relay flag", ApprovalRelay.makeRequest(payload: permissionPayload, event: codexPermission) == nil)
         state.samplePointer(inside: true, at: 0)
         state.samplePointer(inside: true, at: 0.199)
         check("hover does not open before 200 milliseconds", !state.isHovering)

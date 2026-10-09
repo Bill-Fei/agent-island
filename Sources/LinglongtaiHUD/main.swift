@@ -11,6 +11,9 @@ struct LinglongtaiHUDApp: App {
         .defaultSize(width: 720, height: 620)
         .commands {
             CommandMenu("灵动岛") {
+                Button("接入与验证…") {
+                    NSApp.sendAction(Selector(("showIntegrationSetup")), to: nil, from: nil)
+                }
                 Button("查看任务") {
                     NSApp.sendAction(Selector(("showTasks")), to: nil, from: nil)
                 }
