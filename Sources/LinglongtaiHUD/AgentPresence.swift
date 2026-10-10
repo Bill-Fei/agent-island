@@ -103,9 +103,12 @@ final class AgentPresence: ObservableObject {
         // 1. Bring the app forward (switches to the desktop holding its window).
         bringForward(app)
         // Switching to the window's desktop takes a moment, and Accessibility
-        // lists no window until it lands; raise once more after the switch.
-        try? await Task.sleep(nanoseconds: 400_000_000)
-        Self.trace("raise after switch=\(Self.raiseMainWindow(pid: pid))")
+        // lists no window until it lands; raise as soon as one appears.
+        for _ in 0..<10 {
+            if Self.isFrontmost(pid: pid) && Self.frontWindowIsOwn(pid: pid) { return }
+            if Self.raiseMainWindow(pid: pid) { break }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
         if await reached(polls: 4) { return }
         // 2. Frontmost without a window: ask it to reopen one, like a Dock click.
         if let bundleID = app.bundleIdentifier {
