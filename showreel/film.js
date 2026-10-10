@@ -1,5 +1,6 @@
 /* Quiet Power. Every pixel is a pure function of t and immutable seeded data.
-   No external assets, requestAnimationFrame, timers, physics accumulation or audio state. */
+   No remote assets; local product captures/icons are immutable. No requestAnimationFrame,
+   timers, physics accumulation or audio state. */
 'use strict';
 const W=1920,H=1080,TAU=Math.PI*2;
 const P={bg:'#090c0e',white:'#f7f7f4',mint:'#79f2b5',ice:'#84dbf3',muted:'#7f9292'};
@@ -21,8 +22,9 @@ const noise=document.createElement('canvas');noise.width=480;noise.height=270;
 const ng=noise.getContext('2d'),nd=ng.createImageData(480,270);
 for(let i=0;i<nd.data.length;i+=4){const v=100+random()*110;nd.data[i]=nd.data[i+1]=nd.data[i+2]=v;nd.data[i+3]=15}ng.putImageData(nd,0,0);
 let particleTargets=[];
-const metaCanvas=document.createElement('canvas');metaCanvas.width=480;metaCanvas.height=270;
-const metaCtx=metaCanvas.getContext('2d'),metaImage=metaCtx.createImageData(480,270);
+const assets={},assetNames=['codex','claude','workbuddy','doubao','small','medium','overview','settings','controls','connections'];
+const metaCanvas=document.createElement('canvas');metaCanvas.width=960;metaCanvas.height=540;
+const metaCtx=metaCanvas.getContext('2d'),metaImage=metaCtx.createImageData(960,540);
 
 function text(g,s,x,y,size=32,color=P.white,weight=400,align='left',font='Helvetica Neue, PingFang SC, sans-serif'){
   g.fillStyle=color;g.font=`${weight} ${size}px ${font}`;g.textAlign=align;g.textBaseline='alphabetic';g.fillText(s,x,y);
@@ -37,21 +39,21 @@ function circle(g,x,y,r,fill,stroke=null,lw=1){g.beginPath();g.arc(x,y,Math.max(
 function glow(g,x,y,r,color,alpha=.25){g.save();g.globalAlpha=alpha;let z=g.createRadialGradient(x,y,0,x,y,r);z.addColorStop(0,color);z.addColorStop(1,`${color}00`);g.fillStyle=z;g.fillRect(x-r,y-r,r*2,r*2);g.restore()}
 function bg(g,t,light=false){
   g.setTransform(1,0,0,1,0,0);g.globalAlpha=1;g.globalCompositeOperation='source-over';g.filter='none';g.fillStyle=light?P.white:P.bg;g.fillRect(0,0,W,H);
-  if(!light){glow(g,1430+Math.sin(t*.4)*80,600,900,P.mint,.075);glow(g,300,780,620,P.ice,.045)}
+  if(!light){glow(g,1430+Math.sin(t*.4)*80,600,900,P.white,.035);glow(g,300,780,620,P.ice,.025)}
   g.save();g.globalAlpha=light?.20:.10;g.drawImage(noise,0,0,W,H);g.restore();
 }
 const captions=[
  ['轻一点。','一个信号，让工作被看见。','SQUASH / STRETCH'],
  ['你，继续专注。','Agent 在工作，不必来回切换。','KINETIC TYPE'],
  ['恰到好处地出现','小态持续 · 事件展开 · 悬停详情','SHAPE MORPH'],
- ['动得刚刚好','进入、停留、收起。每一步都有分寸。','EASING LAB'],
+ ['按你的节奏出现','真实设置页 · 出现方式与悬停详情','EASING / REAL CONTROLS'],
  ['多 Agent，一个岛','Codex · Claude · Work Buddy · 豆包','9,000 PARTICLES'],
  ['状态，有迹可循','只呈现事件，不推测进度。','3D POINT CLOUD'],
- ['重要时，再出现','开始 · 需要关注 · 本轮结束','LIQUID METABALLS'],
+ ['柔和，不是软弱','轻量信号，汇成有分寸的存在。','LIQUID SILVER'],
  ['并行，不凌乱','写代码、查资料、整理工作。','SWISS GRID WAVE'],
- ['决定，仍然在你','需要确认时提醒，保留你的掌控。','CONTROLLED GLITCH'],
+ ['你的岛，你来定义','真实操控页 · 预览小态与中态','CONTROLLED GLITCH / SETTINGS'],
  ['轻悬停，见详情','0.2 秒，展开任务总览。','INFINITE ZOOM'],
- ['多应用，一处掌握','macOS 顶部的轻量 Agent 状态层。','ISOMETRIC CITY'],
+ ['接入，一目了然','真实 Agent 页面 · 接入状态清晰可见','ISOMETRIC / REAL CONNECTIONS'],
  ['每一步，都可回看','最近 24 小时的任务记录。','SINGLE-LINE HARMONIC'],
  ['看见 · 专注 · 掌控','你的 Agent 管家。','BEAT-CUT RECAP']
 ];
@@ -61,16 +63,20 @@ function chrome(g,i,t,light=false){
   text(g,`${String(i+1).padStart(2,'0')} / 13`,1828,74,20,col,400,'right','Menlo, monospace');
   line(g,92,101,1828,101,light?'#cbd6d1':'#283132',1);
   text(g,captions[i][2],92,1010,20,col,400,'left','Menlo, monospace');
-  text(g,'macOS  /  ALPHA  /  代码重绘演示',1828,1010,19,col,400,'right');g.restore();
+  text(g,'macOS  /  ALPHA  /  真实界面 + 动态设计',1828,1010,19,col,400,'right');g.restore();
 }
 function bottom(g,i,t,light=false){const en=out((t-.12)/.42);g.save();g.globalAlpha=en;g.translate(0,25*(1-en));text(g,captions[i][0],92,858,74,light?P.bg:P.white,600);text(g,captions[i][1],96,918,29,light?'#4b625d':'#b6c7c3',300);g.restore()}
 function topTitle(g,s,x,y,t,size=90){const en=expo((t-.08)/.55);g.save();g.globalAlpha=en;g.translate(0,35*(1-en));text(g,s,x,y,size,P.white,600);g.restore()}
-function notchPath(g,x,y,w,h){const s=Math.min(w*.075,h*.24),r=Math.min(h*.28,w*.08);g.beginPath();g.moveTo(x,y);g.quadraticCurveTo(x+s,y,x+s,y+s);g.lineTo(x+s,y+h-r);g.quadraticCurveTo(x+s,y+h,x+s+r,y+h);g.lineTo(x+w-s-r,y+h);g.quadraticCurveTo(x+w-s,y+h,x+w-s,y+h-r);g.lineTo(x+w-s,y+s);g.quadraticCurveTo(x+w-s,y,x+w,y);g.closePath()}
+function notchPath(g,x,y,w,h){const s=Math.min(w*.075,18,h*.24),r=Math.min(h*.28,26,w*.08);g.beginPath();g.moveTo(x,y);g.quadraticCurveTo(x+s,y,x+s,y+s);g.lineTo(x+s,y+h-r);g.quadraticCurveTo(x+s,y+h,x+s+r,y+h);g.lineTo(x+w-s-r,y+h);g.quadraticCurveTo(x+w-s,y+h,x+w-s,y+h-r);g.lineTo(x+w-s,y+s);g.quadraticCurveTo(x+w-s,y,x+w,y);g.closePath()}
 function brand(g,x,y,s){g.save();notchPath(g,x-s*.46,y-s*.24,s*.92,s*.50);g.fillStyle='#0a0c0d';g.fill();let gr=g.createLinearGradient(0,y-s*.25,0,y+s*.25);gr.addColorStop(0,P.white);gr.addColorStop(1,'#9aaba4');g.strokeStyle=gr;g.lineWidth=s*.035;g.stroke();[.16,.25,.12].forEach((h,i)=>rr(g,x+(i-1)*s*.14-s*.035,y-h*s/2+s*.028,s*.07,h*s,s*.04,[P.mint,P.white,P.ice][i]));g.restore()}
-function mark(g,x,y,size,label='C',col=P.mint){rr(g,x-size/2,y-size/2,size,size,size*.3,'#1a2926',`${col}88`,1.5);text(g,label,x,y+size*.17,size*.39,col,600,'center')}
+function mark(g,x,y,size,label='C',col=P.mint){const keys={C:'codex',CL:'claude',W:'workbuddy',D:'doubao'};const im=assets[keys[label]||label];if(!im)throw new Error('Missing true app icon: '+label);g.drawImage(im,x-size/2,y-size/2,size,size)}
+function shot(g,name,x,y,w,alpha=1){const im=assets[name],h=w*im.height/im.width;g.save();g.globalAlpha*=clamp(alpha);g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';g.drawImage(im,x,y,w,h);g.restore();return h}
+function arrow(g,x,y,scale=1){g.save();g.translate(x,y);g.scale(scale,scale);g.beginPath();g.moveTo(0,0);g.lineTo(0,30);g.lineTo(8,22);g.lineTo(15,37);g.lineTo(22,33);g.lineTo(15,18);g.lineTo(28,18);g.closePath();g.fillStyle=P.white;g.fill();g.strokeStyle='#11181b';g.lineWidth=2;g.stroke();g.restore()}
+function ring(g,x,y,t){const p=clamp(t/.40);g.save();g.globalAlpha=(1-p)*.55;circle(g,x,y,12+p*38,null,P.white,1.5);g.restore()}
 function island(g,x,y,w,h,t,mode='medium',agent='Claude',status='处理中'){
   g.save();g.shadowColor='#00000088';g.shadowBlur=45;g.shadowOffsetY=18;notchPath(g,x-w/2,y,w,h);g.fillStyle='#020506';g.fill();g.shadowColor='transparent';
   notchPath(g,x-w/2,y,w,h);g.strokeStyle='#d7e9e125';g.lineWidth=1.5;g.stroke();
+  notchPath(g,x-w/2,y,w,h);g.clip();
   if(mode==='small'){
     mark(g,x-w/2+48,y+h*.51,34,'C');[0,1,2].forEach(k=>rr(g,x+w/2-70+k*9,y+h*.53-8*(.5+.5*Math.sin(t*TAU*2+k)),4,9+8*(.5+.5*Math.sin(t*TAU*2+k)),2,P.mint));
   }else{
@@ -219,7 +225,7 @@ function outro(g,t){
   if(t>=.98){const ring=clamp((t-.98)/.6);g.save();g.globalAlpha=(1-ring)*.3;circle(g,dotX,565,16+ring*84,null,P.mint,1.5);g.restore()}
   const pp=smooth((t-1.35)/.65);g.save();g.globalAlpha=pp;line(g,630,834,1290,834,'#314d3b');text(g,'轻量感知   /   多 Agent 总览   /   用户掌控',960,885,24,'#8aa994',300,'center');text(g,'macOS · Alpha   |   BILL / AI NATIVE EXPERIENCE',960,997,18,P.muted,400,'center','Menlo, monospace');g.restore();
 }
-const scenes=[s0,s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12];
+const scenes=[s0,s1,(g,t)=>s2(g,t),(g,t)=>s3(g,t),s4,s5,(g,t)=>s6(g,t),s7,(g,t)=>s8(g,t),(g,t)=>s9(g,t),(g,t)=>s10(g,t),(g,t)=>s11(g,t),s12];
 function renderScene(g,i,t,base=true){if(base)bg(g,i*2+t,i===7);else bg(g,i*2+t,i===7);g.save();scenes[i](g,t);g.restore()}
 /* 12 distinct compositing transitions; each begins at an exact bar boundary.
    Incoming and outgoing are generated from their own local t, not prior frames. */
@@ -249,9 +255,10 @@ window.render=function(t){
 };
 window.filmReady=(async()=>{
   await document.fonts.ready;
+  await Promise.all(assetNames.map(name=>new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>{assets[name]=im;resolve()};im.onerror=()=>reject(new Error('Asset load: '+name));im.src='output/v2/assets/'+name+'.png'})));
   const mask=document.createElement('canvas');mask.width=W;mask.height=H;const m=mask.getContext('2d');
   m.fillStyle=P.white;m.font='700 215px Helvetica Neue, sans-serif';m.textAlign='center';m.fillText('ONE ISLAND',960,563);
   const pixels=m.getImageData(0,0,W,H).data,targets=[];for(let y=330;y<590;y+=3)for(let x=220;x<1700;x+=3)if(pixels[(y*W+x)*4+3]>180)targets.push([x,y]);
   const pick=rng(9000);particleTargets=Array.from({length:9000},()=>{const p=targets[Math.floor(pick()*targets.length)];return [p[0]+(pick()-.5)*3,p[1]+(pick()-.5)*3]});
-  window.render(0);return {width:W,height:H,frames:900,fps:30,particles:particleTargets.length,deterministic:true};
+  window.render(0);return {width:W,height:H,frames:900,fps:30,particles:particleTargets.length,deterministic:true,local_assets:assetNames,product_ui:'archived 2026-10-08 screenshots; conversation areas redacted; cursor animation illustrative'};
 })();

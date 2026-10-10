@@ -7,8 +7,8 @@ import numpy as np
 from PIL import Image
 
 ROOT=Path(__file__).resolve().parent
-OUT=ROOT/'output'
-MOV=OUT/'Agent-Island-Quiet-Power-1080p.mp4'
+OUT=ROOT/'output/v2'
+MOV=OUT/'Agent-Island-Quiet-Power-V2-1080p.mp4'
 probe=json.loads(subprocess.check_output([
     '/opt/homebrew/bin/ffprobe','-v','error','-show_streams','-show_format','-of','json',str(MOV)]))
 v=next(s for s in probe['streams'] if s['codec_type']=='video')
@@ -52,7 +52,7 @@ result={'video':{'width':v['width'],'height':v['height'],'fps':30,'frames':900,
                  'seconds':30,'codec':'H.264','pixel_format':'yuv420p'},
         'audio':{'codec':'AAC','sample_rate':48000,'channels':2,'bpm':120,
                  'source_silent_beat_samples_max':0,'aac_silent_beat_peak':quiet_peak},
-        'deterministic':True,'external_assets':0,'cuts_on_beats':True,
+        'deterministic':True,'remote_assets':0,'local_product_assets':len(render['local_assets']),'cuts_on_beats':True,
         'scene_count':13,'unique_transition_count':12,'particle_count':9000,
         'image_checks':image_checks,'file_bytes':MOV.stat().st_size}
 (OUT/'verification.json').write_text(json.dumps(result,indent=2,ensure_ascii=False))
