@@ -102,6 +102,10 @@ final class AgentPresence: ObservableObject {
         }
         // 1. Bring the app forward (switches to the desktop holding its window).
         bringForward(app)
+        // Switching to the window's desktop takes a moment, and Accessibility
+        // lists no window until it lands; raise once more after the switch.
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        Self.trace("raise after switch=\(Self.raiseMainWindow(pid: pid))")
         if await reached(polls: 4) { return }
         // 2. Frontmost without a window: ask it to reopen one, like a Dock click.
         if let bundleID = app.bundleIdentifier {
@@ -170,7 +174,7 @@ final class AgentPresence: ObservableObject {
     /// Diagnostics only: owner app name, layer, alpha and size of the first
     /// on-screen windows. Window titles are never requested.
     private static func frontWindowsSummary() -> String {
-        (onScreenWindows() ?? []).prefix(5).map { window in
+        (onScreenWindows() ?? []).filter(isNormalWindow).prefix(5).map { window in
             let owner = window[kCGWindowOwnerName as String] as? String ?? "?"
             let layer = (window[kCGWindowLayer as String] as? NSNumber)?.intValue ?? -1
             let alpha = (window[kCGWindowAlpha as String] as? NSNumber)?.doubleValue ?? -1
