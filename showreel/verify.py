@@ -7,8 +7,8 @@ import numpy as np
 from PIL import Image
 
 ROOT=Path(__file__).resolve().parent
-OUT=ROOT/'output/v2'
-MOV=OUT/'Agent-Island-Quiet-Power-V2-1080p.mp4'
+OUT=ROOT/'output/v3'
+MOV=OUT/'Agent-Island-Quiet-Power-V3-1080p.mp4'
 probe=json.loads(subprocess.check_output([
     '/opt/homebrew/bin/ffprobe','-v','error','-show_streams','-show_format','-of','json',str(MOV)]))
 v=next(s for s in probe['streams'] if s['codec_type']=='video')
@@ -42,9 +42,9 @@ for i in range(14):
     for offset in [0,3,7,22]:
         f=min(899,i*60+offset)
         ar=np.asarray(Image.open(frames[f]).resize((240,135)).convert('RGB'))
+        # The V3 opening has a deliberate dark build into the real small-state UI;
         # 26.000–26.240 is the designed dark impact / brand build-in.
-        # Test full content after the build, not demand fully formed first-frame type.
-        if not 780 <= f < 788:
+        if not (f < 8 or 780 <= f < 788):
             assert float(ar.std())>10, f
         image_checks.append({'frame':f,'contrast_std':round(float(ar.std()),2),
                              'intentional_dark_impact':780 <= f < 788})

@@ -107,14 +107,24 @@ def compose(destination):
             add(pos+1.5,tick,.035,.6)
 
     # Product gesture sound design, all oscillators/noise generated locally.
-    for position in (.12, .786667, 1.453333):
+    for position in (.5, 1.166667, 1.833333):
         t=times(.15)
         f=410*np.exp(-t*18)+75
         add(position, np.sin(2*np.pi*np.cumsum(f)/SR)*np.exp(-t*32), .12)
-    for position in (4,4.65,5.3,18,18.5,19,19.5,24,24.5,25):
+    for position in (4,4.5,5,18.2,24,24.5,25):
         t=times(.32)
         sw=rng.normal(0,1,len(t))*np.sin(np.pi*t/.32)**2*np.exp(-t*7)
         add(position,sw,.025,math.sin(position))
+
+    # Soft tactile taps align with the illustrative controls, not live actions.
+    for position in (6.75,17,23):
+        t=times(.09)
+        click=(np.sin(2*np.pi*1250*t)+.22*np.sin(2*np.pi*2400*t))*np.exp(-t*95)
+        add(position,click,.065,-.15)
+    for position in (5,16.5,18.2,22.5):
+        t=times(.22);f=720+480*np.sin(np.pi*t/.44)
+        glide=np.sin(2*np.pi*np.cumsum(f)/SR)*np.sin(np.pi*t/.22)**2*np.exp(-t*12)
+        add(position,glide,.055,.25)
 
     # Low-volume deterministic reverb / stereo ping-pong; no external IR.
     dry=mix.copy()
@@ -149,7 +159,7 @@ def compose(destination):
     pcm=np.round(mix*32767).astype('<i2')
     with wave.open(str(destination),"wb") as wav:
         wav.setnchannels(2);wav.setsampwidth(2);wav.setframerate(SR);wav.writeframes(pcm.tobytes())
-    report={"title":"Light Motion — original NumPy score V2", "bpm":120,"sample_rate":SR,
+    report={"title":"Light Motion — original NumPy score V3", "bpm":120,"sample_rate":SR,
             "duration":30,"channels":2,"silence":[25.5,26],
             "silent_samples_max":int(np.max(np.abs(pcm[mute_a:mute_b]))),
             "peak_dbfs":round(20*np.log10(np.max(np.abs(mix))),3),

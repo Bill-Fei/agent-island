@@ -38,32 +38,30 @@ function line(g,x,y,x2,y2,color,lw=1){g.beginPath();g.moveTo(x,y);g.lineTo(x2,y2
 function circle(g,x,y,r,fill,stroke=null,lw=1){g.beginPath();g.arc(x,y,Math.max(.01,r),0,TAU);if(fill){g.fillStyle=fill;g.fill()}if(stroke){g.strokeStyle=stroke;g.lineWidth=lw;g.stroke()}}
 function glow(g,x,y,r,color,alpha=.25){g.save();g.globalAlpha=alpha;let z=g.createRadialGradient(x,y,0,x,y,r);z.addColorStop(0,color);z.addColorStop(1,`${color}00`);g.fillStyle=z;g.fillRect(x-r,y-r,r*2,r*2);g.restore()}
 function bg(g,t,light=false){
-  g.setTransform(1,0,0,1,0,0);g.globalAlpha=1;g.globalCompositeOperation='source-over';g.filter='none';g.fillStyle=light?P.white:P.bg;g.fillRect(0,0,W,H);
+  g.setTransform(1,0,0,1,0,0);g.globalAlpha=1;g.globalCompositeOperation='source-over';g.filter='none';g.fillStyle=light?'#e8ebe7':P.bg;g.fillRect(0,0,W,H);
   if(!light){glow(g,1430+Math.sin(t*.4)*80,600,900,P.white,.035);glow(g,300,780,620,P.ice,.025)}
   g.save();g.globalAlpha=light?.20:.10;g.drawImage(noise,0,0,W,H);g.restore();
 }
 const captions=[
- ['轻一点。','一个信号，让工作被看见。','SQUASH / STRETCH'],
+ ['Agent 在工作。','你不必盯着。','SQUASH / STRETCH'],
  ['你，继续专注。','Agent 在工作，不必来回切换。','KINETIC TYPE'],
  ['恰到好处地出现','小态持续 · 事件展开 · 悬停详情','SHAPE MORPH'],
- ['按你的节奏出现','真实设置页 · 出现方式与悬停详情','EASING / REAL CONTROLS'],
+ ['按你的节奏出现','出现方式 / 悬停详情','EASING / REAL CONTROLS'],
  ['多 Agent，一个岛','Codex · Claude · Work Buddy · 豆包','9,000 PARTICLES'],
  ['状态，有迹可循','只呈现事件，不推测进度。','3D POINT CLOUD'],
- ['柔和，不是软弱','轻量信号，汇成有分寸的存在。','LIQUID SILVER'],
+ ['聚合，而不堆叠','多种状态，同一个入口。','LIQUID SILVER'],
  ['并行，不凌乱','写代码、查资料、整理工作。','SWISS GRID WAVE'],
- ['你的岛，你来定义','真实操控页 · 预览小态与中态','CONTROLLED GLITCH / SETTINGS'],
+ ['你的岛，你来定义','预览小态 / 中态 / 自动尺寸','CONTROLLED GLITCH / SETTINGS'],
  ['轻悬停，见详情','0.2 秒，展开任务总览。','INFINITE ZOOM'],
- ['接入，一目了然','真实 Agent 页面 · 接入状态清晰可见','ISOMETRIC / REAL CONNECTIONS'],
+ ['接入，一目了然','四个 Agent，一处掌握。','ISOMETRIC / REAL CONNECTIONS'],
  ['每一步，都可回看','最近 24 小时的任务记录。','SINGLE-LINE HARMONIC'],
  ['看见 · 专注 · 掌控','你的 Agent 管家。','BEAT-CUT RECAP']
 ];
 function chrome(g,i,t,light=false){
   const col=light?'#536865':P.muted,fg=light?P.bg:P.white;const en=out(t/.4);
   g.save();g.globalAlpha=en;tracked(g,'AGENT DYNAMIC ISLAND',92,74,20,3,fg);
-  text(g,`${String(i+1).padStart(2,'0')} / 13`,1828,74,20,col,400,'right','Menlo, monospace');
-  line(g,92,101,1828,101,light?'#cbd6d1':'#283132',1);
-  text(g,captions[i][2],92,1010,20,col,400,'left','Menlo, monospace');
-  text(g,'macOS  /  ALPHA  /  真实界面 + 动态设计',1828,1010,19,col,400,'right');g.restore();
+  line(g,92,101,1828,101,light?'#c3cbc4':'#283132',1);
+  text(g,'macOS · Alpha',1828,1010,18,col,400,'right');g.restore();
 }
 function bottom(g,i,t,light=false){const en=out((t-.12)/.42);g.save();g.globalAlpha=en;g.translate(0,25*(1-en));text(g,captions[i][0],92,858,74,light?P.bg:P.white,600);text(g,captions[i][1],96,918,29,light?'#4b625d':'#b6c7c3',300);g.restore()}
 function topTitle(g,s,x,y,t,size=90){const en=expo((t-.08)/.55);g.save();g.globalAlpha=en;g.translate(0,35*(1-en));text(g,s,x,y,size,P.white,600);g.restore()}
@@ -100,15 +98,15 @@ function device(g,t){
   rr(g,1380,680,80,8,4,'#1b2926');
 }
 function s0(g,t){
-  topTitle(g,'Agent 在工作。',92,337,t,94);topTitle(g,'你不必盯着。',92,455,t-.20,94);
-  text(g,'QUIET POWER.',98,538,30,P.mint,400);device(g,t);
-  const cyc=Math.max(0,t-.12)*1.5,ph=cyc%1;const y=636-292*4*ph*(1-ph);
+  const en=out(t/.36);rr(g,680,210,1080,470,26,'#11171b','#405057',1.5);
+  line(g,700,240,1740,240,'#344147');shot(g,'small',830,240,780,en);
+  topTitle(g,'Agent 在工作。',92,415,t,88);topTitle(g,'你不必盯着。',92,530,t-.18,88);
+  const cyc=Math.max(0,t-.5)*1.5,ph=cyc%1;const y=614-210*4*ph*(1-ph);
   const impact=Math.exp(-120*Math.pow(Math.min(ph,1-ph),2));const stretch=1+.20*Math.abs(1-2*ph);
-  const x=1420+Math.sin(t*2)*100;
-  glow(g,x,654,100,P.mint,.12);g.save();g.globalAlpha=.25;g.scale(1,.15);circle(g,x,646/.15,60+impact*35,P.mint);g.restore();
-  ball(g,x,y,42,1+impact*.32,stretch-impact*.43);
-  const en=out((t-.4)/.5);g.save();g.globalAlpha=en;line(g,1120,756,1720,756,'#2a3c34',2);text(g,'从一个轻量信号开始',1420,735,25,'#a7bdb1',300,'center');g.restore();
-  chrome(g,0,t);bottom(g,0,t);
+  const x=1260+Math.sin(t*2)*80,bp=out((t-.5)/.25);
+  g.save();g.globalAlpha=bp;glow(g,x,635,100,P.mint,.08);g.scale(1,.15);circle(g,x,624/.15,50+impact*25,'#79f2b530');g.restore();
+  g.save();g.globalAlpha=bp;ball(g,x,y,34,1+impact*.32,stretch-impact*.43);g.restore();
+  text(g,'真实小态 · 轻量感知',1220,742,25,P.muted,300,'center');chrome(g,0,t);
 }
 function s1(g,t){
   const chars=[...'你，继续专注。'];g.font='600 143px PingFang SC, sans-serif';const widths=chars.map(c=>g.measureText(c).width),sum=widths.reduce((a,b)=>a+b,0);let x=(W-sum)/2;
@@ -218,12 +216,12 @@ function s12(g,t){
 }
 function outro(g,t){
   const en=out((t-.06)/.62);g.save();g.globalAlpha=en;g.translate(0,30*(1-en));
-  brand(g,960,356,190);tracked(g,'AGENT DYNAMIC ISLAND',960,672,28,6,P.muted,'center');text(g,'你的 Agent 管家',960,759,37,'#b9cfc1',300,'center');g.restore();
+  brand(g,960,356,190);tracked(g,'AGENT DYNAMIC ISLAND',960,672,28,6,P.muted,'center');text(g,'你的 Agent，恰到好处地出现。',960,759,37,'#b9cfc1',300,'center');g.restore();
   const title='Agent 灵动岛';g.font='600 103px Helvetica Neue, PingFang SC, sans-serif';const tw=g.measureText(title).width;const titleX=(W-(tw+52))/2;g.save();g.globalAlpha=en;text(g,title,titleX,577,103,P.white,600);g.restore();
   const dotX=titleX+tw+29,fall=clamp((t-.10)/.88),y=mix(125,565,fall*fall);const landed=fall>=1;const squash=landed?Math.sin(Math.min((t-.98)*12,Math.PI))*Math.exp(-(t-.98)*10):0;
   ball(g,dotX,y,12,1+Math.max(0,squash)*.3,1-Math.max(0,squash)*.25);
   if(t>=.98){const ring=clamp((t-.98)/.6);g.save();g.globalAlpha=(1-ring)*.3;circle(g,dotX,565,16+ring*84,null,P.mint,1.5);g.restore()}
-  const pp=smooth((t-1.35)/.65);g.save();g.globalAlpha=pp;line(g,630,834,1290,834,'#314d3b');text(g,'轻量感知   /   多 Agent 总览   /   用户掌控',960,885,24,'#8aa994',300,'center');text(g,'macOS · Alpha   |   BILL / AI NATIVE EXPERIENCE',960,997,18,P.muted,400,'center','Menlo, monospace');g.restore();
+  const pp=smooth((t-1.35)/.65);g.save();g.globalAlpha=pp;text(g,'macOS · Alpha   |   BILL / AI NATIVE EXPERIENCE',960,997,18,P.muted,400,'center','Menlo, monospace');g.restore();
 }
 const scenes=[s0,s1,(g,t)=>s2(g,t),(g,t)=>s3(g,t),s4,s5,(g,t)=>s6(g,t),s7,(g,t)=>s8(g,t),(g,t)=>s9(g,t),(g,t)=>s10(g,t),(g,t)=>s11(g,t),s12];
 function renderScene(g,i,t,base=true){if(base)bg(g,i*2+t,i===7);else bg(g,i*2+t,i===7);g.save();scenes[i](g,t);g.restore()}

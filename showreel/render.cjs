@@ -7,7 +7,7 @@ const {spawn}=require('node:child_process');
 const {once}=require('node:events');
 const crypto=require('node:crypto');
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
-const ROOT=__dirname,OUT=path.join(ROOT,'output/v2');
+const ROOT=__dirname,OUT=path.join(ROOT,'output/v3');
 const mode=process.argv[2]||'render';
 fs.mkdirSync(OUT,{recursive:true});
 const server=http.createServer((req,res)=>{
@@ -41,7 +41,7 @@ async function main(){
     '-i',path.join(OUT,'original-score.wav'),'-map','0:v:0','-map','1:a:0','-c:v','libx264','-preset','slow','-crf','17',
     '-pix_fmt','yuv420p','-r','30','-c:a','aac','-b:a','320k','-ar','48000','-t','30','-movflags','+faststart',
     '-metadata','title=Agent 灵动岛 — Quiet Power','-metadata','artist=Bill · original code-generated film',
-    path.join(OUT,'Agent-Island-Quiet-Power-V2-1080p.mp4')];
+    path.join(OUT,'Agent-Island-Quiet-Power-V3-1080p.mp4')];
   const ff=spawn(process.env.FFMPEG||'/opt/homebrew/bin/ffmpeg',args,{stdio:['pipe','ignore','inherit']});
   const ffExit=once(ff,'exit');ff.stdin.on('error',err=>console.error(err.message));
   const before=Date.now();
@@ -53,7 +53,7 @@ async function main(){
   ff.stdin.end();const [code]=await ffExit;if(code!==0)throw new Error(`ffmpeg ${code}`);
   const report={...init,deterministic,errors,external,frame_count:900,cuts:Array.from({length:14},(_,i)=>i*2),
     recap_cuts:[24,24.5,25,25.5],transitions:12,score:'original-score.wav',
-    sha256:crypto.createHash('sha256').update(fs.readFileSync(path.join(OUT,'Agent-Island-Quiet-Power-V2-1080p.mp4'))).digest('hex')};
+    sha256:crypto.createHash('sha256').update(fs.readFileSync(path.join(OUT,'Agent-Island-Quiet-Power-V3-1080p.mp4'))).digest('hex')};
   fs.writeFileSync(path.join(OUT,'render-report.json'),JSON.stringify(report,null,2));
   console.log('COMPLETE',JSON.stringify(report));await browser.close();server.close();
 }
