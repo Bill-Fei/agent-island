@@ -561,8 +561,9 @@ final class TaskStore: ObservableObject {
     /// Wing width asked for by the strings the medium surface renders today.
     /// `nil` leaves the historical fixed width untouched.
     @Published private(set) var mediumWingWidth: Double? = nil
-    /// Growing applies at once; shrinking waits, because status strings cycle
-    /// ("3项进行中" → "运行中" → "3项进行中") and the outline must not breathe.
+    /// Growing applies at once; shrinking waits while medium is on screen,
+    /// because status strings cycle ("3项进行中" → "运行中" → "3项进行中") and
+    /// the outline must not breathe.
     private var pendingNarrowWidth: Double? = nil
     private var pendingNarrowSince: Date? = nil
     private static let narrowHold: TimeInterval = 1.5
@@ -590,8 +591,13 @@ final class TaskStore: ObservableObject {
         let content = IslandContentWidth.medium(agentName: name, statusText: mediumStatusText,
                                                iconSize: iconSize, statusReserve: mediumStatusReserve)
         let target = content.wingWidth()
-        guard let current = mediumWingWidth else {
-            mediumWingWidth = target
+        // The hold only stops a visible outline from breathing. Off screen, a
+        // stale width (e.g. measured for the idle placeholder) would make the
+        // next medium entry open wide and then shrink, so apply it at once.
+        guard let current = mediumWingWidth, presentation == .medium else {
+            if mediumWingWidth != target { mediumWingWidth = target }
+            pendingNarrowWidth = nil
+            pendingNarrowSince = nil
             return
         }
         if target >= current {

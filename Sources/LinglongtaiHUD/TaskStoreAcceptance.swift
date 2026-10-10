@@ -493,6 +493,19 @@ enum TaskStoreAcceptance {
         check("manual size clears auto width override", store.mediumWingWidth == nil && !store.automaticActivityWidth)
         store.setAutomaticActivityWidth(true)
         check("auto mode restores measured width", store.mediumWingWidth != nil)
+        // Let the size preview started by the settings calls run out first.
+        date.addTimeInterval(7)
+        store.refreshPresentation()
+        store.refreshPresentation()
+        let idleWidth = store.mediumWingWidth ?? 0
+        try emit(AgentEvent(type: "upsert", id: UUID(), agent: "Codex", status: .running, createdAt: date, sourceEvent: "PreToolUse"))
+        store.consumeEvents()
+        store.refreshPresentation()
+        let entered = store.mediumWingWidth ?? 0
+        check("medium entry opens at its own width, not the idle one", entered < idleWidth)
+        date.addTimeInterval(2)
+        store.refreshPresentation()
+        check("medium entry does not shrink again after opening", store.mediumWingWidth == entered)
         store.clearAllTasks()
     }
 
