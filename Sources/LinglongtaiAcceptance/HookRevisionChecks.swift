@@ -77,11 +77,12 @@ func runHookRevisionChecks(check: (String, Bool) -> Void) {
               turnA?.legacySessionID != nil && turnA?.legacySessionID == turnB?.legacySessionID &&
               turnA?.legacySessionID == mapped("Stop")?.id)
 
+        // Providers that may run rounds side by side keep the ambiguity guard.
         var overlapping = HookTurnTracker()
-        let anonymousA = route(&overlapping, "UserPromptSubmit").first
-        let anonymousB = route(&overlapping, "UserPromptSubmit")
-        let uncertainStop = route(&overlapping, "Stop")
-        let uncertainPermission = route(&overlapping, "PermissionRequest")
+        let anonymousA = route(&overlapping, "UserPromptSubmit", provider: .workBuddy).first
+        let anonymousB = route(&overlapping, "UserPromptSubmit", provider: .workBuddy)
+        let uncertainStop = route(&overlapping, "Stop", provider: .workBuddy)
+        let uncertainPermission = route(&overlapping, "PermissionRequest", provider: .workBuddy)
         check("overlapping anonymous prompts preserve two independent rows",
               anonymousA?.id != nil && anonymousB.count == 2 && anonymousB[0].id != anonymousA?.id &&
               anonymousB[1].type == "ambiguous-turn")
@@ -89,11 +90,44 @@ func runHookRevisionChecks(check: (String, Bool) -> Void) {
               uncertainStop.count == 1 && uncertainStop[0].type == "ambiguous-turn" &&
               uncertainStop[0].id == nil && uncertainStop[0].status == nil &&
               uncertainPermission.first?.type == "ambiguous-turn" && uncertainPermission.first?.status == nil)
-        let sessionEnd = route(&overlapping, "SessionEnd").first
-        let afterEnd = route(&overlapping, "UserPromptSubmit")
+        let sessionEnd = route(&overlapping, "SessionEnd", provider: .workBuddy).first
+        let afterEnd = route(&overlapping, "UserPromptSubmit", provider: .workBuddy)
         check("session end clears ambiguous routing for the next session round",
               sessionEnd?.type == "end-session" && sessionEnd?.sessionID == anonymousA?.sessionID &&
               afterEnd.count == 1 && afterEnd[0].type == "upsert" && afterEnd[0].id != anonymousA?.id)
+
+        // An interrupted Claude round never sends Stop; the next prompt must
+        // still own its tool, permission and stop callbacks.
+        var interrupted = HookTurnTracker()
+        let abandoned = route(&interrupted, "UserPromptSubmit").first
+        _ = route(&interrupted, "PreToolUse")
+        let resumed = route(&interrupted, "UserPromptSubmit")
+        let resumedPermission = route(&interrupted, "PermissionRequest")
+        let resumedStop = route(&interrupted, "Stop")
+        check("a new Claude prompt retires an unfinished round instead of going ambiguous",
+              resumed.count == 1 && resumed[0].type == "upsert" && resumed[0].id != abandoned?.id &&
+              resumedPermission.count == 1 && resumedPermission[0].id == resumed[0].id &&
+              resumedPermission[0].status == .waiting &&
+              resumedStop.count == 1 && resumedStop[0].id == resumed[0].id && resumedStop[0].status == .completed)
+        check("the retired Claude round ends without an invented outcome",
+              abandoned?.id.flatMap { interrupted.terminalStates[$0]?.isTerminal } == true)
+
+        // Sessions already stuck by the earlier rule must recover on their next prompt.
+        if let stuckSession = mapped("Stop")?.sessionID {
+            let stuckJSON = """
+            {"sessions":{"\(stuckSession)":{"ambiguous":true,"closed":false,"turns":{
+            "t_a":{"id":"\(UUID().uuidString)","isNative":false,"isTerminal":false},
+            "t_b":{"id":"\(UUID().uuidString)","isNative":false,"isTerminal":false}}}}}
+            """
+            var stuck = try JSONDecoder().decode(HookTurnTracker.self, from: Data(stuckJSON.utf8))
+            let recovered = route(&stuck, "UserPromptSubmit")
+            let recoveredTool = route(&stuck, "PreToolUse")
+            check("a Claude session stuck as ambiguous recovers on the next prompt",
+                  recovered.count == 1 && recovered[0].type == "upsert" &&
+                  recoveredTool.count == 1 && recoveredTool[0].id == recovered[0].id)
+        } else {
+            check("stuck Claude session fixture maps", false)
+        }
 
         var upgrade = HookTurnTracker()
         let provisional = route(&upgrade, "UserPromptSubmit").first

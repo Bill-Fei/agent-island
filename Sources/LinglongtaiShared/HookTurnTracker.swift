@@ -80,6 +80,16 @@ public struct HookTurnTracker: Codable, Sendable {
         }
 
         if name == "UserPromptSubmit" {
+            // Claude Code runs one round per session, and an interrupted round
+            // never sends Stop. Its next prompt retires earlier anonymous rounds
+            // (no reason recorded) instead of leaving the session ambiguous.
+            if event.agent == AgentKind.claude.displayName {
+                for (key, turn) in session.active where !turn.isNative {
+                    session.turns[key]?.isTerminal = true
+                    session.turns[key]?.updatedAt = event.createdAt
+                }
+                if session.active.isEmpty { session.ambiguous = false }
+            }
             let overlaps = !session.active.isEmpty
             let turnID = HookEventMapper.localTurnID(sessionID: sessionID, nonce: localTurnID)
             let routed = assigning(event, sessionID: sessionID, turnID: turnID)
