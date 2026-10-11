@@ -405,9 +405,25 @@ private struct HUDExpandedContent: View {
                         Text(error).font(HUDTypography.caption)
                             .foregroundStyle(HUDColorTokens.attention).padding(.top, 8)
                     }
-                    TaskStateIndicator(state: state, visible: store.presentation == .heavy,
-                                       label: store.displayedStatus(for: task))
-                        .padding(.top, 12)
+                    HStack(spacing: 8) {
+                        TaskStateIndicator(state: state, visible: store.presentation == .heavy,
+                                           label: store.displayedStatus(for: task))
+                        if state == .failed {
+                            Button {
+                                store.resyncStatus(for: task)
+                            } label: {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(HUDColorTokens.info)
+                                    .frame(width: 24, height: 24)
+                                    .background(HUDColorTokens.info.opacity(0.14), in: Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .help("重新同步状态；不会重新执行任务")
+                            .accessibilityLabel("重新同步状态，不会重新执行任务")
+                        }
+                    }
+                    .padding(.top, 12)
                     Text(conversationTitles.title(for: task))
                         .font(HUDTypography.body)
                         .foregroundStyle(.white.opacity(0.72))

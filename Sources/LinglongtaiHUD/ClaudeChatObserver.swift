@@ -60,6 +60,12 @@ final class ClaudeChatObserver {
         timer = nil
     }
 
+    /// Run one bounded accessibility read immediately after a manual HUD
+    /// resync. This does not send anything to Claude or create a new turn.
+    func refreshNow() {
+        poll()
+    }
+
     private func poll() {
         guard !pollInFlight else { return }
         guard let app = NSWorkspace.shared.runningApplications.first(where: {

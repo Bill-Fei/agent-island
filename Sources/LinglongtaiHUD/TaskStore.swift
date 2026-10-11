@@ -731,6 +731,24 @@ final class TaskStore: ObservableObject {
         selectedTaskID = task.id
     }
 
+    /// Re-read provider state without issuing a retry or stop command.
+    /// This action never fabricates a lifecycle event or changes another
+    /// conversation's state.
+    func resyncStatus(for task: AgentTask) {
+        guard tasks.contains(where: { $0.id == task.id }) else { return }
+        selectedTaskID = task.id
+        consumeEvents()
+        reconcileOngoingTasks(terminalStates: Self.hookTerminalStates())
+        if task.profile.kind == .doubao {
+            consumeDoubaoTrajectories(force: true)
+        }
+        if task.sourceEvent?.hasPrefix("ClaudeChat") == true {
+            claudeChatObserver?.refreshNow()
+        }
+        notice = "已重新同步 \(task.agent) · 不会重新执行任务"
+        refreshPresentation()
+    }
+
     func perform(_ action: TaskAction, for task: AgentTask) {
         guard let index = tasks.firstIndex(where: { $0.id == task.id }) else { return }
         let updated = tasks[index]
@@ -982,10 +1000,10 @@ final class TaskStore: ObservableObject {
 
     /// Doubao exposes no hook, so its Agent-mode trajectory is polled instead.
     /// Acceptance runs are in-memory only and never read the personal directory.
-    private func consumeDoubaoTrajectories() {
+    private func consumeDoubaoTrajectories(force: Bool = false) {
         guard !isIsolatedRun, !demoPreviewActive, !doubaoPollInFlight else { return }
         let current = now()
-        guard current.timeIntervalSince(lastDoubaoPoll) >= Self.doubaoPollInterval else { return }
+        guard force || current.timeIntervalSince(lastDoubaoPoll) >= Self.doubaoPollInterval else { return }
         lastDoubaoPoll = current
         doubaoPollInFlight = true
         let tracker = doubaoTracker
