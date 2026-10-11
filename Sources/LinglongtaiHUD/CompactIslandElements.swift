@@ -63,7 +63,7 @@ struct CompactTaskIndicator: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var countLabel: String? {
-        guard let value = Int(count), value > 1 else { return nil }
+        guard let value = Int(count), value > 0 else { return nil }
         return value > 9 ? "9+" : String(value)
     }
 
