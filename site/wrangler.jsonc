@@ -1,0 +1,10 @@
+{
+  "name": "agent-island",
+  "pages_build_output_dir": "../dist/site-deploy",
+  "compatibility_date": "2026-10-11",
+  "d1_databases": [{
+    "binding": "ANALYTICS_DB",
+    "database_name": "agent-island-analytics",
+    "database_id": "39bf11d5-6b1a-4655-bf43-d9ebc3838323"
+  }]
+}
