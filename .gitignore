@@ -4,3 +4,4 @@ dist/
 output/
 .env*
 __pycache__/
+.trash/

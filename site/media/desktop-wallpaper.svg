@@ -1,0 +1,173 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMin slice">
+  <!-- Original desktop wallpaper for the hero screen: a daylight sky with one silky blue wave sweeping across.
+       Generated; see the site notes. Not an Apple asset. -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2=".3" y2="1">
+      <stop offset="0" stop-color="#3f9de9"/>
+      <stop offset=".22" stop-color="#8db6e8"/>
+      <stop offset=".42" stop-color="#cfcadb"/>
+      <stop offset=".6" stop-color="#ead8a8"/>
+      <stop offset=".85" stop-color="#bfe0e6"/>
+    </linearGradient>
+    <linearGradient id="body" x1="0" y1="1" x2=".85" y2="0">
+      <stop offset="0" stop-color="#0533b8"/>
+      <stop offset=".35" stop-color="#0645d6"/>
+      <stop offset=".7" stop-color="#1572ea"/>
+      <stop offset="1" stop-color="#36b4f2"/>
+    </linearGradient>
+    <linearGradient id="fade" x1="0" y1="1" x2="1" y2="0">
+      <stop offset=".25" stop-color="#fff" stop-opacity="0"/>
+      <stop offset=".6" stop-color="#fff" stop-opacity=".9"/>
+      <stop offset="1" stop-color="#fff"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#fff" stop-opacity=".35"/>
+      <stop offset=".55" stop-color="#fff" stop-opacity="1"/>
+      <stop offset="1" stop-color="#fff" stop-opacity=".6"/>
+    </linearGradient>
+    <linearGradient id="dune" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#d6e4ee"/>
+      <stop offset=".55" stop-color="#94b6d8"/>
+      <stop offset="1" stop-color="#5d8acb"/>
+    </linearGradient>
+    <clipPath id="waveClip"><path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40 L 1700 1000 L -60 1000 Z"/></clipPath>
+    <mask id="fibreMask" maskUnits="userSpaceOnUse" x="0" y="0" width="1600" height="1000">
+      <rect width="1600" height="1000" fill="url(#fade)"/>
+    </mask>
+    <filter id="b1" filterUnits="userSpaceOnUse" x="-200" y="-200" width="2000" height="1400"><feGaussianBlur stdDeviation="1.1"/></filter>
+    <filter id="b6" filterUnits="userSpaceOnUse" x="-200" y="-200" width="2000" height="1400"><feGaussianBlur stdDeviation="6"/></filter>
+    <filter id="b40" filterUnits="userSpaceOnUse" x="-400" y="-400" width="2400" height="1800"><feGaussianBlur stdDeviation="40"/></filter>
+    <filter id="b80" filterUnits="userSpaceOnUse" x="-400" y="-400" width="2400" height="1800"><feGaussianBlur stdDeviation="80"/></filter>
+    <filter id="grain" filterUnits="userSpaceOnUse" x="0" y="0" width="1600" height="1000">
+      <feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="2" seed="3" stitchTiles="stitch"/>
+      <feColorMatrix type="saturate" values="0"/>
+    </filter>
+  </defs>
+
+  <rect width="1600" height="1000" fill="url(#sky)"/>
+  <!-- Warm haze along the horizon -->
+  <ellipse cx="420" cy="560" rx="560" ry="160" fill="#f3dfae" opacity=".55" filter="url(#b80)"/>
+
+  <!-- Far teal hill on the left, behind the wave -->
+  <path d="M-120 600 C 40 470 210 470 340 560 S 520 650 700 640 L 700 1000 L -120 1000 Z" fill="#109fdc" opacity=".9" filter="url(#b40)"/>
+  <path d="M-120 700 C 120 640 360 660 600 720 L 600 1000 L -120 1000 Z" fill="#0a58d8" opacity=".9" filter="url(#b40)"/>
+
+  <!-- The wave -->
+  <g clip-path="url(#waveClip)">
+    <rect width="1600" height="1000" fill="url(#body)"/>
+    <!-- Deep shadow band a little under the crest gives it a fold -->
+    <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(70 150)" fill="none" stroke="#032a9e" stroke-width="170" opacity=".55" filter="url(#b40)"/>
+    <!-- Light pooling in the belly of the wave -->
+    <g mask="url(#fibreMask)">
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(190 330)" fill="none" stroke="#7fcdf6" stroke-width="150" opacity=".7" filter="url(#b40)"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(205 352)" fill="none" stroke="#c4ecfd" stroke-width="40" opacity=".45" filter="url(#b6)"/>
+    </g>
+    <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(300 520)" fill="none" stroke="#0430b0" stroke-width="160" opacity=".5" filter="url(#b40)"/>
+    <!-- Silky fibres, strongest top right -->
+    <g fill="none" mask="url(#fibreMask)" filter="url(#b1)">
+            <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(0.0 0.0)" stroke="#8fe0ff" stroke-opacity="0.211" stroke-width="2.6"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(0.8 1.4)" stroke="#1a6ae8" stroke-opacity="0.058" stroke-width="4"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(2.0 3.7)" stroke="#ffffff" stroke-opacity="0.110" stroke-width="0.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(3.5 6.3)" stroke="#0a3fc8" stroke-opacity="0.084" stroke-width="0.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(5.2 9.4)" stroke="#5fc8ff" stroke-opacity="0.117" stroke-width="1.2"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(7.0 12.6)" stroke="#ffffff" stroke-opacity="0.137" stroke-width="0.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(9.0 16.2)" stroke="#0a3fc8" stroke-opacity="0.067" stroke-width="1.2"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(11.1 19.9)" stroke="#1a6ae8" stroke-opacity="0.147" stroke-width="0.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(13.3 23.9)" stroke="#0a3fc8" stroke-opacity="0.139" stroke-width="0.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(15.5 28.0)" stroke="#c9f1ff" stroke-opacity="0.053" stroke-width="1.2"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(17.9 32.2)" stroke="#8fe0ff" stroke-opacity="0.110" stroke-width="4"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(20.4 36.7)" stroke="#ffffff" stroke-opacity="0.132" stroke-width="4"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(22.9 41.2)" stroke="#1a6ae8" stroke-opacity="0.072" stroke-width="4"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(25.5 45.9)" stroke="#0a3fc8" stroke-opacity="0.140" stroke-width="1.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(28.2 50.8)" stroke="#ffffff" stroke-opacity="0.125" stroke-width="0.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(31.0 55.7)" stroke="#0a3fc8" stroke-opacity="0.052" stroke-width="1.2"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(33.8 60.8)" stroke="#5fc8ff" stroke-opacity="0.142" stroke-width="2.6"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(36.7 66.0)" stroke="#8fe0ff" stroke-opacity="0.109" stroke-width="2.6"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(39.6 71.3)" stroke="#8fe0ff" stroke-opacity="0.084" stroke-width="1.2"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(42.6 76.7)" stroke="#1a6ae8" stroke-opacity="0.151" stroke-width="0.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(45.7 82.2)" stroke="#0a3fc8" stroke-opacity="0.083" stroke-width="2.6"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(48.8 87.8)" stroke="#8fe0ff" stroke-opacity="0.141" stroke-width="1.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(51.9 93.5)" stroke="#0a3fc8" stroke-opacity="0.173" stroke-width="0.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(55.1 99.2)" stroke="#0a3fc8" stroke-opacity="0.096" stroke-width="1.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(58.4 105.1)" stroke="#c9f1ff" stroke-opacity="0.163" stroke-width="2.6"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(61.7 111.1)" stroke="#ffffff" stroke-opacity="0.165" stroke-width="0.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(65.1 117.1)" stroke="#0a3fc8" stroke-opacity="0.113" stroke-width="1.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(68.5 123.2)" stroke="#8fe0ff" stroke-opacity="0.127" stroke-width="4"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(71.9 129.4)" stroke="#5fc8ff" stroke-opacity="0.111" stroke-width="2.6"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(75.4 135.7)" stroke="#ffffff" stroke-opacity="0.142" stroke-width="1.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(78.9 142.1)" stroke="#5fc8ff" stroke-opacity="0.123" stroke-width="0.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(82.5 148.5)" stroke="#ffffff" stroke-opacity="0.125" stroke-width="1.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(86.1 155.0)" stroke="#1a6ae8" stroke-opacity="0.105" stroke-width="7"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(89.8 161.6)" stroke="#5fc8ff" stroke-opacity="0.069" stroke-width="2.6"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(93.5 168.2)" stroke="#1a6ae8" stroke-opacity="0.075" stroke-width="2.6"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(97.2 174.9)" stroke="#8fe0ff" stroke-opacity="0.054" stroke-width="0.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(100.9 181.7)" stroke="#5fc8ff" stroke-opacity="0.040" stroke-width="1.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(104.8 188.6)" stroke="#c9f1ff" stroke-opacity="0.116" stroke-width="2.6"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(108.6 195.5)" stroke="#5fc8ff" stroke-opacity="0.135" stroke-width="2.6"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(112.5 202.4)" stroke="#ffffff" stroke-opacity="0.051" stroke-width="2.6"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(116.4 209.5)" stroke="#0a3fc8" stroke-opacity="0.062" stroke-width="1.2"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(120.3 216.6)" stroke="#5fc8ff" stroke-opacity="0.123" stroke-width="1.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(124.3 223.7)" stroke="#1a6ae8" stroke-opacity="0.075" stroke-width="1.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(128.3 231.0)" stroke="#1a6ae8" stroke-opacity="0.122" stroke-width="1.2"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(132.4 238.2)" stroke="#c9f1ff" stroke-opacity="0.038" stroke-width="1.2"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(136.4 245.6)" stroke="#c9f1ff" stroke-opacity="0.096" stroke-width="0.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(140.5 253.0)" stroke="#5fc8ff" stroke-opacity="0.111" stroke-width="1.2"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(144.7 260.4)" stroke="#8fe0ff" stroke-opacity="0.056" stroke-width="1.2"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(148.9 267.9)" stroke="#5fc8ff" stroke-opacity="0.079" stroke-width="4"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(153.1 275.5)" stroke="#0a3fc8" stroke-opacity="0.058" stroke-width="1.2"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(157.3 283.1)" stroke="#1a6ae8" stroke-opacity="0.107" stroke-width="4"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(161.6 290.8)" stroke="#1a6ae8" stroke-opacity="0.088" stroke-width="0.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(165.8 298.5)" stroke="#5fc8ff" stroke-opacity="0.107" stroke-width="7"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(170.2 306.3)" stroke="#0a3fc8" stroke-opacity="0.060" stroke-width="2.6"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(174.5 314.1)" stroke="#5fc8ff" stroke-opacity="0.034" stroke-width="7"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(178.9 322.0)" stroke="#5fc8ff" stroke-opacity="0.030" stroke-width="0.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(183.3 329.9)" stroke="#c9f1ff" stroke-opacity="0.061" stroke-width="0.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(187.7 337.9)" stroke="#8fe0ff" stroke-opacity="0.073" stroke-width="0.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(192.2 345.9)" stroke="#ffffff" stroke-opacity="0.069" stroke-width="4"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(196.7 354.0)" stroke="#ffffff" stroke-opacity="0.098" stroke-width="4"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(201.2 362.1)" stroke="#ffffff" stroke-opacity="0.028" stroke-width="1.2"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(205.7 370.3)" stroke="#0a3fc8" stroke-opacity="0.051" stroke-width="7"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(210.3 378.5)" stroke="#8fe0ff" stroke-opacity="0.093" stroke-width="4"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(214.9 386.8)" stroke="#8fe0ff" stroke-opacity="0.056" stroke-width="0.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(219.5 395.1)" stroke="#5fc8ff" stroke-opacity="0.092" stroke-width="2.6"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(224.1 403.5)" stroke="#5fc8ff" stroke-opacity="0.054" stroke-width="0.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(228.8 411.9)" stroke="#c9f1ff" stroke-opacity="0.027" stroke-width="1.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(233.5 420.3)" stroke="#1a6ae8" stroke-opacity="0.037" stroke-width="7"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(238.2 428.8)" stroke="#c9f1ff" stroke-opacity="0.053" stroke-width="1.2"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(243.0 437.3)" stroke="#0a3fc8" stroke-opacity="0.042" stroke-width="7"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(247.7 445.9)" stroke="#0a3fc8" stroke-opacity="0.075" stroke-width="4"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(252.5 454.5)" stroke="#8fe0ff" stroke-opacity="0.077" stroke-width="0.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(257.3 463.2)" stroke="#1a6ae8" stroke-opacity="0.067" stroke-width="4"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(262.2 471.9)" stroke="#8fe0ff" stroke-opacity="0.069" stroke-width="1.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(267.0 480.6)" stroke="#c9f1ff" stroke-opacity="0.046" stroke-width="4"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(271.9 489.4)" stroke="#8fe0ff" stroke-opacity="0.050" stroke-width="4"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(276.8 498.3)" stroke="#c9f1ff" stroke-opacity="0.058" stroke-width="2.6"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(281.7 507.1)" stroke="#1a6ae8" stroke-opacity="0.056" stroke-width="1.2"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(286.7 516.0)" stroke="#0a3fc8" stroke-opacity="0.039" stroke-width="7"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(291.7 525.0)" stroke="#ffffff" stroke-opacity="0.062" stroke-width="1.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(296.7 534.0)" stroke="#5fc8ff" stroke-opacity="0.026" stroke-width="7"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(301.7 543.0)" stroke="#0a3fc8" stroke-opacity="0.056" stroke-width="2.6"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(306.7 552.1)" stroke="#1a6ae8" stroke-opacity="0.055" stroke-width="1.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(311.8 561.2)" stroke="#ffffff" stroke-opacity="0.021" stroke-width="1.2"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(316.9 570.3)" stroke="#5fc8ff" stroke-opacity="0.020" stroke-width="1.2"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(322.0 579.5)" stroke="#5fc8ff" stroke-opacity="0.035" stroke-width="4"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(327.1 588.8)" stroke="#ffffff" stroke-opacity="0.029" stroke-width="7"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(332.2 598.0)" stroke="#8fe0ff" stroke-opacity="0.039" stroke-width="0.8"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(337.4 607.3)" stroke="#1a6ae8" stroke-opacity="0.014" stroke-width="2.6"/>
+      <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(342.6 616.7)" stroke="#1a6ae8" stroke-opacity="0.034" stroke-width="2.6"/>
+    </g>
+    <!-- Soft cyan sheen just under the crest -->
+    <g mask="url(#fibreMask)"><path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" transform="translate(14 22)" fill="none" stroke="#bdf0ff" stroke-width="40" opacity=".35" filter="url(#b6)"/></g>
+  </g>
+
+  <!-- Bright rim along the crest, with a little glow -->
+  <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" fill="none" stroke="#fff" stroke-width="10" opacity=".35" filter="url(#b6)"/>
+  <path d="M-60 900 C 300 760 560 520 860 300 S 1380 -20 1700 -40" fill="none" stroke="url(#rim)" stroke-width="2.2" filter="url(#b1)"/>
+
+  <!-- Pale dunes in the foreground -->
+  <path d="M-120 1060 C 120 880 380 840 600 920 S 860 1040 960 1060 Z" fill="url(#dune)" opacity=".92" filter="url(#b40)"/>
+  <path d="M1160 1060 C 1290 840 1460 660 1720 580 L 1720 1060 Z" fill="url(#dune)" opacity=".88" filter="url(#b40)"/>
+
+  <!-- Fine grain, so the gradients read as a photograph rather than flat vector -->
+  <rect width="1600" height="1000" filter="url(#grain)" opacity=".07"/>
+</svg>

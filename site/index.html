@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Agent 灵动岛：你的 Agent，都在灵动岛里</title>
+<meta name="description" content="Agent 灵动岛把 Codex、Claude、豆包、Work Buddy 的任务状态放在 Mac 屏幕顶部。只看状态，不碰内容，不联网。">
+<meta name="theme-color" content="#000000">
+<link rel="icon" href="media/favicon.png">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Release links. Leave empty until a signed build and a public repo exist;
+  // empty values keep the buttons pointing at the install section instead of a dead URL.
+  window.SITE = {
+    version: '0.3.1',
+    dmgUrl: '',     // e.g. https://github.com/<owner>/<repo>/releases/download/v0.3.1/Agent-Island-0.3.1.dmg
+    mirrorUrl: '',  // optional domestic mirror of the same file
+    sourceUrl: ''  // e.g. https://github.com/<owner>/<repo>
+  };
+</script>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="markStroke" x1="0" y1="10" x2="0" y2="30" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f7fcf7"/><stop offset="1" stop-color="#999e99"/>
+    </linearGradient>
+    <symbol id="mark" viewBox="0 0 40 40">
+      <path d="M1.6 10Q6.02 10 6.02 14.42L6.02 23Q6.02 30 13.02 30L26.98 30Q33.98 30 33.98 23L33.98 14.42Q33.98 10 38.4 10Z" fill="#0a0c0d" stroke="url(#markStroke)" stroke-width="2.4" stroke-linejoin="round"/>
+      <rect x="13" y="17.92" width="2.8" height="6.4" rx="1.4" fill="#79f2b5"/>
+      <rect x="18.6" y="16.12" width="2.8" height="10" rx="1.4" fill="#f7f7f4"/>
+      <rect x="24.2" y="18.72" width="2.8" height="4.8" rx="1.4" fill="#84dbf3"/>
+    </symbol>
+  </defs>
+</svg>
+
+<a class="skip" href="#main">跳到正文</a>
+
+<!-- macOS-style menu bar: the site's navigation, with the live island in the notch.
+     Like the real menu bar, its tint follows whatever is underneath (is-dark is set by island.js). -->
+<header class="menubar is-dark">
+  <a class="menubar-app" href="#top" aria-label="Agent 灵动岛 首页">
+    <svg class="menubar-mark" aria-hidden="true"><use href="#mark"/></svg>
+    <span>Agent 灵动岛</span>
+  </a>
+  <nav class="menubar-menu" aria-label="页面导航">
+    <a href="#film">短片</a>
+    <a href="#states">三种状态</a>
+    <a href="#privacy">隐私</a>
+    <a href="#agents">支持的 Agent</a>
+  </nav>
+  <div class="menubar-right">
+    <span class="menubar-clock" id="clock" aria-hidden="true"></span>
+    <a class="menubar-download" href="#download" data-download>下载</a>
+  </div>
+</header>
+
+<!-- Live demo island. Pure HTML/CSS replica of the app's three states, driven by island.js -->
+<div class="island" id="island" role="button" tabindex="0" aria-expanded="false"
+     aria-label="Agent 灵动岛演示。悬停 0.2 秒或按回车键展开任务总览；内容为演示数据。">
+  <div class="island-glow" aria-hidden="true"></div>
+  <svg class="island-shape" aria-hidden="true"><path/></svg>
+  <div class="island-body" aria-hidden="true">
+
+    <div class="i-small">
+      <img class="i-small-icon" src="media/icons/claude.png" alt="">
+      <span class="i-pill"><span class="i-bars"><i></i><i></i><i></i></span><b>4</b></span>
+    </div>
+
+    <div class="i-med">
+      <span class="i-stack"><img alt=""><img alt=""><img alt=""></span>
+      <span class="i-med-title"></span>
+      <span class="i-med-status"><i></i><span></span></span>
+    </div>
+
+    <div class="i-panel">
+      <svg class="p-mark" style="--d:0"><use href="#mark"/></svg>
+      <span class="p-title" style="--d:0">Agent 灵动岛</span>
+      <span class="p-sub" style="--d:0">你的 Agent 管家</span>
+      <span class="p-count" style="--d:0;left:428px;--c:#8aaee8"><b>2</b>活跃</span>
+      <span class="p-count" style="--d:0;left:476px;--c:#e6e8e4"><b>1</b>待更新</span>
+      <span class="p-count" style="--d:0;left:524px;--c:#e8b080"><b>1</b>待处理</span>
+      <span class="p-collapse" style="--d:0"></span>
+      <span class="p-rule" style="--d:0;top:100px"></span>
+
+      <span class="p-today" style="--d:1">今日活跃 · 12 轮</span>
+      <span class="p-bar" style="--d:1"><i style="width:199px;background:#7aa8ff"></i><i style="width:159px;background:#ad7dff"></i><i style="width:80px;background:#33d69e"></i><i style="width:40px;background:#ff6e47"></i></span>
+      <span class="p-legend" style="--d:1">
+        <span><i style="background:#7aa8ff"></i>Codex<b>5</b></span>
+        <span><i style="background:#ad7dff"></i>Claude<b>4</b></span>
+        <span><i style="background:#33d69e"></i>Work Buddy<b>2</b></span>
+        <span><i style="background:#ff6e47"></i>豆包<b>1</b></span>
+      </span>
+      <span class="p-rule" style="--d:1;top:160px"></span>
+      <span class="p-vrule" style="--d:1"></span>
+
+      <span class="p-list-head" style="--d:2"><span>最近 24 小时</span><span>进行中优先</span></span>
+      <span class="p-card is-current" style="--d:3;top:196px">
+        <img src="media/icons/codex.png" alt=""><b>Codex</b><span>数据库迁移脚本</span><small>A41C02&ensp;21:04</small>
+        <em style="color:#e8b080">待你确认</em>
+      </span>
+      <span class="p-card" style="--d:4;top:280px">
+        <img src="media/icons/workbuddy.png" alt=""><b>Work Buddy</b><span>整理本周周报素材</span><small>7F2E91&ensp;20:58</small>
+        <em style="color:#8aaee8">进行中</em>
+      </span>
+      <span class="p-card" style="--d:5;top:364px">
+        <img src="media/icons/claude.png" alt=""><b>Claude</b><span>重构登录模块</span><small>C93B07&ensp;20:41</small>
+        <em style="color:#87c7ab">本轮结束</em>
+      </span>
+
+      <span class="p-detail" style="--d:5">
+        <img src="media/icons/codex.png" alt=""><b>Codex</b><span class="p-open">打开应用</span>
+        <span class="p-desc">数据库迁移脚本：对比新旧表结构，<br>并补充回滚步骤</span>
+        <span class="p-thread"><span>会话线索 · A41C02&ensp;21:04</span><span>复制会话线索</span></span>
+      </span>
+      <span class="p-step" style="--d:6;top:296px"><span>读取文件 · 已返回</span><time>21:02</time></span>
+      <span class="p-step" style="--d:7;top:324px"><span>执行命令 · 已返回</span><time>21:03</time></span>
+      <span class="p-step" style="--d:8;top:352px"><span>修改文件 · 已返回</span><time>21:03</time></span>
+      <span class="p-step is-attn" style="--d:9;top:380px"><span>请求权限 · 待你确认</span><time>21:04</time></span>
+      <span class="p-foot" style="--d:10">网页演示，非实时数据</span>
+    </div>
+  </div>
+</div>
+
+<main id="main">
+
+  <section class="hero tone-dark" id="top">
+    <p class="hero-hint" aria-hidden="true">
+      <span class="hint-pointer">把鼠标停在刘海上 0.2 秒，看看全部任务</span>
+      <span class="hint-touch">轻点上面的刘海，看看全部任务</span>
+    </p>
+
+    <div class="hero-copy wrap">
+      <h1><span class="nw h1-thin">你的 Agent，</span><span class="nw h1-bold">都在灵动岛里。</span></h1>
+      <p class="hero-lede">Codex、Claude、豆包、<span class="nw">Work Buddy</span> <span class="nw">在跑什么、</span><span class="nw">在等你确认什么，</span><wbr>抬眼看一下屏幕顶部就知道。</p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="#download" data-download>下载 Alpha 版</a>
+        <a class="btn btn-glass" href="#film">看 30 秒短片</a>
+      </div>
+    </div>
+
+    <div class="hero-stage wrap">
+      <div class="hero-ring" aria-hidden="true"></div>
+      <div class="screen" role="img" aria-label="Mac 屏幕顶部：刘海下展开的任务总览，Codex 的数据库迁移正在等你确认。演示数据。">
+        <div class="screen-view" data-demo="panel" data-fit="hero">
+          <p class="screen-menu" aria-hidden="true"><span><b>访达</b><span>文件</span><span>编辑</span><span>显示</span><span>前往</span><span>窗口</span></span><span><svg viewBox="0 0 24 24"><path d="M12 18.6a1.6 1.6 0 1 1 0 .01ZM6.9 14.2a7.3 7.3 0 0 1 10.2 0l-1.3 1.4a5.4 5.4 0 0 0-7.6 0Zm-3-3a11.6 11.6 0 0 1 16.2 0l-1.3 1.4a9.7 9.7 0 0 0-13.6 0Z"/></svg><svg viewBox="0 0 28 24" style="width:calc(24px*var(--k,1))"><path d="M5 7h16a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Zm0 1.3a.7.7 0 0 0-.7.7v6c0 .4.3.7.7.7h16c.4 0 .7-.3.7-.7V9a.7.7 0 0 0-.7-.7Zm1 1.2h12.5v5H6Zm18.3 1.2c.6.2 1 .7 1 1.3s-.4 1.1-1 1.3Z"/></svg><span>周六 21:04</span></span></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec film tone-dark" id="film" aria-labelledby="film-h">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 id="film-h">30 秒，看它怎么工作。</h2>
+        <p>从多个窗口来回切，到只抬眼看一下。</p>
+      </div>
+      <div class="film-frame">
+        <video id="filmVideo" src="media/film.mp4" poster="media/film-poster.jpg?v=2" preload="metadata" playsinline></video>
+        <button class="film-play" id="filmPlay" type="button">
+          <span class="film-play-disc" aria-hidden="true"></span>
+          <span class="film-play-label">播放短片，30 秒，有声音</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec states" id="states" aria-labelledby="states-h">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 id="states-h">平时安静，有事才开口。</h2>
+        <p>它只有三种样子。不弹窗，不抢焦点，不打断你手上的事。</p>
+      </div>
+
+      <div class="state">
+        <div class="state-text">
+          <h3>常驻</h3>
+          <p>任务在跑的时候，它收在刘海两侧。左边是正在工作的 Agent，右边的活动条只说明“还在动”，不代表进度百分比；数字是进行中的任务数。</p>
+        </div>
+        <div class="demo" data-demo="small" role="img" aria-label="刘海两侧：左边是 Claude 图标，右边是活动条和数字 4"></div>
+      </div>
+
+      <div class="state">
+        <div class="state-text">
+          <h3>提醒</h3>
+          <p>任务开始、需要你确认、或者一轮结束时，它横向展开约 10 秒，告诉你是哪件事、现在是什么状态，然后自己收回去。</p>
+        </div>
+        <div class="demo" data-demo="med" role="img" aria-label="横向展开的灵动岛：数据库迁移，待你确认"></div>
+      </div>
+
+      <div class="state">
+        <div class="state-text">
+          <h3>总览</h3>
+          <p>鼠标在顶部停 0.2 秒，就能看到最近 24 小时的任务：谁在等你、谁还在跑、谁已经结束，以及已经返回的步骤。点“打开应用”回到对应的 Agent 处理，移开鼠标就收起。</p>
+        </div>
+        <div class="demo" data-demo="panel" role="img" aria-label="任务总览面板：今日活跃 12 轮，三条任务记录和 Codex 的步骤详情"></div>
+      </div>
+
+      <p class="states-note">以上画面是网页还原的演示，任务内容为演示数据。你看到的会是自己的任务。</p>
+    </div>
+  </section>
+
+  <section class="sec privacy" id="privacy" aria-labelledby="privacy-h">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 id="privacy-h">只看状态，不碰内容。</h2>
+        <p>Agent 灵动岛完全在你的 Mac 上运行。不联网，不上传，不调用任何模型 API，也不需要 API Key。</p>
+      </div>
+      <div class="privacy-cols">
+        <div>
+          <h3>它会知道</h3>
+          <ul class="ledger">
+            <li>哪个 Agent 在工作</li>
+            <li>一轮任务什么时候开始、等待、结束或失败</li>
+            <li>步骤的类别，比如读取文件、执行命令</li>
+            <li>任务标题和会话线索，用来帮你认出是哪件事</li>
+          </ul>
+        </div>
+        <div>
+          <h3>它不会碰</h3>
+          <ul class="ledger">
+            <li>你的提示词和聊天正文</li>
+            <li>工具的输入和输出内容</li>
+            <li>账号、凭据和 API Key</li>
+            <li>你的文件内容</li>
+          </ul>
+        </div>
+      </div>
+      <div class="privacy-notes">
+        <p>接入每个 Agent 之前，它会先告诉你要改哪个配置文件。你确认后才写入，并且留一份原文件备份；随时可以卸载接入。</p>
+        <p>默认只观察，不替你做决定。唯一的例外是 Claude Code：你可以手动开启单次审批，每次只放行这一次，其他 Agent 的确认都回到原应用处理。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec agents" id="agents" aria-labelledby="agents-h">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 id="agents-h">现在能接入的 Agent</h2>
+        <p>Alpha 版先从这几个开始。状态如实标注，不夸大。</p>
+      </div>
+      <ul class="agent-list">
+        <li>
+          <img src="media/icons/codex.png" alt="" width="48" height="48">
+          <span class="agent-name">Codex</span>
+          <span class="agent-how">通过生命周期 Hook 接入</span>
+          <span class="agent-tag">已实机验证</span>
+        </li>
+        <li>
+          <img src="media/icons/claude.png" alt="" width="48" height="48">
+          <span class="agent-name">Claude Code</span>
+          <span class="agent-how">通过生命周期 Hook 接入，可选开启单次审批</span>
+          <span class="agent-tag">已实机验证</span>
+        </li>
+        <li>
+          <img src="media/icons/workbuddy.png" alt="" width="48" height="48">
+          <span class="agent-name">Work Buddy</span>
+          <span class="agent-how">通过生命周期 Hook 接入</span>
+          <span class="agent-tag">已实机验证</span>
+        </li>
+        <li>
+          <img src="media/icons/doubao.png" alt="" width="48" height="48">
+          <span class="agent-name">豆包</span>
+          <span class="agent-how">只读本机的 Agent 模式记录，普通聊天看不到</span>
+          <span class="agent-tag is-soft">只读</span>
+        </li>
+        <li>
+          <img src="media/icons/claude.png" alt="" width="48" height="48">
+          <span class="agent-name">Claude 聊天应用</span>
+          <span class="agent-how">需要辅助功能权限，暂不在 Alpha 的保证范围内</span>
+          <span class="agent-tag is-soft">实验性</span>
+        </li>
+      </ul>
+      <p class="agents-note">应用里的图标读取自你 Mac 上安装的 Agent 本身；没安装的会显示通用占位。</p>
+    </div>
+  </section>
+
+  <section class="sec download tone-dark" id="download" aria-labelledby="download-h">
+    <div class="wrap">
+      <img class="download-icon" src="media/app-icon.png" width="128" height="128" alt="">
+      <h2 id="download-h">下载 Agent 灵动岛</h2>
+      <p class="download-meta">Alpha <span data-version>0.3.1</span>，适用于 Apple 芯片的 Mac，需要 macOS 13 或更高版本。</p>
+      <div class="download-actions">
+        <a class="btn btn-primary btn-lg" id="dmgLink" href="#download" data-download>下载 Alpha 版</a>
+        <a class="btn btn-glass btn-lg" id="mirrorLink" href="#download" hidden>国内镜像下载</a>
+      </div>
+      <p class="download-pending" id="pending">安装包正在准备，发布后这里可以直接下载。</p>
+
+      <ol class="steps">
+        <li><b>拖进“应用程序”</b>打开下载的 .dmg，把 Agent 灵动岛拖进“应用程序”文件夹。</li>
+        <li><b>第一次打开</b>如果系统提示无法打开，到“系统设置 › 隐私与安全性”，点“仍要打开”。</li>
+        <li><b>接入你的 Agent</b>点菜单栏里的灵动岛图标，选“接入与验证…”，只勾选你在用的 Agent。</li>
+        <li><b>跑一轮试试</b>在原应用里发起一次真实任务，回来看看灵动岛有没有亮起来。</li>
+      </ol>
+      <p class="download-note">为什么会有第二步：Alpha 版还没有经过 Apple 公证，macOS 会在第一次打开时多问一句。<span id="sourceNote" hidden>想自己从源码构建，可以<a id="sourceLink" href="#">在 GitHub 查看</a>。</span></p>
+      <p class="download-privacy">网站会统计访问次数、主要按钮点击、安装包下载请求和国家/地区汇总，保留 90 天。统计不使用 Cookie，不保存原始 IP，也不采集应用里的任务或对话内容。下载请求不代表下载完成；Agent 灵动岛应用本身不联网。浏览器开启“不跟踪”或全球隐私控制时，不记录网页行为。</p>
+    </div>
+  </section>
+
+</main>
+
+<footer class="foot tone-dark">
+  <div class="wrap foot-inner">
+    <div class="foot-brand">
+      <svg class="foot-mark" aria-hidden="true"><use href="#mark"/></svg>
+      <span>Agent 灵动岛</span>
+    </div>
+    <p>网页和宣传片中的界面使用演示数据。Codex、Claude、豆包、Work Buddy 是各自所有者的商标，本项目与它们没有隶属关系。</p>
+  </div>
+</footer>
+
+<script src="island.js"></script>
+<script src="analytics.js" defer></script>
+</body>
+</html>
