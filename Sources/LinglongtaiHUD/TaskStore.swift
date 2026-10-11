@@ -307,8 +307,19 @@ final class TaskStore: ObservableObject {
         refreshTaskCacheIfNeeded()
         if let sortedTasksCache { return sortedTasksCache }
         let sorted = displayTasks.sorted { lhs, rhs in
-            let leftRank = needsUserAttention(lhs) ? 0 : ([.queued, .running, .waiting].contains(lhs.status) ? 1 : 2)
-            let rightRank = needsUserAttention(rhs) ? 0 : ([.queued, .running, .waiting].contains(rhs.status) ? 1 : 2)
+            // Sort by the same display state used by the two visible list
+            // sections. Some sources retain a raw `.running` status while
+            // reporting an unknown/untracked result; ranking raw status here
+            // would let those ended rows jump ahead of a newly finished task
+            // and then move down only after `TaskVisualSection.grouped`.
+            let leftState = TaskVisualState.resolve(lhs,
+                                                     displayedStatus: displayedStatus(for: lhs),
+                                                     needsAttention: needsUserAttention(lhs))
+            let rightState = TaskVisualState.resolve(rhs,
+                                                      displayedStatus: displayedStatus(for: rhs),
+                                                      needsAttention: needsUserAttention(rhs))
+            let leftRank = leftState == .attention ? 0 : (leftState.group == .active ? 1 : 2)
+            let rightRank = rightState == .attention ? 0 : (rightState.group == .active ? 1 : 2)
             if leftRank != rightRank { return leftRank < rightRank }
             if lhs.updatedAt == rhs.updatedAt { return lhs.id.uuidString < rhs.id.uuidString }
             return lhs.updatedAt > rhs.updatedAt

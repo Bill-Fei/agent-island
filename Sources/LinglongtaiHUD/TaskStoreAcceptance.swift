@@ -603,6 +603,27 @@ enum TaskStoreAcceptance {
         store.consumeEvents()
         check("release store: a new completion remains selectable as recent history",
               store.tasks.contains { $0.id == ended } && store.sortedTasks.contains { $0.id == ended } && !store.liveTasks.contains { $0.id == ended })
+
+        // A source may retain a raw running state after it can no longer
+        // prove the turn is live. It must not outrank a newly finished row
+        // before the UI groups both rows under 已结束.
+        let untracked = UUID()
+        try emit(AgentEvent(type: "upsert", id: untracked, agent: "豆包", status: .running,
+                            createdAt: date.addingTimeInterval(-30), sourceEvent: "DoubaoSilent"))
+        let justFinished = UUID()
+        try emit(AgentEvent(type: "upsert", id: justFinished, agent: "Codex", status: .completed,
+                            createdAt: date.addingTimeInterval(0.1), sourceEvent: "Stop"))
+        store.consumeEvents()
+        let visibleItems = store.sortedTasks.map { task in
+            TaskVisualItem(task: task,
+                           state: TaskVisualState.resolve(task,
+                                                          displayedStatus: store.displayedStatus(for: task),
+                                                          needsAttention: store.needsUserAttention(task)))
+        }
+        let endedOrder = TaskVisualSection.grouped(visibleItems)
+            .first { $0.group == .ended }?.items.map(\.id) ?? []
+        check("release store: newly finished rows lead ended history over stale unknown rows",
+              endedOrder.first == justFinished && endedOrder.contains(untracked))
         date.addTimeInterval(86_401)
         store.refreshPresentation()
         check("release store: unresolved tasks persist while terminal and unadopted history ages out",
