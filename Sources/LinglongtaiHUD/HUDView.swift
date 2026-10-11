@@ -332,8 +332,10 @@ private struct HUDExpandedContent: View {
                                 ForEach(section.items) { item in
                                     TaskRow(task: item.task, title: conversationTitles.title(for: item.task),
                                             isSelected: selectedID == item.id, state: item.state,
-                                            animationActive: store.presentation == .heavy) {
-                                        store.select(item.task)
+                                            animationActive: store.presentation == .heavy,
+                                            approvalPending: item.task.status == .waiting && item.task.requiresApproval
+                                                && store.approvalRequest(for: item.task) != nil) {
+                                        store.selectOrReview(item.task)
                                     }
                                     // The outer identity stays the task UUID.
                                     // Reset only the row's semantic presentation
@@ -604,6 +606,7 @@ private struct TaskRow: View {
     let isSelected: Bool
     let state: TaskVisualState
     let animationActive: Bool
+    let approvalPending: Bool
     let onSelect: () -> Void
 
     private var isEnded: Bool { state.group == .ended }
@@ -635,6 +638,13 @@ private struct TaskRow: View {
                     HStack(spacing: 6) {
                         TaskStateIndicator(state: state, visible: animationActive)
                         Spacer(minLength: 4)
+                        if approvalPending {
+                            Text("批准…")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(HUDColorTokens.attention)
+                                .padding(.horizontal, 8).padding(.vertical, 2)
+                                .background(HUDColorTokens.attention.opacity(0.16), in: Capsule())
+                        }
                         Text(String(task.id.uuidString.prefix(6)))
                             .font(.system(size: 9, design: .monospaced))
                             .foregroundStyle(.white.opacity(0.3))

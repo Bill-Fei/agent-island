@@ -280,6 +280,7 @@ struct LinglongtaiAcceptance {
         runJournalRevisionChecks { name, condition in check(name, condition) }
         runWorkBuddyTitleRevisionChecks { name, condition in check(name, condition) }
         runClaudeTitleRevisionChecks { name, condition in check(name, condition) }
+        runApprovalShortcutChecks { name, condition in check(name, condition) }
 
         print("\n\(checks) acceptance checks passed")
     }

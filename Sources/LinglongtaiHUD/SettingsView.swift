@@ -57,6 +57,18 @@ struct AppSettingsView: View {
             Divider()
 
             Toggle(isOn: Binding(
+                get: { store.autoOpenApproval },
+                set: { store.setAutoOpenApproval($0) }
+            )) {
+                SettingLabel(
+                    title: "收到批准请求时直接打开批准窗",
+                    detail: "默认关闭。开启后会占用键盘焦点，打字时可能被打断；仍需按 ⌘↩ 才会批准，弹出后 0.6 秒内的决定键会被忽略。"
+                )
+            }
+
+            Divider()
+
+            Toggle(isOn: Binding(
                 get: { store.heavyOnHover },
                 set: { store.setHeavyOnHover($0) }
             )) {

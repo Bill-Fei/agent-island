@@ -23,6 +23,7 @@ final class TaskStore: ObservableObject {
     @Published var notice = "等待实时 Agent 事件"
     @Published var autoPopOnEvent: Bool
     @Published var heavyOnHover: Bool
+    @Published var autoOpenApproval: Bool
     @Published var notchOffset: Double
     @Published var notchWidthAdjustment: Double
     @Published var activityWidth: Double
@@ -195,6 +196,7 @@ final class TaskStore: ObservableObject {
 
     private let autoPopKey = "dynamicIsland.autoPopOnEvent"
     private let heavyOnHoverKey = "dynamicIsland.heavyOnHover"
+    private let autoOpenApprovalKey = "dynamicIsland.autoOpenApproval"
     private let notchOffsetKey = "dynamicIsland.notchOffset"
     private let notchWidthAdjustmentKey = "dynamicIsland.notchWidthAdjustment"
     private let activityWidthKey = "dynamicIsland.activityWidth"
@@ -210,6 +212,8 @@ final class TaskStore: ObservableObject {
         isAcceptancePreview = arguments.contains("--qa-empty") || arguments.contains("--qa-demo")
         autoPopOnEvent = UserDefaults.standard.object(forKey: autoPopKey) as? Bool ?? true
         heavyOnHover = UserDefaults.standard.object(forKey: heavyOnHoverKey) as? Bool ?? true
+        autoOpenApproval = !isAcceptancePreview && (arguments.contains("--auto-open-approval")
+            || UserDefaults.standard.object(forKey: autoOpenApprovalKey) as? Bool ?? false)
         notchOffset = UserDefaults.standard.object(forKey: notchOffsetKey) as? Double ?? 0
         notchWidthAdjustment = UserDefaults.standard.object(forKey: notchWidthAdjustmentKey) as? Double ?? 0
         activityWidth = UserDefaults.standard.object(forKey: activityWidthKey) as? Double ?? 228
@@ -648,6 +652,11 @@ final class TaskStore: ObservableObject {
         autoPopOnEvent = enabled
         if !isIsolatedRun { UserDefaults.standard.set(enabled, forKey: autoPopKey) }
         refreshPresentation()
+    }
+
+    func setAutoOpenApproval(_ enabled: Bool) {
+        autoOpenApproval = enabled
+        if !isIsolatedRun { UserDefaults.standard.set(enabled, forKey: autoOpenApprovalKey) }
     }
 
     func setHeavyOnHover(_ enabled: Bool) {

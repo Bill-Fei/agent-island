@@ -19,11 +19,19 @@ final class HUDController: NSObject {
     private var hiding = false
     private var detailsOpenedFromMenu = false
     private var contextMenuMonitor: Any?
+    private var approvalKeyMonitor: Any?
+    private var approvalOpenedAt = -Double.infinity
+    private var approvalHotKey: GlobalHotKey?
+    private var autoOpenedRequestID: UUID?
+    // Decision keys are ignored briefly after the review opens, so a keystroke
+    // meant for another app can't approve a request the user hasn't read yet.
+    private static let approvalArmDelay = 0.6
 
     override init() {
         super.init()
         configurePanel()
         configureContextMenu()
+        configureApprovalShortcuts()
         observeState()
         // Sample the existing spring at 120 Hz for smoother high-refresh
         // display motion. Task history caching and background polling remain
@@ -166,6 +174,49 @@ final class HUDController: NSObject {
         }
     }
 
+    private func configureApprovalShortcuts() {
+        approvalHotKey = GlobalHotKey { [weak self] in
+            guard let self, self.panel.isVisible, !self.hiding else { return }
+            self.store.reviewPendingApproval()
+        }
+        store.$reviewingApproval.map { $0?.id }.removeDuplicates()
+            .sink { [weak self] id in
+                guard let self, id != nil else { return }
+                self.approvalOpenedAt = ProcessInfo.processInfo.systemUptime
+                self.panel.makeKey()
+            }
+            .store(in: &cancellables)
+        store.objectWillChange.receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.autoOpenApprovalIfNeeded() }
+            .store(in: &cancellables)
+        approvalKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, self.store.reviewingApproval != nil else { return event }
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            guard let action = ApprovalShortcut.action(
+                keyCode: event.keyCode, command: flags.contains(.command), option: flags.contains(.option),
+                control: flags.contains(.control), shift: flags.contains(.shift), isRepeat: event.isARepeat
+            ) else { return event }
+            let armed = ProcessInfo.processInfo.systemUptime - self.approvalOpenedAt >= Self.approvalArmDelay
+            if action != .close && !armed { return nil }
+            self.store.handleApprovalShortcut(action)
+            return nil
+        }
+    }
+
+    // Opt-in: opens the review for each new request exactly once, so Esc is respected.
+    private func autoOpenApprovalIfNeeded() {
+        guard store.autoOpenApproval, panel.isVisible, !hiding, store.reviewingApproval == nil,
+              !store.contextMenuIsOpen, let task = store.approvalTask, let id = task.approvalRequestID,
+              id != autoOpenedRequestID else { return }
+        autoOpenedRequestID = id
+        store.reviewPendingApproval()
+    }
+
+    private func syncApprovalHotKey() {
+        let wanted = panel.isVisible && !hiding && store.approvalTask != nil
+        if wanted { approvalHotKey?.register() } else { approvalHotKey?.unregister() }
+    }
+
     @objc private func openSettings() { IslandAppActions.showSettings() }
     @objc private func exitIsland() { IslandAppActions.quit() }
 
@@ -218,11 +269,14 @@ final class HUDController: NSObject {
 
     private func syncApprovalAvailability() {
         ApprovalRelay.updateHUDHeartbeat(canPresent: panel.isVisible && !hiding && store.autoPopOnEvent)
+        syncApprovalHotKey()
+        autoOpenApprovalIfNeeded()
     }
 
     deinit {
         frameTimer?.invalidate()
         if let contextMenuMonitor { NSEvent.removeMonitor(contextMenuMonitor) }
+        if let approvalKeyMonitor { NSEvent.removeMonitor(approvalKeyMonitor) }
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         if let wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver) }
         if let sleepObserver { NSWorkspace.shared.notificationCenter.removeObserver(sleepObserver) }
