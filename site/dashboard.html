@@ -3,85 +3,91 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Agent 灵动岛 · 数据看板</title>
+<title>Agent 灵动岛 · 网站数据</title>
 <meta name="theme-color" content="#070a08">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath d='M1.6 10Q6.02 10 6.02 14.42L6.02 23Q6.02 30 13.02 30L26.98 30Q33.98 30 33.98 23L33.98 14.42Q33.98 10 38.4 10Z' fill='%23070a08' stroke='%2379f2b5' stroke-width='2.4'/%3E%3Crect x='13' y='17.92' width='2.8' height='6.4' rx='1.4' fill='%2379f2b5'/%3E%3Crect x='18.6' y='16.12' width='2.8' height='10' rx='1.4' fill='%23f2f4f0'/%3E%3Crect x='24.2' y='18.72' width='2.8' height='4.8' rx='1.4' fill='%2384dbf3'/%3E%3C/svg%3E">
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
 <style>
 :root{
   --bg:#070a08; --panel:#0d1210; --panel2:#0a0e0c; --line:#1a211d;
-  --text:#eef4ef; --dim:#8a9791; --accent:#79f2b5; --blue:#84dbf3;
-  --amber:#e8b080; --red:#ff6e47;
+  --text:#eef4ef; --dim:#8a9791; --accent:#79f2b5; --blue:#84dbf3; --amber:#e8b080;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html{scroll-behavior:smooth}
-body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","PingFang SC","Helvetica Neue",sans-serif;min-height:100vh;-webkit-font-smoothing:antialiased;padding-bottom:env(safe-area-inset-bottom)}
-.wrap{max-width:640px;margin:0 auto;padding:0 18px}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","PingFang SC","Helvetica Neue",sans-serif;min-height:100vh;-webkit-font-smoothing:antialiased;padding-bottom:env(safe-area-inset-bottom)}
+.wrap{max-width:860px;margin:0 auto;padding:0 22px}
 
-/* ===== 顶部菜单栏 ===== */
-.menubar{display:flex;align-items:center;gap:10px;padding:18px 4px 8px}
-.menubar .mark{width:24px;height:24px;flex:none}
-.menubar h1{font-size:15px;font-weight:650;letter-spacing:.01em}
-.menubar .right{margin-left:auto;display:flex;align-items:center;gap:12px;font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums}
-.live{display:flex;align-items:center;gap:6px;color:var(--accent);font-weight:600}
-.live i{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);animation:pulse 1.8s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
-.mode-badge{font-size:10px;color:var(--amber);border:1px solid rgba(232,176,128,.35);padding:2px 8px;border-radius:20px;display:none;letter-spacing:.05em;cursor:pointer;transition:border-color .15s}
-.mode-badge:hover{border-color:rgba(232,176,128,.7)}
-
-/* ===== 刘海岛 hero ===== */
-.hero{margin-top:22px}
-.island{position:relative;width:100%;height:36px;border-radius:14px;background:linear-gradient(180deg,#101614,#0b0f0d);border:1px solid #1c2420;box-shadow:0 10px 30px rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;gap:10px}
-.island .pill{font-size:11px;color:var(--dim);display:flex;align-items:center;gap:6px}
-.island .pill i{width:5px;height:5px;border-radius:50%;background:var(--accent)}
-.island .dot{width:26px;height:26px;border-radius:8px;background:var(--panel2);display:flex;align-items:center;justify-content:center}
-.island .dot svg{width:16px;height:16px}
-.hero h2{font-size:13px;color:var(--dim);font-weight:500;margin:20px 0 4px;display:flex;align-items:baseline;gap:8px}
-.hero h2 b{color:var(--text)}
-.hero .big{font-size:64px;font-weight:800;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums}
-.hero .big small{font-size:20px;font-weight:600;color:var(--dim);letter-spacing:0}
-.hero .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:22px}
-.kpi{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 14px 13px}
-.kpi .l{font-size:11px;color:var(--dim)}
-.kpi .v{font-size:23px;font-weight:750;margin-top:5px;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
-.kpi .s{font-size:10px;color:#5d6863;margin-top:3px}
-.kpi.k1 .v{color:var(--accent)}
-.kpi.k2 .v{color:var(--blue)}
-.kpi.k3 .v{color:var(--amber)}
-.kpi .up{color:var(--accent)}
-
-/* ===== 时间切换 ===== */
-.seg{display:flex;gap:6px;margin:26px 0 14px}
-.seg button{flex:1;border:1px solid var(--line);background:var(--panel2);color:var(--dim);font-size:13px;font-weight:600;padding:9px 0;border-radius:10px;cursor:pointer;transition:all .15s}
-.seg button.on{border-color:rgba(121,242,181,.45);background:rgba(121,242,181,.08);color:var(--accent)}
-
-/* ===== 卡片 ===== */
-.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px 16px;margin-bottom:12px}
-.card h3{font-size:13px;font-weight:650;display:flex;align-items:center;gap:8px}
-.card h3 .tag{font-size:10px;font-weight:500;color:var(--dim);border:1px solid var(--line);padding:1px 7px;border-radius:20px}
-.chart-box{height:180px;margin-top:12px}
-.chart-box.loading{display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:12px}
-
-/* ===== 刷新按钮 ===== */
-.icon-btn{width:30px;height:30px;flex:none;display:flex;align-items:center;justify-content:center;background:var(--panel2);border:1px solid var(--line);border-radius:50%;color:var(--dim);cursor:pointer;transition:all .15s}
+/* ===== 顶栏 ===== */
+.topbar{display:flex;align-items:center;gap:12px;padding:22px 4px 0}
+.topbar .mark{width:26px;height:26px;flex:none}
+.topbar h1{font-size:16px;font-weight:650;letter-spacing:.01em}
+.topbar .meta{margin-left:auto;text-align:right;display:flex;align-items:center;gap:12px}
+.topbar .updated{font-size:11px;color:var(--dim);line-height:1.5;font-variant-numeric:tabular-nums}
+.topbar .updated b{color:var(--text);font-weight:600}
+.icon-btn{width:32px;height:32px;flex:none;display:flex;align-items:center;justify-content:center;background:var(--panel);border:1px solid var(--line);border-radius:10px;color:var(--dim);cursor:pointer;transition:all .15s}
 .icon-btn:hover{color:var(--accent);border-color:rgba(121,242,181,.45)}
-.icon-btn svg{width:15px;height:15px}
+.icon-btn svg{width:16px;height:16px}
 .icon-btn.spinning svg{animation:spin .55s linear}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-/* ===== 分布卡片网格 ===== */
-.cards-grid{display:grid;grid-template-columns:1fr;gap:12px;margin-bottom:12px}
-.mini{height:150px;margin-top:10px}
-.mini.loading{display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:12px}
-@media (min-width:640px){ .cards-grid{grid-template-columns:1fr 1fr} }
+/* ===== 眉标 + 标题 ===== */
+.kicker{font-size:11px;letter-spacing:.22em;color:var(--dim);margin:34px 4px 10px;text-transform:uppercase}
+.kicker .dot{color:var(--accent)}
+h2.title{font-size:30px;font-weight:800;letter-spacing:-.02em;margin:0 4px 8px;line-height:1.15}
+.range{font-size:12.5px;color:var(--dim);margin:0 4px 20px}
+.range b{color:var(--text);font-weight:600}
 
-/* ===== 页脚 ===== */
-.foot{text-align:center;color:#56605c;font-size:10.5px;padding:18px 0 34px;line-height:1.8}
+/* ===== 演示数据标注 ===== */
+.demo-note{display:none;margin:0 4px 16px;padding:10px 14px;border:1px solid rgba(232,176,128,.4);border-radius:10px;font-size:12px;color:var(--amber);line-height:1.6}
+.mode-badge{font-size:10px;color:var(--amber);border:1px solid rgba(232,176,128,.35);padding:2px 8px;border-radius:20px;display:none;letter-spacing:.05em;cursor:pointer}
+.mode-badge:hover{border-color:rgba(232,176,128,.7)}
+
+/* ===== 指标卡 ===== */
+.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:26px}
+.metric{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 18px 15px;position:relative;overflow:hidden}
+.metric .l{font-size:12px;color:var(--dim)}
+.metric .v{font-size:38px;font-weight:800;letter-spacing:-.03em;margin:8px 0 6px;font-variant-numeric:tabular-nums;line-height:1}
+.metric .v small{font-size:14px;color:var(--dim);font-weight:600}
+.metric .s{font-size:10.5px;color:#5d6863;line-height:1.5}
+.metric.m1 .v{color:var(--accent)}
+.metric.m2 .v{color:var(--blue)}
+.metric.m3 .v{color:var(--amber)}
+.metric::after{content:'';position:absolute;right:-30px;top:-30px;width:90px;height:90px;border-radius:50%;background:radial-gradient(circle,currentColor 0%,transparent 70%);opacity:.07;color:var(--accent)}
+
+/* ===== 区块 ===== */
+.section-title{font-size:14px;font-weight:700;margin:26px 4px 14px;display:flex;align-items:center;gap:10px}
+.section-title::before{content:'';width:3px;height:15px;border-radius:2px;background:var(--accent)}
+.section-title .hint{font-size:11px;font-weight:500;color:var(--dim);margin-left:auto}
+.seg{display:flex;gap:6px}
+.seg button{border:1px solid var(--line);background:var(--panel2);color:var(--dim);font-size:12px;font-weight:600;padding:7px 14px;border-radius:9px;cursor:pointer;transition:all .15s}
+.seg button.on{border-color:rgba(121,242,181,.45);background:rgba(121,242,181,.08);color:var(--accent)}
+
+/* ===== 图表卡 ===== */
+.chart-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px 18px 8px;margin-bottom:14px}
+.chart-box{height:200px}
+.chart-box.loading{display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:12px;height:200px}
+
+/* ===== 列表（国家 / 设备 / 来源） ===== */
+.list-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px 20px;margin-bottom:14px}
+.list-row{display:flex;align-items:center;gap:14px;padding:11px 0;border-bottom:1px solid #141b18}
+.list-row:last-child{border-bottom:0}
+.list-row .n{width:84px;flex:none;font-size:13.5px;font-weight:600;color:var(--text)}
+.list-row .n small{display:block;font-size:10px;color:#5d6863;font-weight:500;margin-top:1px}
+.list-row .track{flex:1;height:6px;background:var(--panel2);border-radius:4px;overflow:hidden}
+.list-row .fill{height:100%;border-radius:4px;background:var(--accent);transform-origin:left;animation:grow .6s cubic-bezier(.2,.7,.2,1) both}
+.list-row.blue .fill{background:var(--blue)}
+.list-row.amber .fill{background:var(--amber)}
+.list-row .p{width:52px;text-align:right;font-size:12.5px;color:var(--dim);font-variant-numeric:tabular-nums;flex:none}
+.list-row .c{width:38px;text-align:right;font-size:14px;font-weight:750;font-variant-numeric:tabular-nums;flex:none}
+@keyframes grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+
+/* ===== 脚注 ===== */
+.foot{text-align:center;color:#56605c;font-size:10.5px;padding:14px 0 36px;line-height:1.9}
 .foot b{color:var(--dim);font-weight:600}
 
 /* ===== Token 遮罩 ===== */
-.auth{position:fixed;inset:0;background:rgba(7,10,8,.92);z-index:20;display:none;align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(6px)}
-.auth .box{width:100%;max-width:360px;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:24px}
+.auth{position:fixed;inset:0;background:rgba(7,10,8,.94);z-index:20;display:none;align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(6px)}
+.auth .box{width:100%;max-width:360px;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:26px}
 .auth .mark{width:34px;height:34px;margin-bottom:14px}
 .auth h2{font-size:17px;margin-bottom:6px}
 .auth p{font-size:12px;color:var(--dim);line-height:1.7;margin-bottom:16px}
@@ -89,76 +95,60 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .auth input:focus{border-color:rgba(121,242,181,.55)}
 .auth button{width:100%;margin-top:12px;background:var(--accent);color:#06130c;border:0;border-radius:11px;padding:13px;font-size:14.5px;font-weight:700;cursor:pointer}
 .auth .hint{font-size:10.5px;color:#56605c;margin-top:12px;line-height:1.6}
-.err{display:none;margin:0 0 12px;padding:10px 12px;border:1px solid #4a2118;background:#160b07;color:#ffb08f;border-radius:10px;font-size:12px}
-.sample-note{display:none;margin-bottom:12px;padding:9px 12px;border:1px dashed rgba(232,176,128,.4);color:var(--amber);border-radius:10px;font-size:11.5px}
-@media (min-width:640px){ .wrap{max-width:760px;padding:0 24px} .hero .big{font-size:76px} .kpis{grid-template-columns:repeat(3,1fr)} }
+.err{display:none;margin:0 4px 14px;padding:10px 14px;border:1px solid #4a2118;background:#160b07;color:#ffb08f;border-radius:10px;font-size:12px}
+@media (max-width:600px){ .metrics{grid-template-columns:1fr 1fr 1fr;gap:8px} .metric{padding:14px 12px 12px} .metric .v{font-size:26px} .metric .s{font-size:9.5px} .two-col{grid-template-columns:1fr} h2.title{font-size:24px} .wrap{padding:0 16px} .topbar .updated{display:none} }
 </style>
 </head>
 <body>
 <div class="wrap">
 
-  <header class="menubar">
+  <header class="topbar">
     <svg class="mark" viewBox="0 0 40 40" aria-hidden="true"><path d="M1.6 10Q6.02 10 6.02 14.42L6.02 23Q6.02 30 13.02 30L26.98 30Q33.98 30 33.98 23L33.98 14.42Q33.98 10 38.4 10Z" fill="#070a08" stroke="#79f2b5" stroke-width="2.4"/><rect x="13" y="17.92" width="2.8" height="6.4" rx="1.4" fill="#79f2b5"/><rect x="18.6" y="16.12" width="2.8" height="10" rx="1.4" fill="#f2f4f0"/><rect x="24.2" y="18.72" width="2.8" height="4.8" rx="1.4" fill="#84dbf3"/></svg>
     <h1>Agent 灵动岛</h1>
-    <div class="right">
+    <div class="meta">
       <span class="mode-badge" id="modeBadge">演示数据</span>
-      <span class="live"><i></i>实时</span>
+      <div class="updated">更新于 <b id="updated">–</b><br>北京时间 · 点击读取最新数据</div>
       <button class="icon-btn" id="refresh" title="刷新数据" aria-label="刷新数据"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.34 5.66"/><path d="M20 5v6h-6"/></svg></button>
     </div>
   </header>
 
-  <section class="hero">
-    <div class="island" aria-hidden="true">
-      <span class="dot"><svg viewBox="0 0 24 24" fill="none"><rect x="5" y="6" width="14" height="2.5" rx="1.25" fill="#79f2b5"/><rect x="5" y="11" width="9" height="2.5" rx="1.25" fill="#eef4ef"/><rect x="5" y="16" width="11" height="2.5" rx="1.25" fill="#84dbf3"/></svg></span>
-      <span class="pill"><i></i>数据实时汇总</span>
-      <span class="pill" id="todayPill"></span>
-    </div>
+  <div class="kicker">WEBSITE<span class="dot"> · </span>OVERVIEW</div>
+  <h2 class="title">网站数据，一眼看清。</h2>
+  <div class="range">统计范围：<b id="rangeTxt">–</b></div>
 
-    <h2>累计访问 <b id="pvH"></b></h2>
-    <div class="big" id="pvBig">–</div>
+  <div class="demo-note" id="demoNote">演示数据（非真实）：这是本地预览的占位数据。在线上打开并输入 Token 后，这里才是你的真实访问数据。</div>
+  <div class="err" id="err"></div>
 
-    <div class="kpis">
-      <div class="kpi k1"><div class="l">今日访问</div><div class="v" id="todayV">–</div><div class="s" id="todayS"></div></div>
-      <div class="kpi k2"><div class="l">下载请求</div><div class="v" id="dlV">–</div><div class="s" id="dlS"></div></div>
-      <div class="kpi k3"><div class="l">下载率</div><div class="v" id="rateV">–</div><div class="s">下载 ÷ 访问</div></div>
-    </div>
-  </section>
-
-  <div class="seg" id="seg">
-    <button data-days="7" class="on">近 7 天</button>
-    <button data-days="30">近 30 天</button>
+  <div class="metrics">
+    <div class="metric m1"><div class="l">页面访问</div><div class="v" id="pvV">–</div><div class="s">访问次数，不是访客人数</div></div>
+    <div class="metric m2"><div class="l">主要按钮点击</div><div class="v" id="clickV">–</div><div class="s">已记录的非测试点击</div></div>
+    <div class="metric m3"><div class="l">下载请求</div><div class="v" id="dlV">–</div><div class="s">不代表下载完成或安装</div></div>
   </div>
 
-  <div class="err" id="err"></div>
-  <div class="sample-note" id="sampleNote">演示数据（非真实）：这是本地预览的占位数据。在线上打开并输入 Token 后，这里才是你的真实访问数据。</div>
-
-  <div class="card">
-    <h3>每日访问 <span class="tag" id="chartTag">近 7 天</span></h3>
+  <div class="section-title">每日访问趋势 <span class="hint">页面加载次数</span>
+    <div class="seg" id="seg" style="margin-left:auto">
+      <button data-days="7" class="on">近 7 天</button>
+      <button data-days="30">近 30 天</button>
+    </div>
+  </div>
+  <div class="chart-card">
     <div class="chart-box loading" id="chart">加载中…</div>
   </div>
 
-  <div class="cards-grid">
-    <div class="card">
-      <h3>点击行为</h3>
-      <div class="mini loading" id="clicks">加载中…</div>
-    </div>
-    <div class="card">
-      <h3>设备构成</h3>
-      <div class="mini loading" id="devices">加载中…</div>
-    </div>
-    <div class="card">
-      <h3>访问来源</h3>
-      <div class="mini loading" id="sources">加载中…</div>
-    </div>
-    <div class="card">
-      <h3>地区分布</h3>
-      <div class="mini loading" id="countries">加载中…</div>
-    </div>
+  <div class="section-title">访问来自哪里 <span class="hint">根据网络出口判断，VPN 可能影响地域</span></div>
+  <div class="list-card">
+    <div id="countries"></div>
+  </div>
+
+  <div class="section-title">设备与来源 <span class="hint">微信内打开可能没有来源信息</span></div>
+  <div class="two-col">
+    <div class="list-card"><div id="devices"></div></div>
+    <div class="list-card"><div id="sources"></div></div>
   </div>
 
   <div class="foot">
-    Cloudflare D1 · 保留 90 天 · 不使用 Cookie · 下载请求 ≠ 下载完成<br>
-    更新于 <b id="updated">–</b>
+    测试数据已排除 · 数据保留 90 天 · 不使用 Cookie<br>
+    下载请求 ≠ 下载完成或安装 · 更新于 <b id="updated2">–</b>
   </div>
 </div>
 
@@ -178,17 +168,24 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 (function(){
   'use strict';
   const $ = s => document.querySelector(s);
-  const KEY = 'island_stats_token_v2';
+  const KEY = 'island_stats_token_v3';
+  const IS_LOCAL = location.protocol === 'file:' || location.hostname === '';
   const NAMES = { download_section:'下载区按钮', download_hero:'首页下载', download_menu:'顶栏下载', download_mirror:'镜像下载',
     film_play:'播放短片', source:'查看源码', island_demo:'灵动岛演示', film:'短片锚点', states:'状态锚点', privacy:'隐私锚点',
     agents:'Agent 锚点', top:'回到顶部' };
+  const COUNTRY_CN = { CN:'中国', US:'美国', JP:'日本', SG:'新加坡', NL:'荷兰', DE:'德国', GB:'英国', FR:'法国', CA:'加拿大', AU:'澳大利亚', KR:'韩国', IN:'印度', HK:'中国香港', TW:'中国台湾', MO:'中国澳门', RU:'俄罗斯', IT:'意大利', ES:'西班牙', TH:'泰国', MY:'马来西亚', ID:'印尼', VN:'越南', PH:'菲律宾', AE:'阿联酋', SA:'沙特' };
+  const DEVICE_CN = { mobile:'手机', desktop:'电脑', tablet:'平板' };
+  const SOURCE_CN = { direct:'直接访问', social:'社交平台', search:'搜索引擎', referral:'外链', email:'邮件', other:'其他' };
+  const PALETTE = ['#79f2b5','#84dbf3','#e8b080','#ff6e47'];
+
   let token = localStorage.getItem(KEY) || '';
   let days = 7;
-  let chart = null;
+  let trend = null;
 
   const SAMPLE = {
     days:7, start:'2026-10-06', generated_at:new Date().toISOString(),
     pageviews:186, pageviews_days:97, downloads:41, downloads_days:22, download_rate:22.0,
+    click_total:58,
     daily_pageviews:[
       {day:'2026-10-06',c:9},{day:'2026-10-07',c:13},{day:'2026-10-08',c:17},{day:'2026-10-09',c:12},
       {day:'2026-10-10',c:8},{day:'2026-10-11',c:15},{day:'2026-10-12',c:23}
@@ -206,141 +203,93 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   function showErr(m){ const e=$('#err'); e.textContent=m; e.style.display='block'; }
   function clearErr(){ $('#err').style.display='none'; }
 
-  const COUNTRY_CN = { CN:'中国', US:'美国', JP:'日本', SG:'新加坡', NL:'荷兰', DE:'德国', GB:'英国', FR:'法国', CA:'加拿大', AU:'澳大利亚', KR:'韩国', IN:'印度', HK:'中国香港', TW:'中国台湾', MO:'中国澳门', RU:'俄罗斯', IT:'意大利', ES:'西班牙', TH:'泰国', MY:'马来西亚', ID:'印尼', VN:'越南', PH:'菲律宾', AE:'阿联酋', SA:'沙特' };
+  function pct(c, total){ return total ? (c/total*100).toFixed(1) : '0.0'; }
 
-  const DEVICE_CN = { mobile:'手机', desktop:'电脑', tablet:'平板' };
-  const SOURCE_CN = { direct:'直接访问', social:'社交平台', search:'搜索引擎', referral:'外链', email:'邮件', other:'其他' };
-
-  const PALETTE = ['#79f2b5','#84dbf3','#e8b080','#ff6e47'];
-
-  // 横向条形图：排名 / 量级对比
-  function renderHBar(el, rows, color){
-    const ec = window.echarts;
-    if(!ec){ el.className='mini loading'; el.innerHTML='<div style="color:#56605c;font-size:12px">图表库未加载</div>'; return; }
-    el.className='mini';
+  function listRows(el, rows, total, colors){
     el.innerHTML='';
-    if(!rows||!rows.length){ el.innerHTML='<div style="color:#56605c;font-size:12px;padding-top:50px;text-align:center">暂无数据</div>'; return; }
-    const inst = ec.getInstanceByDom(el) || ec.init(el);
-    const names = rows.map(r=> NAMES[r.target] || COUNTRY_CN[r.country] || r.device || r.source || r.target || '');
-    const vals = rows.map(r=>r.c);
-    inst.setOption({
-      grid:{left:4,right:8,top:6,bottom:4,containLabel:true},
-      tooltip:{trigger:'axis',axisPointer:{type:'shadow'},confine:true,backgroundColor:'#0d1210',borderColor:'#1a211d',textStyle:{color:'#eef4ef',fontSize:12,fontFamily:'-apple-system,BlinkMacSystemFont,sans-serif'}},
-      xAxis:{type:'value',show:false},
-      yAxis:{type:'category',data:names,inverse:true,axisLine:{show:false},axisTick:{show:false},
-        axisLabel:{color:'#d7ded9',fontSize:11,fontFamily:'-apple-system'}},
-      series:[{
-        type:'bar',data:vals,barWidth:'42%',
-        itemStyle:{color, borderRadius:[0,4,4,0]},
-        label:{show:true,position:'right',color:'#eef4ef',fontSize:11,fontWeight:600,fontFamily:'-apple-system'}
-      }]
+    if(!rows||!rows.length){ el.innerHTML='<div style="color:#56605c;font-size:12px;padding:10px 0">暂无数据</div>'; return; }
+    const max = Math.max.apply(null, rows.map(r=>r.c));
+    rows.forEach((r,i)=>{
+      let name = NAMES[r.target] || COUNTRY_CN[r.country] || DEVICE_CN[r.device] || SOURCE_CN[r.source] || r.target || r.device || r.source || r.country || '';
+      const cn = r.country ? '网络出口' : (r.target ? '交互动作' : '');
+      const row=document.createElement('div');
+      row.className='list-row'+(colors && colors[i%colors.length] ? ' '+colors[i%colors.length] : '');
+      row.innerHTML='<span class="n"></span><span class="track"><span class="fill" style="width:'+(max?Math.max(2,r.c/max*100):0)+'%;animation-delay:'+(i*60)+'ms"></span></span><span class="p"></span><span class="c"></span>';
+      row.querySelector('.n').innerHTML = name + (cn ? '<small>'+cn+'</small>' : '');
+      row.querySelector('.p').textContent = pct(r.c,total)+'%';
+      row.querySelector('.c').textContent = r.c+' 次';
+      el.appendChild(row);
     });
-    inst.resize();
   }
 
-  // 环形图：构成占比（中心不放大数字）
-  function renderDonut(el, rows){
-    const ec = window.echarts;
-    if(!ec){ el.className='mini loading'; el.innerHTML='<div style="color:#56605c;font-size:12px">图表库未加载</div>'; return; }
-    el.className='mini';
-    el.innerHTML='';
-    if(!rows||!rows.length){ el.innerHTML='<div style="color:#56605c;font-size:12px;padding-top:50px;text-align:center">暂无数据</div>'; return; }
-    const inst = ec.getInstanceByDom(el) || ec.init(el);
-    const data = rows.map((r,i)=>{
-      let name = r.device ? (DEVICE_CN[r.device]||r.device) : r.source ? (SOURCE_CN[r.source]||r.source) : r.country ? (COUNTRY_CN[r.country]||r.country) : (r.target||'');
-      return { name, value:r.c, itemStyle:{color:PALETTE[i%PALETTE.length]} };
-    });
-    inst.setOption({
-      tooltip:{trigger:'item',confine:true,backgroundColor:'#0d1210',borderColor:'#1a211d',textStyle:{color:'#eef4ef',fontSize:12,fontFamily:'-apple-system,BlinkMacSystemFont,sans-serif'},
-        formatter:p=>p.name+'　'+p.value+' 次　'+Math.round(p.percent)+'%'},
-      legend:{bottom:0,icon:'circle',itemWidth:9,itemHeight:9,itemGap:14,textStyle:{color:'#8a9791',fontSize:11,fontFamily:'-apple-system'},
-        formatter:name=>{ const it=data.find(d=>d.name===name); return name+(it?('  '+it.value):''); }},
-      series:[{
-        type:'pie',radius:['58%','78%'],center:['50%','42%'],avoidLabelOverlap:true,
-        itemStyle:{borderColor:'#070a08',borderWidth:2},
-        label:{show:false},
-        data
-      }]
-    });
-    inst.resize();
-  }
-
-  function renderChart(daily, downloads){
+  function renderTrend(daily, downloads){
     const el=$('#chart');
-    if(!window.echarts){ el.className='chart-box'; el.innerHTML='<div style="color:#56605c;font-size:12px">图表库未加载（离线？）</div>'; return; }
+    if(!window.echarts){ el.className='chart-box loading'; el.innerHTML='<div>图表库未加载（离线？）</div>'; return; }
     el.className='chart-box';
     el.innerHTML='';
     const data=(daily||[]).map(d=>d.day.slice(5).replace('-','/'));
     const pv=(daily||[]).map(d=>d.c);
     const dl=(downloads||[]).map(d=>d.c);
-    if(!chart) chart=echarts.init(el);
-    chart.setOption({
-      grid:{left:8,right:8,top:24,bottom:26,containLabel:true},
+    if(!trend) trend=echarts.init(el);
+    trend.setOption({
+      grid:{left:6,right:6,top:26,bottom:22,containLabel:true},
       tooltip:{trigger:'axis',confine:true,backgroundColor:'#0d1210',borderColor:'#1a211d',textStyle:{color:'#eef4ef',fontSize:12,fontFamily:'-apple-system,BlinkMacSystemFont,sans-serif'}},
+      legend:{top:0,right:0,icon:'circle',itemWidth:9,itemHeight:9,itemGap:14,textStyle:{color:'#8a9791',fontSize:11,fontFamily:'-apple-system'}},
       xAxis:{type:'category',data:data,axisLine:{lineStyle:{color:'#1a211d'}},axisTick:{show:false},
         axisLabel:{color:'#8a9791',fontSize:10.5,fontFamily:'-apple-system',interval:0}},
       yAxis:{type:'value',min:0,splitLine:{lineStyle:{color:'#141b18'}},axisLabel:{color:'#8a9791',fontSize:10.5,fontFamily:'-apple-system'}},
       series:[
         {name:'访问',type:'line',data:pv,smooth:.35,symbol:'circle',symbolSize:5,
-          lineStyle:{width:2.2,color:'#79f2b5'},
-          itemStyle:{color:'#79f2b5'},
-          areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(121,242,181,.22)'},{offset:1,color:'rgba(121,242,181,0)'}]}}},
-        {name:'下载',type:'bar',data:dl,barWidth:'34%',
-          itemStyle:{color:'#84dbf3',borderRadius:[3,3,0,0],opacity:.85}}
+          lineStyle:{width:2.2,color:'#79f2b5'},itemStyle:{color:'#79f2b5'},
+          areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(121,242,181,.20)'},{offset:1,color:'rgba(121,242,181,0)'}]}}},
+        {name:'下载',type:'bar',data:dl,barWidth:'32%',itemStyle:{color:'#84dbf3',borderRadius:[3,3,0,0],opacity:.85}}
       ]
     });
-    chart.resize();
+    trend.resize();
   }
 
-  function fmt(t){ return t.getHours().toString().padStart(2,'0')+':'+t.getMinutes().toString().padStart(2,'0')+':'+t.getSeconds().toString().padStart(2,'0'); }
+  function fmtBJ(iso){
+    const d=new Date(iso);
+    const bj=new Date(d.getTime()+8*3600*1000);
+    return bj.toISOString().slice(11,19);
+  }
 
   function apply(j, sample){
-    $('#pvH').textContent = sample?'（演示）':'';
-    $('#pvBig').textContent = j.pageviews.toLocaleString();
-    const today = sample ? (j.daily_pageviews||[]).slice(-1) : (j.daily_pageviews||[]).filter(d=>d.day===new Date().toISOString().slice(0,10));
-    $('#todayV').textContent = today.length?today[0].c.toLocaleString():'–';
-    $('#todayS').textContent = '今日页面加载';
+    clearErr();
+    const today = new Date().toISOString().slice(0,10);
+    const clickTotal = (j.clicks||[]).reduce((s,r)=>s+r.c,0);
+    $('#pvV').textContent = j.pageviews.toLocaleString();
+    $('#clickV').textContent = clickTotal.toLocaleString();
     $('#dlV').textContent = j.downloads.toLocaleString();
-    $('#dlS').textContent = '近 '+j.days+' 天：'+j.downloads_days.toLocaleString();
-    $('#rateV').textContent = j.download_rate+'%';
-    $('#chartTag').textContent = '近 '+j.days+' 天';
-    renderChart(j.daily_pageviews, j.daily_downloads);
-    renderHBar($('#clicks'), j.clicks, '#79f2b5');
-    renderDonut($('#devices'), j.devices);
-    renderDonut($('#sources'), j.sources);
-    renderHBar($('#countries'), j.countries, '#e8b080');
-    const t=new Date(j.generated_at);
-    $('#updated').textContent=fmt(t);
+    $('#rangeTxt').textContent = '已保留数据 · '+(j.start||'–')+' 至 '+today+'（UTC）';
+    const t = new Date(j.generated_at);
+    $('#updated').textContent = fmtBJ(j.generated_at);
+    $('#updated2').textContent = fmtBJ(j.generated_at);
+    renderTrend(j.daily_pageviews, j.daily_downloads);
+    listRows($('#countries'), j.countries, j.pageviews, ['']);
+    listRows($('#devices'), j.devices, j.pageviews, ['blue']);
+    listRows($('#sources'), j.sources, j.pageviews, ['amber']);
     $('#modeBadge').style.display = sample?'inline-block':'none';
-    $('#sampleNote').style.display = sample?'block':'none';
+    $('#demoNote').style.display = sample?'block':'none';
   }
 
-  const IS_LOCAL = location.protocol === 'file:' || location.hostname === '';
-
   async function load(){
-    clearErr();
     if(!token){ showAuth(); return; }
     const t=token, d=days;
+    clearErr();
     try{
       const r=await fetch('/api/analytics/stats?token='+encodeURIComponent(t)+'&days='+d,{credentials:'omit'});
       if(r.status===401){ showAuth(); return; }
       if(!r.ok) throw new Error('HTTP '+r.status);
       apply(await r.json(), false);
     }catch(e){
-      // 仅本地预览（file://）回退演示数据；线上加载失败如实报错，绝不冒充真实数据。
       if(IS_LOCAL){ apply(SAMPLE, true); }
       else { showErr('加载失败：'+e.message); }
     }
   }
 
-  function showAuth(){
-    $('#auth').style.display='flex';
-    if(token) $('#token').value=token;
-  }
+  function showAuth(){ $('#auth').style.display='flex'; if(token) $('#token').value=token; }
   function hideAuth(){ $('#auth').style.display='none'; }
-
-  $('#modeBadge').addEventListener('click', ()=>{ showAuth(); });
-  $('#auth').addEventListener('click', e=>{ if(e.target.id==='auth') hideAuth(); });
 
   $('#refresh').addEventListener('click', ()=>{
     const btn=$('#refresh');
@@ -348,12 +297,14 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     setTimeout(()=>btn.classList.remove('spinning'), 650);
     load();
   });
+  $('#modeBadge').addEventListener('click', ()=>{ showAuth(); });
+  $('#auth').addEventListener('click', e=>{ if(e.target.id==='auth') hideAuth(); });
 
   $('#seg').addEventListener('click', e=>{
     const b=e.target.closest('button'); if(!b) return;
     document.querySelectorAll('#seg button').forEach(x=>x.classList.remove('on'));
     b.classList.add('on'); days=+b.dataset.days;
-    if(days===30 && !SAMPLE.daily_pageviews.find(d=>d.day<'2026-10-06')){ SAMPLE.daily_pageviews.unshift({day:'2026-10-05',c:11},{day:'2026-10-04',c:7}); SAMPLE.daily_downloads.unshift({day:'2026-10-05',c:2},{day:'2026-10-04',c:1}); }
+    if(days===30 && IS_LOCAL && !SAMPLE.daily_pageviews.find(d=>d.day<'2026-10-06')){ SAMPLE.daily_pageviews.unshift({day:'2026-10-05',c:11},{day:'2026-10-04',c:7}); SAMPLE.daily_downloads.unshift({day:'2026-10-05',c:2},{day:'2026-10-04',c:1}); }
     load();
   });
 
@@ -363,19 +314,14 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     token=v; localStorage.setItem(KEY,v); hideAuth(); load();
   });
 
-  const now=new Date();
-  $('#todayPill').textContent=(now.getMonth()+1)+' 月 '+now.getDate()+' 日';
-
   if(IS_LOCAL && !token){ apply(SAMPLE, true); }
   else { hideAuth(); load(); }
   setInterval(load, 300000);
   window.addEventListener('resize', ()=>{
     if(!window.echarts) return;
-    ['#chart','#clicks','#devices','#sources','#countries'].forEach(sel=>{
-      const el=document.querySelector(sel);
-      const inst=echarts.getInstanceByDom(el);
-      if(inst) inst.resize();
-    });
+    const el=document.querySelector('#chart');
+    const inst=echarts.getInstanceByDom(el);
+    if(inst) inst.resize();
   });
 })();
 </script>
