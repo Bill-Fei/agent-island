@@ -31,6 +31,45 @@ async function record(env, request, event, target, source, test) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    if (url.pathname === '/api/analytics/stats') {
+      // Token-protected read API for the dashboard (GET only, no request body, read-only).
+      if (request.method !== 'GET') return reply(405);
+      const token = url.searchParams.get('token') || '';
+      if (!env.STATS_TOKEN || token !== env.STATS_TOKEN) return reply(401);
+      const days = Math.min(Math.max(parseInt(url.searchParams.get('days') || '7', 10) || 7, 1), 90);
+      const start = new Date(Date.now() - (days - 1) * 86400000).toISOString().slice(0, 10);
+      let rows;
+      try {
+        rows = await env.ANALYTICS_DB.batch([
+          env.ANALYTICS_DB.prepare(`SELECT COALESCE(SUM(count),0) AS c FROM daily_metrics WHERE event='page_view' AND traffic='visitor'`).bind(),
+          env.ANALYTICS_DB.prepare(`SELECT COALESCE(SUM(count),0) AS c FROM daily_metrics WHERE event='page_view' AND traffic='visitor' AND day>=?`).bind(start),
+          env.ANALYTICS_DB.prepare(`SELECT day, SUM(count) AS c FROM daily_metrics WHERE event='page_view' AND traffic='visitor' AND day>=? GROUP BY day ORDER BY day`).bind(start),
+          env.ANALYTICS_DB.prepare(`SELECT COALESCE(SUM(count),0) AS c FROM daily_metrics WHERE event='download_request'`).bind(),
+          env.ANALYTICS_DB.prepare(`SELECT COALESCE(SUM(count),0) AS c FROM daily_metrics WHERE event='download_request' AND day>=?`).bind(start),
+          env.ANALYTICS_DB.prepare(`SELECT day, SUM(count) AS c FROM daily_metrics WHERE event='download_request' AND day>=? GROUP BY day ORDER BY day`).bind(start),
+          env.ANALYTICS_DB.prepare(`SELECT target, SUM(count) AS c FROM daily_metrics WHERE event='click' AND traffic='visitor' GROUP BY target ORDER BY c DESC LIMIT 8`).bind(),
+          env.ANALYTICS_DB.prepare(`SELECT device, SUM(count) AS c FROM daily_metrics WHERE event='page_view' AND traffic='visitor' GROUP BY device ORDER BY c DESC`).bind(),
+          env.ANALYTICS_DB.prepare(`SELECT country, SUM(count) AS c FROM daily_metrics WHERE event='page_view' AND traffic='visitor' GROUP BY country ORDER BY c DESC LIMIT 10`).bind(),
+          env.ANALYTICS_DB.prepare(`SELECT source, SUM(count) AS c FROM daily_metrics WHERE event='page_view' AND traffic='visitor' GROUP BY source ORDER BY c DESC`).bind()
+        ]);
+      } catch { return reply(503); }
+      const val = (i) => rows[i].results?.[0]?.c ?? 0;
+      const pvTotal = val(0), dlTotal = val(3);
+      return new Response(JSON.stringify({
+        days, start, generated_at: new Date().toISOString(),
+        pageviews: pvTotal,
+        pageviews_days: val(1),
+        downloads: dlTotal,
+        downloads_days: val(4),
+        download_rate: pvTotal ? Math.round(dlTotal / pvTotal * 1000) / 10 : 0,
+        daily_pageviews: rows[2].results || [],
+        daily_downloads: rows[5].results || [],
+        clicks: rows[6].results || [],
+        devices: rows[7].results || [],
+        countries: rows[8].results || [],
+        sources: rows[9].results || []
+      }), { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
+    }
     if (url.pathname === '/api/analytics') {
       if (request.method !== 'POST') return reply(405);
       if (request.headers.get('Origin') !== url.origin) return reply(403);

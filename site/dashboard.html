@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Agent 灵动岛 · 数据看板</title>
+<meta name="theme-color" content="#0a0c0d">
+<style>
+:root{
+  --bg:#0a0c0d; --panel:#121619; --panel2:#0e1113; --line:#1e2428;
+  --text:#f2f4f0; --dim:#9aa3a0; --accent:#79f2b5; --blue:#84dbf3; --amber:#e8b080; --red:#ff6e47;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif;min-height:100vh;padding:0 0 env(safe-area-inset-bottom)}
+.top{display:flex;align-items:center;gap:10px;padding:16px 16px 10px;position:sticky;top:0;z-index:5;background:linear-gradient(#0a0c0dee,#0a0c0d00);backdrop-filter:blur(8px)}
+.top .mark{width:26px;height:26px;flex:none}
+.top h1{font-size:17px;font-weight:700;letter-spacing:.02em}
+.top .sub{font-size:11px;color:var(--dim);margin-left:auto}
+.top .live{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--accent);font-weight:600}
+.top .live i{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pulse 1.6s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin:10px 14px}
+.card h3{font-size:12px;color:var(--dim);font-weight:600;margin-bottom:12px;letter-spacing:.04em}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 14px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;position:relative;overflow:hidden}
+.tile .label{font-size:11px;color:var(--dim);display:flex;align-items:center;gap:6px}
+.tile .value{font-size:28px;font-weight:800;margin-top:6px;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.tile .value small{font-size:14px;color:var(--dim);font-weight:600}
+.tile .delta{font-size:11px;margin-top:4px;color:var(--dim)}
+.tile.accent .value{color:var(--accent)}
+.tile.blue .value{color:var(--blue)}
+.tile.amber .value{color:var(--amber)}
+.tile.rate .value{color:var(--accent)}
+.seg{display:flex;gap:4px;background:var(--panel2);padding:3px;border-radius:10px;margin:0 14px}
+.seg button{flex:1;border:0;background:none;color:var(--dim);font-size:13px;font-weight:600;padding:7px 0;border-radius:8px;cursor:pointer}
+.seg button.on{background:var(--panel);color:var(--text);box-shadow:0 1px 4px #00000055}
+.chart{position:relative;height:150px;margin-top:6px}
+.chart svg{width:100%;height:100%;display:block}
+.bars{display:flex;flex-direction:column;gap:9px}
+.bar-row{display:flex;align-items:center;gap:10px;font-size:12px}
+.bar-row .k{width:76px;color:var(--dim);flex:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar-row .track{flex:1;height:8px;background:var(--panel2);border-radius:5px;overflow:hidden}
+.bar-row .fill{height:100%;border-radius:5px;background:var(--accent)}
+.bar-row.blue .fill{background:var(--blue)}
+.bar-row.amber .fill{background:var(--amber)}
+.bar-row .v{width:34px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;flex:none}
+.auth{position:fixed;inset:0;background:var(--bg);z-index:20;display:flex;align-items:center;justify-content:center;padding:24px}
+.auth .box{width:100%;max-width:340px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px}
+.auth h2{font-size:16px;margin-bottom:6px}
+.auth p{font-size:12px;color:var(--dim);line-height:1.6;margin-bottom:14px}
+.auth input{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:11px 12px;font-size:14px;outline:none}
+.auth input:focus{border-color:var(--accent)}
+.auth button{width:100%;margin-top:10px;background:var(--accent);color:#06110a;border:0;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer}
+.err{display:none;margin:10px 14px;padding:10px 12px;border:1px solid #5a2a1e;background:#1d100a;color:#ffb08f;border-radius:10px;font-size:12px}
+.foot{text-align:center;color:#5c6562;font-size:10px;padding:16px 0 28px;line-height:1.7}
+.foot b{color:var(--dim)}
+@media (min-width:640px){ .grid{grid-template-columns:repeat(4,1fr)} }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <svg class="mark" viewBox="0 0 40 40" aria-hidden="true"><path d="M1.6 10Q6.02 10 6.02 14.42L6.02 23Q6.02 30 13.02 30L26.98 30Q33.98 30 33.98 23L33.98 14.42Q33.98 10 38.4 10Z" fill="#0a0c0d" stroke="#79f2b5" stroke-width="2.4"/><rect x="13" y="17.92" width="2.8" height="6.4" rx="1.4" fill="#79f2b5"/><rect x="18.6" y="16.12" width="2.8" height="10" rx="1.4" fill="#f7f7f4"/><rect x="24.2" y="18.72" width="2.8" height="4.8" rx="1.4" fill="#84dbf3"/></svg>
+  <h1>Agent 灵动岛</h1>
+  <span class="sub">数据看板</span>
+  <span class="live"><i></i>实时</span>
+</div>
+
+<div class="err" id="err"></div>
+
+<div class="grid">
+  <div class="tile accent"><div class="label">总访问量</div><div class="value" id="pvTotal">–</div><div class="delta">页面加载次数</div></div>
+  <div class="tile"><div class="label">近 7 天访问</div><div class="value" id="pvDays">–</div><div class="delta" id="pvDaysNote">最近 7 天</div></div>
+  <div class="tile amber"><div class="label">下载请求</div><div class="value" id="dlTotal">–</div><div class="delta" id="dlDays">–</div></div>
+  <div class="tile rate"><div class="label">下载率</div><div class="value" id="rate">–</div><div class="delta">下载 ÷ 访问</div></div>
+</div>
+
+<div class="seg" id="seg">
+  <button data-days="7" class="on">7 天</button>
+  <button data-days="30">30 天</button>
+</div>
+
+<div class="card">
+  <h3>每日访问趋势</h3>
+  <div class="chart" id="chart"></div>
+</div>
+
+<div class="card">
+  <h3>点击行为 Top</h3>
+  <div class="bars" id="clicks"></div>
+</div>
+
+<div class="card">
+  <h3>设备分布</h3>
+  <div class="bars" id="devices"></div>
+</div>
+
+<div class="card">
+  <h3>访问来源</h3>
+  <div class="bars" id="sources"></div>
+</div>
+
+<div class="card">
+  <h3>国家 / 地区 Top</h3>
+  <div class="bars" id="countries"></div>
+</div>
+
+<div class="foot">
+  数据来自 Cloudflare D1 · 保留 90 天 · 不使用 Cookie<br>
+  下载请求 ≠ 下载完成 · 更新于 <b id="updated">–</b>
+</div>
+
+<div class="auth" id="auth">
+  <div class="box">
+    <h2>输入查看 Token</h2>
+    <p>这是你埋点平台设置的看板 Token（在 Cloudflare 控制台的 Worker 变量里），只有你知道。</p>
+    <input id="token" type="password" placeholder="STATS_TOKEN" autocomplete="off">
+    <button id="go">进入看板</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  const $ = s => document.querySelector(s);
+  const KEY = 'island_stats_token';
+  const NAMES = { download_section:'下载区按钮', download_hero:'首页下载', download_menu:'顶栏下载', download_mirror:'镜像下载',
+    film_play:'播放短片', source:'查看源码', island_demo:'灵动岛演示', film:'短片锚点', states:'状态锚点', privacy:'隐私锚点',
+    agents:'Agent锚点', top:'回到顶部' };
+  let token = localStorage.getItem(KEY) || '';
+  let days = 7;
+
+  function err(msg){ const e = $('#err'); e.textContent = msg; e.style.display = 'block'; }
+  function clearErr(){ $('#err').style.display = 'none'; }
+
+  function bars(el, rows, color){
+    el.innerHTML = '';
+    if (!rows || !rows.length){ el.innerHTML = '<div style="color:#5c6562;font-size:12px">暂无数据</div>'; return; }
+    const max = Math.max(...rows.map(r => r.c));
+    rows.forEach(r => {
+      const row = document.createElement('div');
+      row.className = 'bar-row' + (color ? ' ' + color : '');
+      const name = NAMES[r.target] || r.target || r.device || r.country || r.source || r.day || r.k;
+      row.innerHTML = '<span class="k"></span><span class="track"><span class="fill" style="width:' + (max ? Math.max(2, r.c / max * 100) : 0) + '%"></span></span><span class="v"></span>';
+      row.querySelector('.k').textContent = name;
+      row.querySelector('.v').textContent = r.c;
+      el.appendChild(row);
+    });
+  }
+
+  function chart(daily){
+    const el = $('#chart');
+    el.innerHTML = '';
+    const data = daily || [];
+    if (!data.length){ el.innerHTML = '<div style="color:#5c6562;font-size:12px;text-align:center;padding-top:50px">暂无数据</div>'; return; }
+    const W = 640, H = 150, P = 8;
+    const max = Math.max(...data.map(d => d.c), 1);
+    const bw = (W - P * 2) / data.length;
+    let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">';
+    svg += '<line x1="0" y1="' + (H - 20) + '" x2="' + W + '" y2="' + (H - 20) + '" stroke="#1e2428" stroke-width="1"/>';
+    data.forEach((d, i) => {
+      const x = P + i * bw, h = Math.max(2, (d.c / max) * (H - 34));
+      svg += '<rect x="' + (x + bw * 0.18) + '" y="' + (H - 20 - h) + '" width="' + (bw * 0.64) + '" height="' + h + '" rx="2" fill="#79f2b5" opacity="0.92"/>';
+      if (data.length <= 16) svg += '<text x="' + (x + bw / 2) + '" y="' + (H - 5) + '" fill="#5c6562" font-size="9" text-anchor="middle">' + d.day.slice(5) + '</text>';
+    });
+    svg += '</svg>';
+    el.innerHTML = svg;
+  }
+
+  async function load(){
+    clearErr();
+    const t = token, d = days;
+    try {
+      const r = await fetch('/api/analytics/stats?token=' + encodeURIComponent(t) + '&days=' + d, { credentials: 'omit' });
+      if (r.status === 401){ showAuth(); return; }
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const j = await r.json();
+      $('#pvTotal').textContent = j.pageviews.toLocaleString();
+      $('#pvDays').textContent = j.pageviews_days.toLocaleString();
+      $('#pvDaysNote').textContent = '最近 ' + j.days + ' 天';
+      $('#dlTotal').textContent = j.downloads.toLocaleString();
+      $('#dlDays').textContent = '最近 ' + j.days + ' 天：' + j.downloads_days.toLocaleString();
+      $('#rate').textContent = j.download_rate + '%';
+      chart(j.daily_pageviews);
+      bars($('#clicks'), j.clicks, '');
+      bars($('#devices'), j.devices, 'blue');
+      bars($('#sources'), j.sources, 'amber');
+      bars($('#countries'), j.countries, '');
+      const t2 = new Date(j.generated_at);
+      $('#updated').textContent = t2.getHours().toString().padStart(2,'0') + ':' + t2.getMinutes().toString().padStart(2,'0') + ':' + t2.getSeconds().toString().padStart(2,'0');
+    } catch(e){ err('加载失败：' + e.message); }
+  }
+
+  function showAuth(){
+    $('#auth').style.display = 'flex';
+    if (token) $('#token').value = token;
+  }
+  function hideAuth(){ $('#auth').style.display = 'none'; }
+
+  $('#seg').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    document.querySelectorAll('#seg button').forEach(x => x.classList.remove('on'));
+    b.classList.add('on'); days = +b.dataset.days; load();
+  });
+
+  $('#go').addEventListener('click', () => {
+    const v = $('#token').value.trim();
+    if (!v){ $('#token').focus(); return; }
+    token = v; localStorage.setItem(KEY, v); hideAuth(); load();
+  });
+
+  if (token){ hideAuth(); load(); } else { showAuth(); }
+  setInterval(load, 300000);
+})();
+</script>
+</body>
+</html>

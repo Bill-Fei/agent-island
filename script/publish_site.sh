@@ -33,7 +33,7 @@ shasum -a 256 "$DMG" | tee "$DMG.sha256"
 echo "==> 3/4 Assembling the site"
 rm -rf "$OUT"
 mkdir -p "$OUT/media/icons" "$OUT/download"
-cp "$ROOT_DIR/site/index.html" "$ROOT_DIR/site/style.css" "$ROOT_DIR/site/island.js" "$ROOT_DIR/site/analytics.js" "$ROOT_DIR/site/_worker.js" "$ROOT_DIR/site/_routes.json" "$OUT/"
+cp "$ROOT_DIR/site/index.html" "$ROOT_DIR/site/style.css" "$ROOT_DIR/site/island.js" "$ROOT_DIR/site/analytics.js" "$ROOT_DIR/site/_worker.js" "$ROOT_DIR/site/_routes.json" "$ROOT_DIR/site/dashboard.html" "$OUT/"
 # Only files the page actually uses; the unused state-*.jpg stay private.
 for f in app-icon.png favicon.png film-poster.jpg film.mp4 desktop-wallpaper.svg; do
   cp "$ROOT_DIR/site/media/$f" "$OUT/media/"
