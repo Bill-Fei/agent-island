@@ -9,13 +9,13 @@
 <link rel="icon" href="media/favicon.png">
 <link rel="stylesheet" href="style.css">
 <script>
-  // Release links. Leave empty until a signed build and a public repo exist;
-  // empty values keep the buttons pointing at the install section instead of a dead URL.
+  // Release links. The download button points at the dmg shipped next to this page
+  // (injected by script/publish_site.sh); sourceUrl links back to the public repo.
   window.SITE = {
     version: '0.3.1',
-    dmgUrl: '',     // e.g. https://github.com/<owner>/<repo>/releases/download/v0.3.1/Agent-Island-0.3.1.dmg
+    dmgUrl: '',     // injected by publish_site.sh: download/<version>.dmg
     mirrorUrl: '',  // optional domestic mirror of the same file
-    sourceUrl: ''  // e.g. https://github.com/<owner>/<repo>
+    sourceUrl: 'https://github.com/Bill-Fei/agent-island'
   };
 </script>
 </head>
