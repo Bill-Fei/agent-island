@@ -10,16 +10,21 @@ struct AIWorkDurationRow: View {
     @StateObject private var explanation = DurationExplanationState()
     var body: some View {
         Button { explanation.explains.toggle() } label: {
-            HStack(spacing: 7) {
-                Image(systemName: "clock").foregroundStyle(.white.opacity(0.42))
-                Text("今日 AI 工作").foregroundStyle(.white.opacity(0.58))
-                Text("· \(duration.summary.label)").monospacedDigit().foregroundStyle(.white.opacity(0.85))
+            HStack(spacing: 6) {
+                Image(systemName: "clock")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.42))
+                Text("今日 AI · \(duration.summary.label)")
+                    .foregroundStyle(.white.opacity(0.68))
+                    .monospacedDigit()
                 Spacer(minLength: 0)
                 if duration.summary.incomplete { Text("统计不完整").foregroundStyle(.white.opacity(0.4)) }
-                Image(systemName: "info.circle").foregroundStyle(.white.opacity(0.35))
+                Image(systemName: "info.circle")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.35))
             }
             .font(HUDTypography.caption)
-            .padding(.horizontal, 20).padding(.vertical, 10)
+            .padding(.horizontal, 16).padding(.vertical, 5)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

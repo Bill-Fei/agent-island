@@ -64,13 +64,28 @@ final class TaskStore: ObservableObject {
         return now().timeIntervalSince(date) < 30 ? "已提交决定 · 等待回执" : "尚未收到回执 · 请核实"
     }
 
+    /// Explain where the user must make a decision. A PermissionRequest is
+    /// only a permission check until the relay publishes a live request.
+    func approvalSurfaceText(for task: AgentTask) -> String? {
+        guard task.status == .waiting else { return nil }
+        if approvalRequest(for: task) != nil { return "岛内单次审批" }
+        if task.profile.kind == .claude, task.sourceEvent == "PermissionRequest" { return "请在 Claude Code 中确认" }
+        if task.profile.kind == .claude, task.sourceEvent == "Notification" { return "原应用正在等待确认" }
+        return nil
+    }
+
     func currentStepText(for task: AgentTask) -> String {
         if task.sourceEvent == "ClaudeChatUnknown" { return task.detail }
         if let feedback = approvalFeedback(for: task) { return feedback }
-        if approvalRequest(for: task) != nil { return "请求单次批准 · 请核对本次工具操作" }
+        if approvalRequest(for: task) != nil { return "岛内单次审批 · 请核对本次工具操作" }
         if displayedStatus(for: task) == "结果未知" { return "未收到结束信号，无法确认结果" }
         if task.status == .waiting && task.sourceEvent == "PermissionRequest" {
-            return "应用正在核对工具权限，灵动岛不接管审批"
+            return task.profile.kind == .claude
+                ? "应用正在核对工具权限 · 请在 Claude Code 中确认"
+                : "应用正在核对工具权限，灵动岛不接管审批"
+        }
+        if task.status == .waiting && task.sourceEvent == "Notification", task.profile.kind == .claude {
+            return "原应用正在等待确认 · 灵动岛仅同步状态"
         }
         if task.sourceEvent == "PreToolUse",
            let step = task.toolSteps.filter({ $0.state == .running }).max(by: { $0.updatedAt < $1.updatedAt }) {

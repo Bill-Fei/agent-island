@@ -523,7 +523,9 @@ private struct HUDExpandedContent: View {
                         .help("只移除本地显示，不会停止 Agent；后续真实事件仍可再次出现。")
                 }
                 Spacer(minLength: 8)
-                Text(store.approvalFeedback(for: task) ?? (store.needsUserAttention(task) && store.approvalRequest(for: task) == nil ? "需在原应用确认" : "由真实事件更新"))
+                Text(store.approvalFeedback(for: task)
+                     ?? store.approvalSurfaceText(for: task)
+                     ?? (store.needsUserAttention(task) && store.approvalRequest(for: task) == nil ? "需在原应用确认" : "由真实事件更新"))
                     .font(HUDTypography.caption)
                     .foregroundStyle(.white.opacity(0.32))
                     .multilineTextAlignment(.trailing)
