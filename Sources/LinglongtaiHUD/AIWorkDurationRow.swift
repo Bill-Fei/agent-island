@@ -24,7 +24,7 @@ struct AIWorkDurationRow: View {
                     .foregroundStyle(.white.opacity(0.35))
             }
             .font(HUDTypography.caption)
-            .padding(.horizontal, 16).padding(.vertical, 5)
+            .padding(.horizontal, 14).padding(.vertical, 3)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

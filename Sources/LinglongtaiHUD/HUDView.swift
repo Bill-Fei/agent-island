@@ -288,7 +288,6 @@ private struct HUDExpandedContent: View {
                 detailPane
             }
             .frame(maxHeight: .infinity)
-            HUDSectionDivider()
             if !store.demoPreviewActive { AIWorkDurationRow() }
         }
     }
