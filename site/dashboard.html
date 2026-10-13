@@ -66,7 +66,12 @@ h2.title{font-size:30px;font-weight:800;letter-spacing:-.02em;margin:0 4px 8px;l
 .chart-box{height:200px}
 .chart-box.loading{display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:12px;height:200px}
 
-/* ===== 列表（国家 / 设备 / 来源） ===== */
+/* ===== 图表容器 ===== */
+.hbox{height:212px}
+.dbox{height:182px}
+.hbox.loading,.dbox.loading{display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:12px}
+
+/* ===== 列表（已弃用，保留样式以防回退） ===== */
 .list-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px 20px;margin-bottom:14px}
 .list-row{display:flex;align-items:center;gap:14px;padding:11px 0;border-bottom:1px solid #141b18}
 .list-row:last-child{border-bottom:0}
@@ -136,14 +141,19 @@ h2.title{font-size:30px;font-weight:800;letter-spacing:-.02em;margin:0 4px 8px;l
   </div>
 
   <div class="section-title">访问来自哪里 <span class="hint">根据网络出口判断，VPN 可能影响地域</span></div>
-  <div class="list-card">
-    <div id="countries"></div>
+  <div class="chart-card">
+    <div class="hbox loading" id="countries">加载中…</div>
+  </div>
+
+  <div class="section-title">点击行为 <span class="hint">主要交互动作</span></div>
+  <div class="chart-card">
+    <div class="hbox loading" id="clicks">加载中…</div>
   </div>
 
   <div class="section-title">设备与来源 <span class="hint">微信内打开可能没有来源信息</span></div>
   <div class="two-col">
-    <div class="list-card"><div id="devices"></div></div>
-    <div class="list-card"><div id="sources"></div></div>
+    <div class="chart-card"><div class="dbox loading" id="devices">加载中…</div></div>
+    <div class="chart-card"><div class="dbox loading" id="sources">加载中…</div></div>
   </div>
 
   <div class="foot">
@@ -205,21 +215,58 @@ h2.title{font-size:30px;font-weight:800;letter-spacing:-.02em;margin:0 4px 8px;l
 
   function pct(c, total){ return total ? (c/total*100).toFixed(1) : '0.0'; }
 
-  function listRows(el, rows, total, colors){
+  // 横向条形图：排名 / 量级对比（地区、点击）
+  function renderHBar(el, rows, color){
+    const ec = window.echarts;
+    if(!ec){ el.className='hbox loading'; el.innerHTML='<div style="color:#56605c;font-size:12px">图表库未加载</div>'; return; }
+    el.className='hbox';
     el.innerHTML='';
-    if(!rows||!rows.length){ el.innerHTML='<div style="color:#56605c;font-size:12px;padding:10px 0">暂无数据</div>'; return; }
-    const max = Math.max.apply(null, rows.map(r=>r.c));
-    rows.forEach((r,i)=>{
-      let name = NAMES[r.target] || COUNTRY_CN[r.country] || DEVICE_CN[r.device] || SOURCE_CN[r.source] || r.target || r.device || r.source || r.country || '';
-      const cn = r.country ? '网络出口' : (r.target ? '交互动作' : '');
-      const row=document.createElement('div');
-      row.className='list-row'+(colors && colors[i%colors.length] ? ' '+colors[i%colors.length] : '');
-      row.innerHTML='<span class="n"></span><span class="track"><span class="fill" style="width:'+(max?Math.max(2,r.c/max*100):0)+'%;animation-delay:'+(i*60)+'ms"></span></span><span class="p"></span><span class="c"></span>';
-      row.querySelector('.n').innerHTML = name + (cn ? '<small>'+cn+'</small>' : '');
-      row.querySelector('.p').textContent = pct(r.c,total)+'%';
-      row.querySelector('.c').textContent = r.c+' 次';
-      el.appendChild(row);
+    if(!rows||!rows.length){ el.innerHTML='<div style="color:#56605c;font-size:12px;padding-top:70px;text-align:center">暂无数据</div>'; return; }
+    const inst = ec.getInstanceByDom(el) || ec.init(el);
+    const total = rows.reduce((s,r)=>s+r.c,0);
+    const names = rows.map(r=> NAMES[r.target] || COUNTRY_CN[r.country] || DEVICE_CN[r.device] || SOURCE_CN[r.source] || r.target || r.device || r.source || r.country || '');
+    const vals = rows.map(r=>r.c);
+    inst.setOption({
+      grid:{left:4,right:16,top:4,bottom:4,containLabel:true},
+      tooltip:{trigger:'axis',axisPointer:{type:'shadow'},confine:true,backgroundColor:'#0d1210',borderColor:'#1a211d',textStyle:{color:'#eef4ef',fontSize:12,fontFamily:'-apple-system,BlinkMacSystemFont,sans-serif'},
+        formatter:ps=>{ const p=ps[0]; return p.name+'　'+p.value+' 次　'+(total?Math.round(p.value/total*1000)/10:0)+'%'; }},
+      xAxis:{type:'value',show:false},
+      yAxis:{type:'category',data:names,inverse:true,axisLine:{show:false},axisTick:{show:false},
+        axisLabel:{color:'#d7ded9',fontSize:11,fontFamily:'-apple-system'}},
+      series:[{
+        type:'bar',data:vals,barWidth:'46%',
+        itemStyle:{color, borderRadius:[0,4,4,0]},
+        label:{show:true,position:'right',color:'#eef4ef',fontSize:11,fontWeight:600,fontFamily:'-apple-system',formatter:p=>p.value+' 次'}
+      }]
     });
+    inst.resize();
+  }
+
+  // 环形图：构成占比（设备、来源）
+  function renderDonut(el, rows){
+    const ec = window.echarts;
+    if(!ec){ el.className='dbox loading'; el.innerHTML='<div style="color:#56605c;font-size:12px">图表库未加载</div>'; return; }
+    el.className='dbox';
+    el.innerHTML='';
+    if(!rows||!rows.length){ el.innerHTML='<div style="color:#56605c;font-size:12px;padding-top:60px;text-align:center">暂无数据</div>'; return; }
+    const inst = ec.getInstanceByDom(el) || ec.init(el);
+    const data = rows.map((r,i)=>{
+      let name = r.device ? (DEVICE_CN[r.device]||r.device) : r.source ? (SOURCE_CN[r.source]||r.source) : r.country ? (COUNTRY_CN[r.country]||r.country) : (r.target||'');
+      return { name, value:r.c, itemStyle:{color:PALETTE[i%PALETTE.length]} };
+    });
+    inst.setOption({
+      tooltip:{trigger:'item',confine:true,backgroundColor:'#0d1210',borderColor:'#1a211d',textStyle:{color:'#eef4ef',fontSize:12,fontFamily:'-apple-system,BlinkMacSystemFont,sans-serif'},
+        formatter:p=>p.name+'　'+p.value+' 次　'+Math.round(p.percent)+'%'},
+      legend:{bottom:0,icon:'circle',itemWidth:9,itemHeight:9,itemGap:14,textStyle:{color:'#8a9791',fontSize:11,fontFamily:'-apple-system'},
+        formatter:name=>{ const it=data.find(d=>d.name===name); return name+(it?('  '+it.value):''); }},
+      series:[{
+        type:'pie',radius:['56%','76%'],center:['50%','40%'],avoidLabelOverlap:true,
+        itemStyle:{borderColor:'#070a08',borderWidth:2},
+        label:{show:false},
+        data
+      }]
+    });
+    inst.resize();
   }
 
   function renderTrend(daily, downloads){
@@ -266,9 +313,10 @@ h2.title{font-size:30px;font-weight:800;letter-spacing:-.02em;margin:0 4px 8px;l
     $('#updated').textContent = fmtBJ(j.generated_at);
     $('#updated2').textContent = fmtBJ(j.generated_at);
     renderTrend(j.daily_pageviews, j.daily_downloads);
-    listRows($('#countries'), j.countries, j.pageviews, ['']);
-    listRows($('#devices'), j.devices, j.pageviews, ['blue']);
-    listRows($('#sources'), j.sources, j.pageviews, ['amber']);
+    renderHBar($('#countries'), j.countries, '#e8b080');
+    renderHBar($('#clicks'), j.clicks, '#79f2b5');
+    renderDonut($('#devices'), j.devices);
+    renderDonut($('#sources'), j.sources);
     $('#modeBadge').style.display = sample?'inline-block':'none';
     $('#demoNote').style.display = sample?'block':'none';
   }
@@ -319,9 +367,11 @@ h2.title{font-size:30px;font-weight:800;letter-spacing:-.02em;margin:0 4px 8px;l
   setInterval(load, 300000);
   window.addEventListener('resize', ()=>{
     if(!window.echarts) return;
-    const el=document.querySelector('#chart');
-    const inst=echarts.getInstanceByDom(el);
-    if(inst) inst.resize();
+    ['#chart','#countries','#clicks','#devices','#sources'].forEach(sel=>{
+      const el=document.querySelector(sel);
+      const inst=echarts.getInstanceByDom(el);
+      if(inst) inst.resize();
+    });
   });
 })();
 </script>
