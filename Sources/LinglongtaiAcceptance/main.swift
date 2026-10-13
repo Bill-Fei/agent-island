@@ -17,6 +17,7 @@ struct LinglongtaiAcceptance {
         }
 
         var state = IslandInteraction()
+        runAIWorkDurationChecks { name, result in check(name, result) }
         runAlphaSetupRevisionChecks { name, result in check(name, result) }
         check("conversation titles accept title metadata", ConversationTitles.clean("  实际会话标题  ") == "实际会话标题")
         check("conversation titles never use multiline prompt fallback", ConversationTitles.clean("prompt\nbody") == nil)

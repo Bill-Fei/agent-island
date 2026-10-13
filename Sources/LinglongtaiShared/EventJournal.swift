@@ -8,6 +8,7 @@ public enum EventJournal {
         public let end: UInt64
         public let events: [AgentEvent]
         public let blockedByOversizedLine: Bool
+        public let rejectedRowCount: Int
     }
 
     public static func read(at url: URL, offset: UInt64, byteLimit: Int = 1_048_576,
@@ -30,10 +31,12 @@ public enum EventJournal {
         // intentionally not skipped; diagnostics must report this blockage.
         let complete = data[..<end]
         let decoder = JSONDecoder()
-        let events = complete.split(separator: 10).compactMap {
+        let rows = complete.split(separator: 10)
+        let events = rows.compactMap {
             try? decoder.decode(AgentEvent.self, from: Data($0))
         }
         return Batch(start: start, end: start + UInt64(complete.count), events: events,
-                     blockedByOversizedLine: complete.isEmpty && data.count >= max(1, byteLimit))
+                     blockedByOversizedLine: complete.isEmpty && data.count >= max(1, byteLimit),
+                     rejectedRowCount: rows.count - events.count)
     }
 }

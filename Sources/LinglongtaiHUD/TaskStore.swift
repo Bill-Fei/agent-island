@@ -1043,6 +1043,9 @@ final class TaskStore: ObservableObject {
             connections[kind.rawValue] = max(connections[kind.rawValue] ?? .distantPast, date)
         }
         switch event.type {
+        case "source-unknown":
+            notice = "\(event.agent ?? "Agent") 回调无法识别；统计已暂停该未知区间，请检查接入版本。"
+            return true
         case "connection":
             return true
         case "ambiguous-turn":

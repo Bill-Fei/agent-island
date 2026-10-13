@@ -44,7 +44,7 @@ struct AlphaOnboardingView: View {
                             Text(kind == .claude ? "Claude Code（不是 Claude Chat）" : kind.displayName)
                         }
                         Spacer()
-                        Text(setup.installed.contains(kind) ? "观察器已安装" : "尚未检测到完整配置")
+                        Text(setup.diagnostics[kind] ?? "正在检查接入")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
@@ -77,8 +77,12 @@ struct AlphaOnboardingView: View {
                             Text(date, style: .time).monospacedDigit()
                         } else { Text("尚未收到真实回调").foregroundStyle(.secondary) }
                     }.font(.callout)
+                    if store.tasks.contains(where: { $0.profile.kind == kind && $0.sourceEvent == "AmbiguousTurn" && [.running, .waiting].contains($0.status) }) {
+                        Text("\(kind.displayName)：收到回调，但轮次无法识别；不视为正常执行。请在下一轮请求后核实。")
+                            .font(.caption).foregroundStyle(.orange)
+                    }
                 }
-                Text("未收到时：确认配置已加载，Codex 在 /hooks 审阅信任，必要时新建会话。Claude Code 正常成功路径仍待验证；豆包属于实验性本地 Agent 轨迹观察，普通聊天不可见。")
+                Text("升级时仅维护已接入的观察器；被移除的接入不会自动恢复。未收到回调不等于断连或任务结束，可能正在长时间执行。配置异常请检查，Codex 的信任仍需在 /hooks 审阅；第三方协议变更不能保证自动兼容。豆包仅观察本地 Agent 轨迹，普通聊天不可见。")
                     .font(.caption).foregroundStyle(.secondary)
             }.padding(10)
         }

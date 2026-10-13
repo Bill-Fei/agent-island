@@ -317,6 +317,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         configureStatusItem()
         let args = ProcessInfo.processInfo.arguments
         if !args.contains("--qa-empty") && !args.contains("--qa-demo") && !args.contains("--data-dir") {
+            let bundled = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/linglongtaictl")
+            Task {
+                let failure = await Task.detached(priority: .utility) { () -> String? in
+                    do {
+                        try AlphaIntegrationSetup.upgradeExisting(home: FileManager.default.homeDirectoryForCurrentUser, bundled: bundled)
+                        return nil
+                    } catch { return error.localizedDescription }
+                }.value
+                if let failure { TaskStore.shared.notice = "接入升级未完成：\(failure) 请打开接入与验证。" }
+            }
             onboarding = AlphaOnboardingController(store: TaskStore.shared)
             if !UserDefaults.standard.bool(forKey: "alpha.hasSeenSetup") {
                 onboarding?.show()

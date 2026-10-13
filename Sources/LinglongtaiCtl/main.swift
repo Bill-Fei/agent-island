@@ -224,9 +224,23 @@ struct LinglongtaiCtl {
         var approval: ApprovalRelay.Request?
         // Explicit opt-in applies ONLY to Claude Code's documented contract.
         withEventLock { fd in
-            guard var state = loadBridgeState(), recoverPending(&state, descriptor: fd),
-                  let mapped = HookEventMapper.map(provider: AgentKind.resolve(provider), payload: input) else { return }
-            var events = state.tracker.route(mapped)
+            let kind = AgentKind.resolve(provider)
+            let mapped = HookEventMapper.map(provider: kind, payload: input)
+            guard var state = loadBridgeState(), recoverPending(&state, descriptor: fd) else { return }
+            var events: [AgentEvent]
+            if let mapped { events = state.tracker.route(mapped) }
+            else {
+                // Deliberately ignored subagent/filtered notification events
+                // are not protocol failures. Everything else leaves only a
+                // metadata discontinuity, never the rejected payload itself.
+                let object = (try? JSONSerialization.jsonObject(with: input)) as? [String: Any]
+                if let agentID = object?["agent_id"] as? String, !agentID.isEmpty { return }
+                if object?["hook_event_name"] as? String == "Notification",
+                   let type = object?["notification_type"] as? String,
+                   !["permission_prompt", "elicitation_dialog", "agent_needs_input"].contains(type) { return }
+                events = [AgentEvent(type: "source-unknown", agent: kind.displayName, sourceEvent: "UnrecognizedHook")]
+            }
+            HookHealth.record(provider: kind, parsed: mapped != nil, directory: LinglongtaiPaths.applicationSupport)
             if args.contains("--approval-relay"), ApprovalRelay.supports(AgentKind.resolve(provider)),
                ApprovalRelay.hasActiveHUD, events.count == 1,
                let request = ApprovalRelay.makeRequest(payload: input, event: events[0]),

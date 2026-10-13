@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 
 /// Allowlisted observer configuration. Never changes provider trust or replies
@@ -20,9 +19,66 @@ public enum IntegrationConfiguration {
         shellQuote(binary.path) + " hook --provider " + provider.rawValue
     }
     public static func helperURL(home: URL, bundled: URL) throws -> URL {
-        let data = try Data(contentsOf: bundled)
-        let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-        return home.appendingPathComponent("Library/Application Support/LinglongtaiHUD/bin/linglongtaictl-" + String(digest.prefix(16)))
+        home.appendingPathComponent("Library/Application Support/LinglongtaiHUD/bin/linglongtaictl")
+    }
+
+    /// Upgrade only entries the user already installed. Missing events remain
+    /// missing: launching the app must never re-enable a removed integration.
+    public static func migrateOwned(_ original: Data, binary: URL, provider: AgentKind, home: URL) throws -> Data {
+        guard original.count <= 4_194_304,
+              var settings = try JSONSerialization.jsonObject(with: original) as? [String: Any] else {
+            throw ConfigurationError.invalidConfiguration
+        }
+        guard let existing = settings["hooks"] else { return original }
+        guard var hooks = existing as? [String: Any] else { throw ConfigurationError.invalidConfiguration }
+        var changed = false
+        for (event, value) in hooks {
+            guard var groups = value as? [[String: Any]] else { throw ConfigurationError.invalidConfiguration }
+            for index in groups.indices {
+                guard var entries = groups[index]["hooks"] as? [[String: Any]] else { throw ConfigurationError.invalidConfiguration }
+                for entry in entries.indices {
+                    let old = entries[entry]["command"] as? String ?? ""
+                    guard isOwnedCommand(old, provider: provider, home: home) else { continue }
+                    let new = command(binary: binary, provider: provider) + (old.hasSuffix(" --approval-relay") ? " --approval-relay" : "")
+                    if new != old { entries[entry]["command"] = new; changed = true }
+                }
+                groups[index]["hooks"] = entries
+            }
+            hooks[event] = groups
+        }
+        guard changed else { return original }
+        settings["hooks"] = hooks
+        var data = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
+        data.append(10)
+        return data
+    }
+
+    public static func configuredBridges(_ data: Data, provider: AgentKind, home: URL) -> [URL] {
+        guard data.count <= 4_194_304,
+              let settings = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let hooks = settings["hooks"] as? [String: Any] else { return [] }
+        return hooks.values.flatMap { value -> [URL] in
+            (value as? [[String: Any]] ?? []).flatMap { group -> [URL] in
+                (group["hooks"] as? [[String: Any]] ?? []).compactMap { entry in
+                    let value = entry["command"] as? String ?? ""
+                    guard isOwnedCommand(value, provider: provider, home: home),
+                          let range = value.range(of: " hook --provider ", options: .backwards) else { return nil }
+                    return URL(fileURLWithPath: unquote(String(value[..<range.lowerBound])))
+                }
+            }
+        }
+    }
+
+    public static func health(_ data: Data?, binary: URL, provider: AgentKind, home: URL,
+                              bridgeMatches: Bool) -> String {
+        guard let data else { return "尚未接入" }
+        guard let settings = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return "配置无法读取" }
+        if settings["disableAllHooks"] as? Bool == true { return "原应用已禁用 Hook" }
+        let bridges = configuredBridges(data, provider: provider, home: home)
+        guard !bridges.isEmpty else { return "尚未接入" }
+        if bridges.contains(where: { $0.path != binary.path }) { return "旧版桥接 · 待迁移" }
+        guard bridgeMatches else { return "桥接缺失或版本不匹配" }
+        return isInstalled(data, binary: binary, provider: provider) ? "配置就绪 · 不代表任务运行中" : "配置不完整 · 请检查接入"
     }
     public static func events(for provider: AgentKind) -> [String] {
         let common = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PermissionRequest", "PostToolUse", "Stop", "SessionEnd"]

@@ -19,7 +19,7 @@ COMPILER=(swiftc -target "$(uname -m)-apple-macosx13.0")
   -I "$VALIDATION_DIR" Sources/LinglongtaiHUD/*.swift \
   "$VALIDATION_DIR/LinglongtaiShared.o" -o "$VALIDATION_DIR/LinglongtaiHUD"
 "${COMPILER[@]}" -parse-as-library -module-cache-path "$VALIDATION_DIR/module-cache" \
-  -I "$VALIDATION_DIR" Sources/LinglongtaiHUD/AgentUsageCount.swift Sources/LinglongtaiHUD/ClaudeChatObserver.swift Sources/LinglongtaiHUD/TaskStore.swift \
+  -I "$VALIDATION_DIR" Sources/LinglongtaiHUD/AgentUsageCount.swift Sources/LinglongtaiHUD/ClaudeChatObserver.swift Sources/LinglongtaiHUD/TaskVisualState.swift Sources/LinglongtaiHUD/TaskStore.swift \
   Sources/LinglongtaiHUD/TaskStoreAcceptance.swift Sources/LinglongtaiHUD/ClaudeApprovalAcceptance.swift script/StoreAcceptanceMain.swift \
   "$VALIDATION_DIR/LinglongtaiShared.o" -o "$VALIDATION_DIR/store-acceptance"
 "$VALIDATION_DIR/linglongtai-acceptance"
@@ -30,7 +30,7 @@ COMPILER=(swiftc -target "$(uname -m)-apple-macosx13.0")
 ISLAND_QA_DIRECTORY="$(mktemp -d /private/tmp/island-contained-store.XXXXXX)"
 "$VALIDATION_DIR/store-acceptance" --data-dir "$ISLAND_QA_DIRECTORY"
 "${COMPILER[@]}" -parse-as-library -module-cache-path "$VALIDATION_DIR/module-cache" \
-  -I "$VALIDATION_DIR" Sources/LinglongtaiHUD/AgentUsageCount.swift Sources/LinglongtaiHUD/ClaudeChatObserver.swift Sources/LinglongtaiHUD/TaskStore.swift \
+  -I "$VALIDATION_DIR" Sources/LinglongtaiHUD/AgentUsageCount.swift Sources/LinglongtaiHUD/ClaudeChatObserver.swift Sources/LinglongtaiHUD/TaskVisualState.swift Sources/LinglongtaiHUD/TaskStore.swift \
   Sources/LinglongtaiHUD/BackgroundStoreAcceptance.swift script/BackgroundStoreAcceptanceMain.swift \
   "$VALIDATION_DIR/LinglongtaiShared.o" -o "$VALIDATION_DIR/background-store-acceptance"
 ISLAND_BG_DIRECTORY="$(mktemp -d /private/tmp/island-background-store.XXXXXX)"
