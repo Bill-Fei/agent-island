@@ -44,5 +44,7 @@ jobs:
       - name: Check formatting and tracked-file hygiene
         run: |
           git diff --check
-          test ! -d dist
-          test ! -f .DS_Store
+          # Generated output is expected after packaging; only tracked output
+          # violates repository hygiene. Do not delete the built artifact.
+          test -z "$(git ls-files -- dist .build)"
+          test -z "$(git ls-files | grep -E '(^|/)\.DS_Store$' || true)"

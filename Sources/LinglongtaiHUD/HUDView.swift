@@ -283,9 +283,10 @@ private struct HUDExpandedContent: View {
             HUDSectionDivider()
 
             HStack(spacing: 0) {
-                taskList(sections: sections).frame(width: 274)
+                taskList(sections: sections).frame(width: IslandLayout.taskListWidth)
                 HUDSectionDivider(vertical: true)
                 detailPane
+                    .frame(width: IslandLayout.detailWidth)
             }
             .frame(maxHeight: .infinity)
         }
@@ -476,12 +477,14 @@ private struct HUDExpandedContent: View {
                     .frame(maxHeight: .infinity, alignment: .top)
                     .padding(.top, 14)
 
-                    actionBar(for: task)
-                        .padding(.top, 12)
+                    if hasDetailActions(for: task) {
+                        actionBar(for: task)
+                            .padding(.top, 12)
+                    }
                 }
                 .padding(.horizontal, 18)
-                .padding(.top, 18)
-                .padding(.bottom, 14)
+                .padding(.top, 14)
+                .padding(.bottom, 12)
             } else {
                 VStack(spacing: 12) {
                     Image(systemName: "sparkles")
@@ -508,6 +511,17 @@ private struct HUDExpandedContent: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    private func hasDetailActions(for task: AgentTask) -> Bool {
+        store.approvalRequest(for: task) != nil || store.displayedStatus(for: task) == "结果未知"
+            || detailFooterText(for: task) != nil
+    }
+
+    private func detailFooterText(for task: AgentTask) -> String? {
+        store.approvalFeedback(for: task)
+            ?? store.approvalSurfaceText(for: task)
+            ?? (store.needsUserAttention(task) && store.approvalRequest(for: task) == nil ? "需在原应用确认" : nil)
+    }
+
     private func actionBar(for task: AgentTask) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             if store.approvalRequest(for: task) != nil {
@@ -525,9 +539,7 @@ private struct HUDExpandedContent: View {
                         .help("只移除本地显示，不会停止 Agent；后续真实事件仍可再次出现。")
                 }
                 Spacer(minLength: 8)
-                if let footerText = store.approvalFeedback(for: task)
-                    ?? store.approvalSurfaceText(for: task)
-                    ?? (store.needsUserAttention(task) && store.approvalRequest(for: task) == nil ? "需在原应用确认" : nil) {
+                if let footerText = detailFooterText(for: task) {
                     Text(footerText)
                         .font(HUDTypography.caption)
                         .foregroundStyle(.white.opacity(0.32))
