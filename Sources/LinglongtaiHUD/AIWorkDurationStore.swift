@@ -20,8 +20,9 @@ final class AIWorkDurationStore: ObservableObject {
             return
         }
         refresh()
-        timer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
+        let store = self
+        timer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { _ in
+            Task { @MainActor in store.refresh() }
         }
     }
 
