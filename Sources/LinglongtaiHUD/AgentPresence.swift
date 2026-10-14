@@ -21,7 +21,10 @@ final class AgentPresence: ObservableObject {
         .codex: "com.openai.codex",
         .claude: "com.anthropic.claudefordesktop",
         .doubao: "com.bot.pc.doubao",
-        .workBuddy: "com.workbuddy.workbuddy"
+        // WorkBuddy's macOS app identifies itself as Tencent WorkBuddy.
+        // The old `com.workbuddy.workbuddy` value never resolved on installed
+        // builds, so the island silently fell back to the generic SF Symbol.
+        .workBuddy: "com.tencent.workbuddy.mac"
     ]
 
     init() {
