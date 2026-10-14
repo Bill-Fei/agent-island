@@ -20,8 +20,9 @@ final class AlphaIntegrationSetup: ObservableObject {
     }
 
     init() {
-        timer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
+        let setup = self
+        timer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { _ in
+            Task { @MainActor in setup.refresh() }
         }
     }
 
