@@ -279,7 +279,7 @@ private struct HUDExpandedContent: View {
 
             HUDSectionDivider()
 
-            TodayUsageBar(usage: store.todayAgentUsage)
+            TodayUsageBar(usage: store.todayAgentUsage, showsDuration: !store.demoPreviewActive)
             HUDSectionDivider()
 
             HStack(spacing: 0) {
@@ -288,7 +288,6 @@ private struct HUDExpandedContent: View {
                 detailPane
             }
             .frame(maxHeight: .infinity)
-            if !store.demoPreviewActive { AIWorkDurationRow() }
         }
     }
 

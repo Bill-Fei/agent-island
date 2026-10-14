@@ -14,20 +14,25 @@ struct AIWorkDurationRow: View {
                 Image(systemName: "clock")
                     .font(.system(size: 9, weight: .medium))
                     .foregroundStyle(.white.opacity(0.42))
-                Text("今日 AI · \(duration.summary.label)")
+                Text("AI 工作 · \(duration.summary.label)")
                     .foregroundStyle(.white.opacity(0.68))
                     .monospacedDigit()
-                Spacer(minLength: 0)
-                if duration.summary.incomplete { Text("统计不完整").foregroundStyle(.white.opacity(0.4)) }
+                if duration.summary.incomplete {
+                    Image(systemName: "exclamationmark.circle")
+                        .foregroundStyle(.white.opacity(0.4))
+                }
                 Image(systemName: "info.circle")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.white.opacity(0.35))
             }
             .font(HUDTypography.caption)
-            .padding(.horizontal, 14).padding(.vertical, 3)
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.vertical, 2)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .help(duration.summary.incomplete ? "AI 工作统计不完整，点击查看说明" : "点击查看 AI 工作时间统计说明")
         .accessibilityLabel("今日 AI 工作 \(duration.summary.label)\(duration.summary.incomplete ? "，统计不完整" : "")，查看统计说明")
         .popover(isPresented: $explanation.explains) {
             VStack(alignment: .leading, spacing: 8) {

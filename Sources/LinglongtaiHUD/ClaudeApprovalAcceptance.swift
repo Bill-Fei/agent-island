@@ -19,7 +19,10 @@ func runClaudeApprovalStoreChecks(check: (String, Bool) -> Void, emit: (AgentEve
     guard let request = try publish(), let task = store.tasks.first(where: { $0.id == request.taskID }) else {
         check("Claude approval store fixture publishes", false); return
     }
-    check("Claude live relay attracts attention", store.approvalRequest(for: task) == request && store.needsUserAttention(task) && store.waitingCount == 1 && store.presentation == .medium)
+    check("Claude live relay waits briefly before attracting attention", store.approvalRequest(for: task) == request && !store.needsUserAttention(task) && store.waitingCount == 0 && store.presentation == .compact)
+    date.addTimeInterval(1.2)
+    store.refreshPresentation()
+    check("Claude live relay attracts attention after a continuous wait", store.approvalRequest(for: task) == request && store.needsUserAttention(task) && store.waitingCount == 1 && store.presentation == .medium)
     store.reviewApproval(for: task)
     check("Claude review selects exact pending request", store.reviewingApproval == request)
     let reload = TaskStore(now: { date })
@@ -45,5 +48,24 @@ func runClaudeApprovalStoreChecks(check: (String, Bool) -> Void, emit: (AgentEve
     store.respondToApproval(expired, decision: .allow)
     check("expired review cannot submit", store.submittedApprovals[expired.id] == nil && store.failedApprovals.contains(expired.taskID))
     ApprovalRelay.cleanup(expired.id)
+    store.clearAllTasks()
+
+    let claudeNotification = UUID()
+    date = Date()
+    func notification(_ sourceEvent: String, status: AgentTaskStatus) throws {
+        try emit(AgentEvent(type: "upsert", id: claudeNotification, agent: "Claude", status: status,
+                            requiresApproval: status == .waiting, createdAt: date, sourceEvent: sourceEvent))
+        store.consumeEvents()
+    }
+    try notification("UserPromptSubmit", status: .running)
+    date.addTimeInterval(11)
+    store.refreshPresentation()
+    try notification("Notification", status: .waiting)
+    check("Claude notification does not pulse before it settles", store.waitingCount == 0 && store.presentation == .compact)
+    date.addTimeInterval(2)
+    store.refreshPresentation()
+    check("Claude notification surfaces only after a continuous wait", store.waitingCount == 1 && store.presentation == .medium)
+    try notification("PostToolUse", status: .running)
+    check("Claude notification pulse clears when the tool continues", store.waitingCount == 0 && store.presentation == .compact)
     store.clearAllTasks()
 }

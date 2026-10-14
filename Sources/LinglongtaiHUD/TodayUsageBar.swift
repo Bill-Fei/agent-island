@@ -4,6 +4,7 @@ import SwiftUI
 /// Retained real turns today, shown as distribution rather than completion progress.
 struct TodayUsageBar: View {
     let usage: [AgentUsageCount]
+    var showsDuration = true
 
     private var total: Int { usage.reduce(0) { $0 + $1.count } }
 
@@ -44,13 +45,14 @@ struct TodayUsageBar: View {
                     }
                 }
                 Spacer(minLength: 0)
+                if showsDuration { AIWorkDurationRow() }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 10)
         .help("统计保留记录中今日有活动的轮次；色段表示各 Agent 占比，不是任务完成进度。")
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .contain)
         .accessibilityLabel(accessibilitySummary)
     }
 

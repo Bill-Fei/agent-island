@@ -69,8 +69,8 @@ final class TaskStore: ObservableObject {
     func approvalSurfaceText(for task: AgentTask) -> String? {
         guard task.status == .waiting else { return nil }
         if approvalRequest(for: task) != nil { return "岛内单次审批" }
-        if task.profile.kind == .claude, task.sourceEvent == "PermissionRequest" { return "请在 Claude Code 中确认" }
-        if task.profile.kind == .claude, task.sourceEvent == "Notification" { return "原应用正在等待确认" }
+        if task.profile.kind == .claude, task.sourceEvent == "PermissionRequest" { return "权限检查 · 无岛内操作" }
+        if task.profile.kind == .claude, task.sourceEvent == "Notification" { return "原应用通知 · 岛内仅观察" }
         return nil
     }
 
@@ -81,11 +81,11 @@ final class TaskStore: ObservableObject {
         if displayedStatus(for: task) == "结果未知" { return "未收到结束信号，无法确认结果" }
         if task.status == .waiting && task.sourceEvent == "PermissionRequest" {
             return task.profile.kind == .claude
-                ? "应用正在核对工具权限 · 请在 Claude Code 中确认"
+                ? "应用正在核对工具权限，尚未确认需要你操作；灵动岛不接管本次检查"
                 : "应用正在核对工具权限，灵动岛不接管审批"
         }
         if task.status == .waiting && task.sourceEvent == "Notification", task.profile.kind == .claude {
-            return "原应用正在等待确认 · 灵动岛仅同步状态"
+            return "收到原应用确认通知 · 灵动岛仅观察，无法核实原窗口是否仍需操作"
         }
         if task.sourceEvent == "PreToolUse",
            let step = task.toolSteps.filter({ $0.state == .running }).max(by: { $0.updatedAt < $1.updatedAt }) {
@@ -160,6 +160,13 @@ final class TaskStore: ObservableObject {
     private var eventPulseUntil = Date.distantPast
     private var mediumUntil = Date.distantPast
     private var highlightedTaskID: UUID?
+    private var attentionPulseTaskID: UUID?
+    private var claudeNotificationStarts: [UUID: Date] = [:]
+    private var surfacedClaudeNotifications: [UUID: Date] = [:]
+    private var approvalRequestStarts: [UUID: Date] = [:]
+    private var surfacedApprovalRequests: Set<UUID> = []
+    private static let notificationSettleDelay: TimeInterval = 2
+    private static let approvalSettleDelay: TimeInterval = 1.2
     @Published private(set) var calibrationPreview: Presentation?
     private var calibrationUntil = Date.distantPast
     private let now: () -> Date
@@ -447,6 +454,8 @@ final class TaskStore: ObservableObject {
             [
                 task.updatedAt.addingTimeInterval(-5),
                 task.updatedAt,
+                (claudeNotificationStarts[task.id] ?? task.updatedAt).addingTimeInterval(Self.notificationSettleDelay),
+                approvalRequestStarts.values.map { $0.addingTimeInterval(Self.approvalSettleDelay) }.min() ?? .distantFuture,
                 task.updatedAt.addingTimeInterval(120),
                 task.updatedAt.addingTimeInterval(DoubaoTrajectory.staleAfter),
                 task.updatedAt.addingTimeInterval(AgentActivityMotion.unresolvedLimit),
@@ -470,7 +479,12 @@ final class TaskStore: ObservableObject {
     func needsUserAttention(_ task: AgentTask) -> Bool {
         guard task.status == .waiting, task.sourceEvent != "AmbiguousTurn", isFresh(task) else { return false }
         if task.approvalRequestID != nil || task.sourceEvent == "PermissionRequest" {
-            return approvalRequest(for: task) != nil
+            guard let request = approvalRequest(for: task) else { return false }
+            let started = approvalRequestStarts[request.id] ?? task.updatedAt
+            return now().timeIntervalSince(started) >= Self.approvalSettleDelay
+        }
+        if task.profile.kind == .claude, task.sourceEvent == "Notification" {
+            return now().timeIntervalSince(claudeNotificationStarts[task.id] ?? task.updatedAt) >= Self.notificationSettleDelay
         }
         return true // Explicit provider notifications and custom waiting events.
     }
@@ -531,6 +545,7 @@ final class TaskStore: ObservableObject {
         if task.status == .waiting && !needsUserAttention(task) {
             if task.sourceEvent == "PermissionRequest" { return "权限检查中" }
             if let id = task.approvalRequestID, submittedApprovals[id] != nil { return "等待回执" }
+            if task.profile.kind == .claude, task.sourceEvent == "Notification", task.approvalRequestID == nil { return "确认通知观察中" }
             return task.approvalRequestID == nil ? "权限检查中" : "等待权限结果"
         }
         return task.statusLabel
@@ -1206,6 +1221,22 @@ final class TaskStore: ObservableObject {
                 task.approvalRequestID = event.approvalRequestID
                 tasks.append(task)
             }
+            if let current = tasks.first(where: { $0.id == id }), current.profile.kind == .claude,
+               current.status == .waiting, current.sourceEvent == "Notification" {
+                if claudeNotificationStarts[id] == nil { claudeNotificationStarts[id] = current.updatedAt }
+            } else {
+                claudeNotificationStarts.removeValue(forKey: id)
+                surfacedClaudeNotifications.removeValue(forKey: id)
+            }
+            if let current = tasks.first(where: { $0.id == id }),
+               let requestID = current.approvalRequestID,
+               current.status == .waiting,
+               approvalRequest(for: current) != nil {
+                if approvalRequestStarts[requestID] == nil { approvalRequestStarts[requestID] = current.updatedAt }
+            } else if let previousApproval {
+                approvalRequestStarts.removeValue(forKey: previousApproval)
+            }
+            invalidateTaskCache()
             if let current = tasks.first(where: { $0.id == id }) {
                 if [.completed, .failed, .cancelled].contains(current.status) {
                     ongoingTaskIDs.remove(id)
@@ -1231,12 +1262,19 @@ final class TaskStore: ObservableObject {
                 (event.approvalRequestID != nil && event.approvalRequestID != previousApproval) ||
                 (event.status != previousStatus && [.waiting, .completed, .failed, .cancelled].contains(event.status ?? .running))
             let permissionCheckOnly = event.sourceEvent == "PermissionRequest" && event.approvalRequestID == nil
-            if important && !permissionCheckOnly,
+            let settlingClaudeNotification = tasks.first(where: { $0.id == id }).map {
+                $0.profile.kind == .claude && $0.sourceEvent == "Notification" && !needsUserAttention($0)
+            } ?? false
+            let settlingApprovalRequest = tasks.first(where: { $0.id == id }).map {
+                $0.approvalRequestID != nil && !needsUserAttention($0)
+            } ?? false
+            if important && !permissionCheckOnly && !settlingClaudeNotification && !settlingApprovalRequest,
                tasks.first(where: { $0.id == id }).map({ isFresh($0) }) == true,
                let createdAt = event.createdAt, abs(now().timeIntervalSince(createdAt)) <= 120 {
                 mediumUntil = now().addingTimeInterval(10)
                 eventPulseUntil = mediumUntil
                 highlightedTaskID = id
+                attentionPulseTaskID = tasks.first(where: { $0.id == id }).map { needsUserAttention($0) } == true ? id : nil
             }
             if selectedTaskID == nil { selectedTaskID = id }
             let agentName = tasks.first(where: { $0.id == id })?.agent ?? "Agent"
@@ -1290,6 +1328,37 @@ final class TaskStore: ObservableObject {
         // Publish time-driven changes once at semantic boundaries, even in
         // manual sizing mode. Never publish a blind 0.8-second refresh tick.
         refreshTaskCacheIfNeeded()
+        // A resolved relay/prompt must not leave ten seconds of obsolete
+        // attention behind. Do not clear another task's start/end feedback.
+        if let id = attentionPulseTaskID, highlightedTaskID == id,
+           tasks.first(where: { $0.id == id }).map({ needsUserAttention($0) }) != true {
+            mediumUntil = .distantPast
+            eventPulseUntil = .distantPast
+            highlightedTaskID = nil
+            attentionPulseTaskID = nil
+        }
+        // Short-lived native notices often disappear before a user can open
+        // Claude. Mature a continuous wait once; duplicate notices do not
+        // restart this clock or repeatedly reopen the island.
+        for task in tasks where task.profile.kind == .claude && task.sourceEvent == "Notification" {
+            let start = claudeNotificationStarts[task.id] ?? task.updatedAt
+            guard needsUserAttention(task), task.approvalRequestID == nil,
+                  surfacedClaudeNotifications[task.id] != start else { continue }
+            surfacedClaudeNotifications[task.id] = start
+            mediumUntil = now().addingTimeInterval(10)
+            eventPulseUntil = mediumUntil
+            highlightedTaskID = task.id
+            attentionPulseTaskID = task.id
+        }
+        for task in tasks {
+            guard let request = approvalRequest(for: task), needsUserAttention(task),
+                  !surfacedApprovalRequests.contains(request.id) else { continue }
+            surfacedApprovalRequests.insert(request.id)
+            mediumUntil = now().addingTimeInterval(10)
+            eventPulseUntil = mediumUntil
+            highlightedTaskID = task.id
+            attentionPulseTaskID = task.id
+        }
         if statusSignatureCache == nil {
             statusSignatureCache = sortedTasks.map { "\($0.id):\(displayedStatus(for: $0))" }.joined(separator: "|") + ":\(waitingCount)"
         }
@@ -1309,7 +1378,8 @@ final class TaskStore: ObservableObject {
             reviewingApproval = nil
             interaction = IslandInteraction()
             if let current = tasks.first(where: { $0.id == request.taskID }),
-               current.status == .waiting, current.approvalRequestID == request.id {
+               current.status == .waiting, current.approvalRequestID == request.id,
+               now() >= request.expiresAt {
                 notice = "批准请求已过期或被处理，请在原应用核实"
                 failedApprovals.insert(request.taskID)
                 mediumUntil = now().addingTimeInterval(10)
