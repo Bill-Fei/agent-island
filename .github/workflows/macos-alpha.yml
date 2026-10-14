@@ -17,6 +17,26 @@ jobs:
         run: xcode-select -p
       - name: Build all products
         run: swift build --build-system swiftbuild -c debug
+      - name: Build release package
+        run: ./script/build_and_run.sh --release-package
+      - name: Create release DMG
+        run: |
+          set -euo pipefail
+          version="$(tr -d '\n' < VERSION)"
+          stage="$(mktemp -d)"
+          trap 'rm -rf "$stage"' EXIT
+          cp -R "dist/Release/Agent 灵动岛.app" "$stage/"
+          ln -s /Applications "$stage/Applications"
+          hdiutil create -volname "Agent 灵动岛" -srcfolder "$stage" -format UDZO -ov "dist/Release/Agent-Island-${version}.dmg"
+          shasum -a 256 "dist/Release/Agent-Island-${version}.dmg" > "dist/Release/Agent-Island-${version}.dmg.sha256"
+      - name: Upload release package
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-island-release
+          path: |
+            dist/Release/Agent-Island-*.dmg
+            dist/Release/Agent-Island-*.dmg.sha256
+          if-no-files-found: error
       - name: Run shared acceptance checks
         run: swift run --build-system swiftbuild linglongtai-acceptance
       - name: Check formatting and tracked-file hygiene
