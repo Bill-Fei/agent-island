@@ -17,10 +17,6 @@ struct AIWorkDurationRow: View {
                 Text("AI 工作 · \(duration.summary.label)")
                     .foregroundStyle(.white.opacity(0.68))
                     .monospacedDigit()
-                if duration.summary.incomplete {
-                    Image(systemName: "exclamationmark.circle")
-                        .foregroundStyle(.white.opacity(0.4))
-                }
                 Image(systemName: "info.circle")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.white.opacity(0.35))
