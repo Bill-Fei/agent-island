@@ -15,6 +15,7 @@ BUNDLE_ID="com.billfei.linglongtai.hud"
 MIN_SYSTEM_VERSION="13.0"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BUILD_SYSTEM="${ISLAND_BUILD_SYSTEM:-native}"
 DIST_DIR="$ROOT_DIR/dist"
 if [[ "$MODE" == "--release-package" || "$MODE" == "--release-verify" ]]; then
   DIST_DIR="$ROOT_DIR/dist/Release"
@@ -91,8 +92,8 @@ if [[ "$MODE" == "--package-validated" ]]; then
     fi
   done
 else
-swift build --build-system swiftbuild -c "$ISLAND_CONFIGURATION"
-ISLAND_BIN_DIR="$(swift build --build-system swiftbuild -c "$ISLAND_CONFIGURATION" --show-bin-path)"
+swift build --build-system "$BUILD_SYSTEM" -c "$ISLAND_CONFIGURATION"
+ISLAND_BIN_DIR="$(swift build --build-system "$BUILD_SYSTEM" -c "$ISLAND_CONFIGURATION" --show-bin-path)"
 BUILD_BINARY="$ISLAND_BIN_DIR/$APP_NAME"
 BUILD_HELPER="$ISLAND_BIN_DIR/linglongtaictl"
 fi
