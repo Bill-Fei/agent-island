@@ -11,12 +11,14 @@ permissions:
 jobs:
   build-and-check:
     runs-on: macos-14
+    env:
+      ISLAND_BUILD_SYSTEM: xcode
     steps:
       - uses: actions/checkout@v4
       - name: Select Swift toolchain
         run: xcode-select -p
       - name: Build all products
-        run: swift build --build-system native -c debug
+        run: swift build --build-system xcode -c debug
       - name: Build release package
         run: ./script/build_and_run.sh --release-package
       - name: Create release DMG
@@ -38,7 +40,7 @@ jobs:
             dist/Release/Agent-Island-*.dmg.sha256
           if-no-files-found: error
       - name: Run shared acceptance checks
-        run: swift run --build-system native linglongtai-acceptance
+        run: swift run --build-system xcode linglongtai-acceptance
       - name: Check formatting and tracked-file hygiene
         run: |
           git diff --check
