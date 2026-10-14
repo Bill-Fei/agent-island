@@ -70,7 +70,9 @@ public struct IslandMetrics: Equatable, Sendable {
             }
             let width = max(notchWidth + activityWidth, centerExclusionWidth + 32 + 156)
             return CGSize(width: width, height: notchHeight)
-        case .heavy: return CGSize(width: 680, height: safeTop + 416)
+        // Match the expanded content width to the 760 pt canvas while keeping
+        // 12 pt clearance at both display edges.
+        case .heavy: return CGSize(width: 736, height: safeTop + 416)
         }
     }
 }

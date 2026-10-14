@@ -5,7 +5,10 @@ import SwiftUI
 
 struct IslandLayout: Equatable {
     static let canvasSize = CGSize(width: 760, height: 540)
-    static let heavyContentSize = CGSize(width: 640, height: 400)
+    // The expanded panel uses the full safe canvas width (12 pt breathing room
+    // on each side). Keeping the content and shell widths equal prevents the
+    // detail pane from being clipped by an inner 640 pt frame.
+    static let heavyContentSize = CGSize(width: 736, height: 400)
     var notchWidth: CGFloat = 184
     var notchHeight: CGFloat = 32
     var physicalWidth: CGFloat = 184

@@ -429,7 +429,9 @@ private struct HUDExpandedContent: View {
                     Text(conversationTitles.title(for: task))
                         .font(HUDTypography.body)
                         .foregroundStyle(.white.opacity(0.72))
-                        .lineLimit(2)
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.top, 14)
                         .textSelection(.enabled)
                     HStack {
@@ -459,6 +461,8 @@ private struct HUDExpandedContent: View {
                                     HStack(alignment: .top) {
                                         Image(systemName: step.state == .failed ? "exclamationmark.circle" : "arrow.turn.down.right")
                                         Text(step.label + (step.state == .failed ? " · 返回错误" : " · 已返回"))
+                                            .fixedSize(horizontal: false, vertical: true)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
                                         Spacer()
                                         Text(step.updatedAt, style: .time).foregroundStyle(.secondary)
                                     }.font(HUDTypography.body)
