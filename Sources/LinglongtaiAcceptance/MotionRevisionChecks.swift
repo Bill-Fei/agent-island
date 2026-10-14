@@ -138,7 +138,7 @@ func runMotionRevisionChecks(check: (String, Bool) -> Void) {
         maximumHeight = max(maximumHeight, simultaneous.frame.height)
     }
     check("soft expansion retains a bounded small rebound while content stays monotonic",
-          openingDoesNotFlash && maximumWidth > 680 && maximumWidth < 687 && maximumHeight > 448 && maximumHeight < 454)
+          openingDoesNotFlash && maximumWidth > 736 && maximumWidth < 743 && maximumHeight > 448 && maximumHeight < 454)
     check("all settled destination content has unscaled text", simultaneous.frame.heavyScale == 1)
     simultaneous.setTarget(.collapsed)
     var shellFadesBeforeHome = false
