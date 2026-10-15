@@ -1,0 +1,111 @@
+# Publish a GitHub Release when a vX.Y.Z tag is pushed.
+#
+# Why this exists: the DMG used to be built by the macOS Alpha workflow as a plain
+# build artifact, which expires and needs a login to download. Attaching it to a
+# Release had to be done by hand, and a hand step that is easy to skip is how the
+# website ended up advertising one version while serving another.
+#
+# Release it:
+#   git tag v0.3.5 && git push origin v0.3.5
+#
+# The tag must match VERSION, or the job fails before building anything.
+
+name: Release
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to (re)publish, e.g. v0.3.4'
+        required: true
+
+permissions:
+  contents: write  # required to create the Release and upload assets
+
+jobs:
+  release:
+    runs-on: macos-14
+    env:
+      ISLAND_BUILD_SYSTEM: xcode
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Resolve and verify version
+        id: v
+        run: |
+          set -euo pipefail
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          version="$(tr -d '\n' < VERSION)"
+          # A tag that disagrees with VERSION is the exact mismatch this workflow exists
+          # to prevent. Fail loudly instead of shipping a mislabelled build.
+          if [ "$tag" != "v$version" ]; then
+            echo "::error::Tag $tag does not match VERSION $version. Bump VERSION or retag."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "dmg=Agent-Island-$version.dmg" >> "$GITHUB_OUTPUT"
+
+      - name: Build release package
+        run: ./script/build_and_run.sh --release-package
+
+      - name: Verify the built app
+        run: bash script/check_release.sh "dist/Release/Agent 灵动岛.app"
+
+      - name: Run acceptance checks
+        run: swift run --build-system xcode linglongtai-acceptance
+
+      - name: Create DMG
+        run: |
+          set -euo pipefail
+          version="${{ steps.v.outputs.version }}"
+          stage="$(mktemp -d)"
+          trap 'rm -rf "$stage"' EXIT
+          cp -R "dist/Release/Agent 灵动岛.app" "$stage/"
+          ln -s /Applications "$stage/Applications"
+          hdiutil create -volname "Agent 灵动岛" -srcfolder "$stage" -format UDZO -ov \
+            "dist/Release/Agent-Island-${version}.dmg"
+          hdiutil verify "dist/Release/Agent-Island-${version}.dmg"
+          cd dist/Release
+          shasum -a 256 "Agent-Island-${version}.dmg" > "Agent-Island-${version}.dmg.sha256"
+          cat "Agent-Island-${version}.dmg.sha256"
+
+      - name: Publish the Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: Agent 灵动岛 ${{ github.event.inputs.tag || github.ref_name }}
+          draft: false
+          # Earlier releases were published as full releases, so each new one takes the
+          # "Latest" badge and /releases/latest keeps resolving to the newest build.
+          prerelease: false
+          make_latest: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/Release/Agent-Island-${{ steps.v.outputs.version }}.dmg
+            dist/Release/Agent-Island-${{ steps.v.outputs.version }}.dmg.sha256
+          body: |
+            Alpha ${{ steps.v.outputs.version }}，适用于 Apple 芯片的 Mac，需要 macOS 13 或更高版本。
+
+            安装包由 GitHub Actions 从标签 `${{ github.event.inputs.tag || github.ref_name }}`
+            构建，`.sha256` 可用于校验。
+
+            本地 ad-hoc 签名，未经 Apple 公证：第一次打开时如果系统拦截，到
+            「系统设置 › 隐私与安全性」点「仍要打开」。
+
+      - name: Summary
+        run: |
+          {
+            echo "### 已发布 ${{ steps.v.outputs.dmg }}"
+            echo
+            echo '```'
+            cat "dist/Release/${{ steps.v.outputs.dmg }}.sha256"
+            echo '```'
+            echo
+            echo "网站仍需单独部署：把这个 .dmg 放进 \`dist/site-deploy/download/\`，"
+            echo "再运行 \`node script/publish_site_analytics.mjs --deploy\`。"
+          } >> "$GITHUB_STEP_SUMMARY"
