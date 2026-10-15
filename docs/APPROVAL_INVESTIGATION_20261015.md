@@ -58,3 +58,7 @@
 - `script/check_store.sh` 补编 `ClaudeApprovalAcceptance.swift`（此前无法编译）。
 
 **检查**：relay 81 项、TaskStore 243 项、hook bridge、acceptance 558 项全部通过，均为隔离 fixture。终端 CLI 的真实批准往返、Desktop 不再误弹，目前都**未验证**，需在安装新包后用真实事件确认。
+
+## 2026-10-16 修订：Desktop 恢复岛内快速审批
+
+Bill 依赖岛内审批来跨多个对话处理请求，所以不再关闭 Desktop 的岛内审批。改为：SDK 宿主（entrypoint 不是 `cli`）发布的请求带 `waitsForProviderPrompt=true`，HUD 收到同一任务的 Notification（原应用真实弹卡约 6 秒后触发）后才显示按钮。自动放行的工具不会弹卡，也就不会误弹。Desktop 是否采纳 hook 的决定仍**未验证**，需要用 approval-trace 的 `decision-output` 时间与 PostToolUse 及原应用卡片状态对照确认。

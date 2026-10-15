@@ -142,9 +142,16 @@ with tempfile.TemporaryDirectory(prefix="island-approval-") as temporary:
     for label, entrypoint in [("desktop-host", "claude-desktop-3p"), ("vscode-host", "claude-vscode"), ("sdk-host", "sdk-ts")]:
         root = base / label
         proc = start(root, payload(provider="claude"), entrypoint=entrypoint)
-        check(label + " never publishes an island approval", finish(proc) == b"" and not list((root / "pending-approvals").glob("*.json")))
-        event = json.loads((root / "events.jsonl").read_text().splitlines()[-1])
-        check(label + " still reports the permission check for observation", event.get("sourceEvent") == "PermissionRequest" and "approvalRequestID" not in event)
+        _, request = pending(root)
+        check(label + " request waits for the provider's own prompt", request.get("waitsForProviderPrompt") is True)
+        approve_pending(root)
+        check(label + " still delivers the one-shot decision", json.loads(finish(proc))["hookSpecificOutput"]["decision"]["behavior"] == "allow")
+    root = base / "cli-host"
+    proc = start(root, payload(provider="claude"), entrypoint="cli")
+    _, request = pending(root)
+    check("terminal CLI request is actionable immediately", "waitsForProviderPrompt" not in request)
+    approve_pending(root)
+    finish(proc)
     root = base / "unset-entrypoint"
     proc = start(root, payload(provider="claude"), entrypoint=None)
     approve_pending(root)

@@ -47,6 +47,9 @@ final class TaskStore: ObservableObject {
               let id = current.approvalRequestID else { return nil }
         guard let request = ApprovalRelay.pending(id, taskID: task.id, now: now()),
               request.provider == task.profile.kind else { return nil }
+        // SDK hosts check permissions they then auto-approve; only their own
+        // prompt notification proves there is a decision waiting for the user.
+        if request.waitsForProviderPrompt == true, current.sourceEvent != "Notification" { return nil }
         return request
     }
 

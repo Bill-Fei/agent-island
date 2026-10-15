@@ -242,7 +242,6 @@ struct LinglongtaiCtl {
             }
             HookHealth.record(provider: kind, parsed: mapped != nil, directory: LinglongtaiPaths.applicationSupport)
             if args.contains("--approval-relay"), ApprovalRelay.supports(AgentKind.resolve(provider)),
-               ApprovalRelay.hostHonorsHookDecision(),
                ApprovalRelay.hasActiveHUD, events.count == 1,
                let request = ApprovalRelay.makeRequest(payload: input, event: events[0]),
                ApprovalRelay.publish(request) {

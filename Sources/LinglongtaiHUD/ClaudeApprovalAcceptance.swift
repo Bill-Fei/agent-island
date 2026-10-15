@@ -7,10 +7,13 @@ func runClaudeApprovalStoreChecks(check: (String, Bool) -> Void, emit: (AgentEve
     let store = TaskStore(now: { date })
     store.clearAllTasks()
     let payload = try JSONSerialization.data(withJSONObject: ["hook_event_name": "PermissionRequest", "tool_name": "Bash", "cwd": "/tmp/approval-store-fixture", "tool_input": ["command": "printf harmless-fixture"]])
-    func publish() throws -> ApprovalRelay.Request? {
+    func publish(desktopHost: Bool = false) throws -> ApprovalRelay.Request? {
         var event = AgentEvent(type: "upsert", id: UUID(), agent: "Claude", status: .waiting,
                                requiresApproval: true, createdAt: date, sourceEvent: "PermissionRequest")
-        guard let request = ApprovalRelay.makeRequest(payload: payload, event: event, now: date), ApprovalRelay.publish(request) else { return nil }
+        // Pin the host explicitly; the checks must not depend on the caller's environment.
+        guard var request = ApprovalRelay.makeRequest(payload: payload, event: event, now: date) else { return nil }
+        request.waitsForProviderPrompt = desktopHost ? true : nil
+        guard ApprovalRelay.publish(request) else { return nil }
         event.approvalRequestID = request.id
         try emit(event)
         store.consumeEvents()
@@ -48,6 +51,23 @@ func runClaudeApprovalStoreChecks(check: (String, Bool) -> Void, emit: (AgentEve
     store.respondToApproval(expired, decision: .allow)
     check("expired review cannot submit", store.submittedApprovals[expired.id] == nil && store.failedApprovals.contains(expired.taskID))
     ApprovalRelay.cleanup(expired.id)
+    store.clearAllTasks()
+    date = Date()
+    guard let desktop = try publish(desktopHost: true), let desktopTask = store.tasks.first(where: { $0.id == desktop.taskID }) else {
+        check("Claude Desktop fixture publishes", false); return
+    }
+    date.addTimeInterval(1.2)
+    store.refreshPresentation()
+    check("Desktop permission check alone never pops the island", store.approvalRequest(for: desktopTask) == nil && !store.needsUserAttention(desktopTask) && store.waitingCount == 0)
+    date.addTimeInterval(4.8)
+    try emit(AgentEvent(type: "upsert", id: desktop.taskID, agent: "Claude", status: .waiting, requiresApproval: true, createdAt: date, sourceEvent: "Notification"))
+    store.consumeEvents()
+    let prompted = store.tasks.first(where: { $0.id == desktop.taskID })
+    check("Desktop prompt notification makes the same request actionable", prompted.flatMap { store.approvalRequest(for: $0) } == desktop)
+    date.addTimeInterval(1.2)
+    store.refreshPresentation()
+    check("Desktop prompt shows the island quick action", prompted.map { store.needsUserAttention($0) } == true && store.approvalTask?.id == desktop.taskID)
+    ApprovalRelay.cleanup(desktop.id)
     store.clearAllTasks()
 
     let claudeNotification = UUID()

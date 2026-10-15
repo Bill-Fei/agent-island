@@ -8,13 +8,13 @@ public enum ApprovalRelay {
     /// remain observation-only, and no standing permissions are returned.
     public static func supports(_ provider: AgentKind) -> Bool { provider == .claude }
 
-    /// Only the terminal CLI lets a PermissionRequest hook answer the prompt.
-    /// SDK hosts such as Claude Desktop (`claude-desktop*`) still decide in
-    /// their own UI: a relay there pops for auto-approved tools and its
-    /// decision is not applied. Unknown hosts stay observation-only.
-    public static func hostHonorsHookDecision(environment: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
-        guard let entrypoint = environment["CLAUDE_CODE_ENTRYPOINT"], !entrypoint.isEmpty else { return true }
-        return entrypoint == "cli"
+    /// The terminal CLI asks only when it will show a prompt. SDK hosts such as
+    /// Claude Desktop (`claude-desktop*`) run this hook for every permission
+    /// check, including tools they then auto-approve in their own UI. There the
+    /// island must wait for the provider's real prompt (its Notification).
+    public static func hostShowsOwnPrompt(environment: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+        guard let entrypoint = environment["CLAUDE_CODE_ENTRYPOINT"], !entrypoint.isEmpty else { return false }
+        return entrypoint != "cli"
     }
 
     public struct Request: Codable, Identifiable, Equatable, Sendable {
@@ -26,6 +26,8 @@ public enum ApprovalRelay {
         public var context: String
         public var expiresAt: Date
         public var processID: Int32
+        /// Set for SDK hosts: actionable only after the provider's prompt appears.
+        public var waitsForProviderPrompt: Bool?
     }
     public enum Decision: String, Codable { case allow, deny }
     private struct Reply: Codable { var id: UUID; var decision: Decision }
@@ -53,7 +55,8 @@ public enum ApprovalRelay {
         guard context.range(of: sensitive, options: .regularExpression) == nil else { return nil }
         return Request(id: UUID(), taskID: taskID, provider: provider,
                        tool: ToolStep.label(for: tool), context: context,
-                       expiresAt: now.addingTimeInterval(45), processID: getpid())
+                       expiresAt: now.addingTimeInterval(45), processID: getpid(),
+                       waitsForProviderPrompt: hostShowsOwnPrompt() ? true : nil)
     }
 
     public static func publish(_ request: Request) -> Bool {
