@@ -55,11 +55,11 @@ final class AlphaIntegrationSetup: ObservableObject {
         guard !busy, !selected.isEmpty else { return }
         let providers = IntegrationConfiguration.providers.filter { selected.contains($0) }
         let alert = NSAlert()
-        alert.messageText = uninstall ? "移除所选接入？" : "安装所选状态观察器？"
+        alert.messageText = uninstall ? L("移除所选接入？") : L("安装所选状态观察器？")
         alert.informativeText = providers.compactMap { IntegrationConfiguration.relativePath(for: $0) }.map { "~/" + $0 }.joined(separator: "\n")
-            + "\n\n以上配置先备份再合并。接入使用固定桥接入口；后续灵动岛升级会原子更新桥接，保留旧版用于回退，已运行的回调不中断。保留其他设置和已有审批选择，不新增信任或审批权限，不启动任务。卸载不删除历史。安装前请暂时关闭会编辑这些配置的原应用。"
-        alert.addButton(withTitle: "取消")
-        alert.addButton(withTitle: uninstall ? "备份并移除" : "备份并安装")
+            + "\n\n" + L("以上配置先备份再合并。接入使用固定桥接入口；后续灵动岛升级会原子更新桥接，保留旧版用于回退，已运行的回调不中断。保留其他设置和已有审批选择，不新增信任或审批权限，不启动任务。卸载不删除历史。安装前请暂时关闭会编辑这些配置的原应用。")
+        alert.addButton(withTitle: L("取消"))
+        alert.addButton(withTitle: uninstall ? L("备份并移除") : L("备份并安装"))
         guard alert.runModal() == .alertSecondButtonReturn else { return }
         busy = true
         let home = home, helper = helper
@@ -69,7 +69,7 @@ final class AlphaIntegrationSetup: ObservableObject {
                 do {
                     try Self.apply(providers, uninstall: uninstall, home: home, helper: helper, bundled: bundled)
                     return uninstall ? "已移除所选观察器，历史保留。" : "已安装，尚未证明连接成功。请用真实任务验证；Codex 在 /hooks 审阅信任。"
-                } catch { return "未完成：\(error.localizedDescription) 请重新检查；不会自动重试。" }
+                } catch { return LF("未完成：%@ 请重新检查；不会自动重试。", L(error.localizedDescription)) }
             }.value
             message = result
             busy = false

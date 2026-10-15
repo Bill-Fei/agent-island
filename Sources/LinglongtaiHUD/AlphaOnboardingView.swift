@@ -41,10 +41,10 @@ struct AlphaOnboardingView: View {
                         Toggle(isOn: Binding(get: { setup.selected.contains(kind) }, set: { value in
                             if value { setup.selected.insert(kind) } else { setup.selected.remove(kind) }
                         })) {
-                            Text(kind == .claude ? "Claude Code（不是 Claude Chat）" : kind.displayName)
+                            Text(kind == .claude ? L("Claude Code（不是 Claude Chat）") : L(kind.displayName))
                         }
                         Spacer()
-                        Text(setup.diagnostics[kind] ?? "正在检查接入")
+                        Text(L(setup.diagnostics[kind] ?? "正在检查接入"))
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
@@ -56,7 +56,7 @@ struct AlphaOnboardingView: View {
                     Button("移除所选接入") { setup.confirm(uninstall: true) }
                         .disabled(setup.selected.isEmpty || setup.busy)
                 }
-                Text(setup.message).font(.callout).foregroundStyle(.secondary)
+                Text(L(setup.message)).font(.callout).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
             }.padding(10)
         }
@@ -69,7 +69,7 @@ struct AlphaOnboardingView: View {
                     .font(.callout).foregroundStyle(.secondary)
                 ForEach(IntegrationConfiguration.providers, id: \.self) { kind in
                     HStack {
-                        Text(kind == .claude ? "Claude Code" : kind.displayName)
+                        Text(kind == .claude ? "Claude Code" : L(kind.displayName))
                         Spacer()
                         if let date = store.connections[kind.rawValue] {
                             Text("最近收到 ").foregroundStyle(.secondary)
@@ -78,7 +78,7 @@ struct AlphaOnboardingView: View {
                         } else { Text("尚未收到真实回调").foregroundStyle(.secondary) }
                     }.font(.callout)
                     if store.tasks.contains(where: { $0.profile.kind == kind && $0.sourceEvent == "AmbiguousTurn" && [.running, .waiting].contains($0.status) }) {
-                        Text("\(kind.displayName)：收到回调，但轮次无法识别；不视为正常执行。请在下一轮请求后核实。")
+                        Text("\(L(kind.displayName))：收到回调，但轮次无法识别；不视为正常执行。请在下一轮请求后核实。")
                             .font(.caption).foregroundStyle(.orange)
                     }
                 }
@@ -99,7 +99,7 @@ final class AlphaOnboardingController {
         if window == nil {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 700, height: 680),
                                   styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-            window.title = "Agent 灵动岛 · 接入与验证"
+            window.title = L("Agent 灵动岛 · 接入与验证")
             window.contentView = NSHostingView(rootView: AlphaOnboardingView(store: store))
             window.isReleasedWhenClosed = false
             window.center()

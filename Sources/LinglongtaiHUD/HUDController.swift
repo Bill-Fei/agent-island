@@ -77,7 +77,7 @@ final class HUDController: NSObject {
             contentRect: NSRect(origin: .zero, size: IslandLayout.canvasSize),
             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false
         )
-        panel.title = "Agent 灵动岛 · 任务"
+        panel.title = L("Agent 灵动岛 · 任务")
         panel.level = .statusBar
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         panel.backgroundColor = .clear
@@ -161,12 +161,12 @@ final class HUDController: NSObject {
                 let point = CGPoint(x: mouse.x - self.panel.frame.minX, y: self.panel.frame.maxY - mouse.y)
                 self.store.endContextMenu(pointerInside: self.surface.contains(point))
             }
-            let menu = NSMenu(title: "灵动岛")
-            let settings = NSMenuItem(title: "设置…", action: #selector(self.openSettings), keyEquivalent: "")
+            let menu = NSMenu(title: L("灵动岛"))
+            let settings = NSMenuItem(title: L("设置…"), action: #selector(self.openSettings), keyEquivalent: "")
             settings.target = self
             menu.addItem(settings)
             menu.addItem(.separator())
-            let quit = NSMenuItem(title: "退出灵动岛", action: #selector(self.exitIsland), keyEquivalent: "")
+            let quit = NSMenuItem(title: L("退出灵动岛"), action: #selector(self.exitIsland), keyEquivalent: "")
             quit.target = self
             menu.addItem(quit)
             NSMenu.popUpContextMenu(menu, with: event, for: self.hostingView)
@@ -325,7 +325,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         return nil
                     } catch { return error.localizedDescription }
                 }.value
-                if let failure { TaskStore.shared.notice = "接入升级未完成：\(failure) 请打开接入与验证。" }
+                if let failure { TaskStore.shared.notice = LF("接入升级未完成：%@ 请打开接入与验证。", failure) }
             }
             onboarding = AlphaOnboardingController(store: TaskStore.shared)
             if !UserDefaults.standard.bool(forKey: "alpha.hasSeenSetup") {
@@ -346,28 +346,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // 24pt gives it the same visual weight as neighboring menu-bar apps.
             appIcon.size = NSSize(width: 24, height: 24)
             appIcon.isTemplate = false
-            appIcon.accessibilityDescription = "Agent 灵动岛"
+            appIcon.accessibilityDescription = L("Agent 灵动岛")
             item.button?.image = appIcon
         } else {
-            item.button?.image = NSImage(systemSymbolName: "circle.dashed", accessibilityDescription: "Agent 灵动岛")
+            item.button?.image = NSImage(systemSymbolName: "circle.dashed", accessibilityDescription: L("Agent 灵动岛"))
         }
-        item.button?.toolTip = "Agent 灵动岛 · 你的 Agent 管家"
+        item.button?.toolTip = L("Agent 灵动岛 · 你的 Agent 管家")
 
         let menu = NSMenu()
-        let setup = NSMenuItem(title: "接入与验证…", action: #selector(showIntegrationSetup), keyEquivalent: "")
+        let setup = NSMenuItem(title: L("接入与验证…"), action: #selector(showIntegrationSetup), keyEquivalent: "")
         setup.target = self
         menu.addItem(setup)
-        let details = NSMenuItem(title: "查看任务", action: #selector(showTasks), keyEquivalent: "")
+        let details = NSMenuItem(title: L("查看任务"), action: #selector(showTasks), keyEquivalent: "")
         details.target = self
         menu.addItem(details)
-        let toggle = NSMenuItem(title: "显示 / 隐藏 Agent 灵动岛", action: #selector(toggleHUD), keyEquivalent: "")
+        let toggle = NSMenuItem(title: L("显示 / 隐藏 Agent 灵动岛"), action: #selector(toggleHUD), keyEquivalent: "")
         toggle.target = self
         menu.addItem(toggle)
-        let settings = NSMenuItem(title: "Agent 灵动岛设置…", action: #selector(showSettings), keyEquivalent: ",")
+        let settings = NSMenuItem(title: L("Agent 灵动岛设置…"), action: #selector(showSettings), keyEquivalent: ",")
         settings.target = self
         menu.addItem(settings)
         menu.addItem(.separator())
-        let quit = NSMenuItem(title: "退出 Agent 灵动岛", action: #selector(quitApp), keyEquivalent: "q")
+        let quit = NSMenuItem(title: L("退出 Agent 灵动岛"), action: #selector(quitApp), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
         item.menu = menu
