@@ -94,3 +94,20 @@ for (const script of ['publish_site.sh', 'publish_site_analytics.mjs']) {
   assert.ok(src.includes('../download/') || src.includes("['en/index.html', '../']"), `${script} does not point /en/ at ../download/`);
 }
 console.log('Site language tests passed: page tagging, language clicks, publish lists.');
+
+// Stats API: the recent-visits breakdown keeps country, device, source and page together.
+{
+  const statRows = [];
+  const statEnv = { STATS_TOKEN: 't', ANALYTICS_DB: {
+    prepare: sql => ({ bind: (...values) => ({ sql, values }) }),
+    batch: async statements => { statRows.push(...statements); return statements.map((s, i) => ({ results: i === 12
+      ? [{day: '2026-10-15', country: 'US', device: 'desktop', source: 'news.ycombinator.com', page: 'en', c: 1}] : [{c: 0}] })); }
+  }};
+  const res = await worker.fetch(new Request('https://agent-island.pages.dev/api/analytics/stats?token=t'), statEnv, ctx);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.deepEqual(body.recent[0], {day: '2026-10-15', country: 'US', device: 'desktop', source: 'news.ycombinator.com', page: 'en', c: 1});
+  assert.match(statRows[12].sql, /GROUP BY day, country, device, source, target/);
+  assert.equal((await worker.fetch(new Request('https://agent-island.pages.dev/api/analytics/stats?token=wrong'), statEnv, ctx)).status, 401);
+}
+console.log('Site stats tests passed: recent-visits breakdown, token check.');

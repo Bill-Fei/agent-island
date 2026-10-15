@@ -85,6 +85,19 @@ h2.title{font-size:30px;font-weight:800;letter-spacing:-.02em;margin:0 4px 8px;l
 .list-row .c{width:38px;text-align:right;font-size:14px;font-weight:750;font-variant-numeric:tabular-nums;flex:none}
 @keyframes grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+
+/* ===== 访问明细表 ===== */
+.visits-card{padding:6px 18px}
+.visits{width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums}
+.visits th{text-align:left;font-size:10.5px;font-weight:600;color:var(--dim);padding:10px 8px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+.visits td{padding:10px 8px;border-bottom:1px solid #141b18;color:var(--text);white-space:nowrap}
+.visits tr:last-child td{border-bottom:0}
+.visits .num{text-align:right;font-weight:700}
+.visits .day{color:var(--dim)}
+.visits .site{color:var(--accent);font-weight:600}
+.visits .muted{color:var(--dim)}
+.visits-empty{color:#56605c;font-size:12px;text-align:center;padding:28px 0}
+.visits-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
 .engagement-note{font-size:11px;color:var(--dim);line-height:1.65;margin:-5px 4px 14px}
 .engagement-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:14px;margin-bottom:14px}
 
@@ -146,6 +159,9 @@ h2.title{font-size:30px;font-weight:800;letter-spacing:-.02em;margin:0 4px 8px;l
   <div class="chart-card">
     <div class="hbox loading" id="countries">加载中…</div>
   </div>
+
+  <div class="section-title">最近两天访问明细 <span class="hint">国家 × 设备 × 来源一起看 · 按 UTC 日期</span></div>
+  <div class="chart-card visits-card"><div class="visits-wrap" id="recent"><div class="visits-empty">加载中…</div></div></div>
 
   <div class="section-title">点击行为 <span class="hint">主要交互动作</span></div>
   <div class="chart-card">
@@ -224,7 +240,9 @@ h2.title{font-size:30px;font-weight:800;letter-spacing:-.02em;margin:0 4px 8px;l
     devices:[{device:'mobile',c:118},{device:'desktop',c:68}],
     sources:[{source:'direct',c:96},{source:'social',c:52},{source:'search',c:38}],
     countries:[{country:'CN',c:142},{country:'US',c:21},{country:'JP',c:8},{country:'SG',c:6},{country:'NL',c:5},{country:'DE',c:4}],
-    pages:[{page:'',c:131},{page:'en',c:55}]
+    pages:[{page:'',c:131},{page:'en',c:55}],
+    recent:[{day:'2026-10-12',country:'US',device:'desktop',source:'news.ycombinator.com',page:'en',c:3},{day:'2026-10-12',country:'CN',device:'mobile',source:'direct',page:'',c:2},
+      {day:'2026-10-11',country:'US',device:'desktop',source:'social',page:'',c:1},{day:'2026-10-11',country:'JP',device:'desktop',source:'github.com',page:'en',c:1}]
     ,engagement:[{metric:'visible_time',bucket:'0_9s',c:12},{metric:'visible_time',bucket:'10_29s',c:28},{metric:'visible_time',bucket:'30_59s',c:19},{metric:'visible_time',bucket:'60s_plus',c:11},{metric:'scroll_depth',bucket:'25',c:31},{metric:'scroll_depth',bucket:'50',c:20},{metric:'scroll_depth',bucket:'75',c:13},{metric:'scroll_depth',bucket:'100',c:6},{metric:'film_complete',bucket:'complete',c:5}]
   };
 
@@ -320,6 +338,20 @@ h2.title{font-size:30px;font-weight:800;letter-spacing:-.02em;margin:0 4px 8px;l
     renderHBar($('#filmCompletion'), engagementRows(j,'film_complete').map(r=>({...r,target:ENGAGEMENT_CN[r.target]||r.target})), '#e8b080');
   }
 
+  // 访问明细：每行是同一天、同一国家、设备、来源、页面的访问次数汇总，不是单个访客。
+  function renderRecent(rows){
+    const el=$('#recent');
+    if(!rows||!rows.length){ el.innerHTML='<div class="visits-empty">最近两天还没有访问</div>'; return; }
+    const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    const body=rows.map(r=>{
+      const known=SOURCE_CN[r.source];
+      const src=known ? `<span class="muted">${known}</span>` : `<span class="site">${esc(r.source)}</span>`;
+      return `<tr><td class="day">${esc(r.day.slice(5).replace('-','/'))}</td><td>${esc(COUNTRY_CN[r.country]||r.country)}</td>`+
+        `<td>${esc(DEVICE_CN[r.device]||r.device)}</td><td>${src}</td><td class="muted">${esc(PAGE_CN[r.page]??r.page)}</td><td class="num">${r.c}</td></tr>`;
+    }).join('');
+    el.innerHTML='<table class="visits"><thead><tr><th>日期</th><th>国家/地区</th><th>设备</th><th>来源</th><th>页面</th><th class="num">次数</th></tr></thead><tbody>'+body+'</tbody></table>';
+  }
+
   function fmtBJ(iso){
     const d=new Date(iso);
     const bj=new Date(d.getTime()+8*3600*1000);
@@ -339,6 +371,7 @@ h2.title{font-size:30px;font-weight:800;letter-spacing:-.02em;margin:0 4px 8px;l
     $('#updated2').textContent = fmtBJ(j.generated_at);
     renderTrend(j.daily_pageviews, j.daily_downloads);
     renderHBar($('#countries'), j.countries, '#e8b080');
+    renderRecent(j.recent);
     renderHBar($('#clicks'), j.clicks, '#79f2b5');
     renderDonut($('#devices'), j.devices);
     renderDonut($('#sources'), j.sources);

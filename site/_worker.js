@@ -70,6 +70,11 @@ export default {
           env.ANALYTICS_DB.prepare(`SELECT source, SUM(count) AS c FROM daily_metrics WHERE event='page_view' AND traffic='visitor' GROUP BY source ORDER BY c DESC`).bind()
           ,env.ANALYTICS_DB.prepare(`SELECT metric,bucket,SUM(count) AS c FROM engagement_metrics WHERE traffic='visitor' AND day>=? GROUP BY metric,bucket ORDER BY metric,bucket`).bind(start)
           ,env.ANALYTICS_DB.prepare(`SELECT target AS page, SUM(count) AS c FROM daily_metrics WHERE event='page_view' AND traffic='visitor' GROUP BY target ORDER BY c DESC`).bind()
+          // The dimensions are already stored together per row; the charts above just split them.
+          // Listing them side by side for the last two days answers "where did that US visit come from".
+          ,env.ANALYTICS_DB.prepare(`SELECT day, country, device, source, target AS page, SUM(count) AS c FROM daily_metrics
+              WHERE event='page_view' AND traffic='visitor' AND day>=? GROUP BY day, country, device, source, target
+              ORDER BY day DESC, c DESC LIMIT 60`).bind(new Date(Date.now() - 86400000).toISOString().slice(0, 10))
         ]);
       } catch { return reply(503); }
       const val = (i) => rows[i].results?.[0]?.c ?? 0;
@@ -88,7 +93,8 @@ export default {
         countries: rows[8].results || [],
         sources: rows[9].results || [],
         engagement: rows[10].results || [],
-        pages: rows[11].results || []
+        pages: rows[11].results || [],
+        recent: rows[12].results || []
       }), { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
     }
     if (url.pathname === '/api/analytics') {
