@@ -1,7 +1,10 @@
 // Pages advanced-mode worker: assets + first-party aggregate analytics.
 const TARGETS = new Set(['download_section', 'download_menu', 'download_hero', 'download_mirror',
-  'film_play', 'source', 'island_demo', 'film', 'states', 'privacy', 'agents', 'top']);
+  'download_blocked', 'film_play', 'source', 'island_demo', 'film', 'states', 'privacy', 'agents', 'top']);
 const SOURCES = new Set(['direct', 'search', 'social', 'other']);
+const ENGAGEMENT = new Set(['visible_time', 'scroll_depth', 'film_complete']);
+const VISIBLE_BUCKETS = new Set(['0_9s', '10_29s', '30_59s', '60s_plus']);
+const SCROLL_BUCKETS = new Set(['25', '50', '75', '100']);
 const privateHeaders = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' };
 const reply = status => new Response(null, { status, headers: privateHeaders });
 function excluded(request) {
@@ -28,6 +31,17 @@ async function record(env, request, event, target, source, test) {
     env.ANALYTICS_DB.prepare('DELETE FROM daily_metrics WHERE day < ?').bind(cutoff)
   ]);
 }
+async function recordEngagement(env, request, metric, bucket, test) {
+  if (!env.ANALYTICS_DB) throw new Error('Analytics binding missing');
+  const day = new Date().toISOString().slice(0, 10);
+  const cutoff = new Date(Date.now() - 89 * 86400000).toISOString().slice(0, 10);
+  await env.ANALYTICS_DB.batch([
+    env.ANALYTICS_DB.prepare(`INSERT INTO engagement_metrics(day,metric,bucket,traffic,count)
+      VALUES(?,?,?,?,1) ON CONFLICT(day,metric,bucket,traffic)
+      DO UPDATE SET count=count+1`).bind(day, metric, bucket, test ? 'test' : 'visitor'),
+    env.ANALYTICS_DB.prepare('DELETE FROM engagement_metrics WHERE day < ?').bind(cutoff)
+  ]);
+}
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -51,6 +65,7 @@ export default {
           env.ANALYTICS_DB.prepare(`SELECT device, SUM(count) AS c FROM daily_metrics WHERE event='page_view' AND traffic='visitor' GROUP BY device ORDER BY c DESC`).bind(),
           env.ANALYTICS_DB.prepare(`SELECT country, SUM(count) AS c FROM daily_metrics WHERE event='page_view' AND traffic='visitor' GROUP BY country ORDER BY c DESC LIMIT 10`).bind(),
           env.ANALYTICS_DB.prepare(`SELECT source, SUM(count) AS c FROM daily_metrics WHERE event='page_view' AND traffic='visitor' GROUP BY source ORDER BY c DESC`).bind()
+          ,env.ANALYTICS_DB.prepare(`SELECT metric,bucket,SUM(count) AS c FROM engagement_metrics WHERE traffic='visitor' AND day>=? GROUP BY metric,bucket ORDER BY metric,bucket`).bind(start)
         ]);
       } catch { return reply(503); }
       const val = (i) => rows[i].results?.[0]?.c ?? 0;
@@ -67,7 +82,8 @@ export default {
         clicks: rows[6].results || [],
         devices: rows[7].results || [],
         countries: rows[8].results || [],
-        sources: rows[9].results || []
+        sources: rows[9].results || [],
+        engagement: rows[10].results || []
       }), { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
     }
     if (url.pathname === '/api/analytics') {
@@ -94,9 +110,17 @@ export default {
         for (const part of chunks) { bytes.set(part, offset); offset += part.byteLength; }
         data = JSON.parse(new TextDecoder().decode(bytes));
       } catch { return reply(400); }
-      if (!data || !['page_view', 'click'].includes(data.event)) return reply(400);
+      if (!data || !['page_view', 'click', ...ENGAGEMENT].includes(data.event)) return reply(400);
+      if (typeof data.source !== 'string' || data.source.length < 1 || data.source.length > 120
+        || !/^[A-Za-z0-9.\-_]+$/.test(data.source) || typeof data.test !== 'boolean') return reply(400);
       if (data.event === 'click' && !TARGETS.has(data.target)) return reply(400);
-      if (!SOURCES.has(data.source) || typeof data.test !== 'boolean') return reply(400);
+      if (ENGAGEMENT.has(data.event)) {
+        const bucket = typeof data.bucket === 'string' ? data.bucket : '';
+        const valid = data.event === 'visible_time' ? VISIBLE_BUCKETS : data.event === 'scroll_depth' ? SCROLL_BUCKETS : new Set(['complete']);
+        if (!valid.has(bucket)) return reply(400);
+        try { await recordEngagement(env, request, data.event, bucket, data.test); return reply(204); }
+        catch { return reply(503); }
+      }
       try {
         await record(env, request, data.event, data.event === 'click' ? data.target : '', data.source, data.test);
         return reply(204);

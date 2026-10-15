@@ -34,8 +34,13 @@ echo "==> 3/4 Assembling the site"
 rm -rf "$OUT"
 mkdir -p "$OUT/media/icons" "$OUT/download"
 cp "$ROOT_DIR/site/index.html" "$ROOT_DIR/site/style.css" "$ROOT_DIR/site/island.js" "$ROOT_DIR/site/analytics.js" "$ROOT_DIR/site/_worker.js" "$ROOT_DIR/site/_routes.json" "$ROOT_DIR/site/dashboard.html" "$OUT/"
+# dashboard.html loads echarts from here, not a CDN: jsDelivr was unreachable on some
+# networks and left every chart blank. Without this copy the dashboard ships broken.
+cp "$ROOT_DIR/site/echarts.min.js" "$OUT/"
 # Only files the page actually uses; the unused state-*.jpg stay private.
-for f in app-icon.png favicon.png film-poster.jpg film.mp4 desktop-wallpaper.svg; do
+# og-card.jpg is referenced by absolute URL from the og:image/twitter:image tags, so it must
+# ship even though nothing on the page loads it.
+for f in app-icon.png favicon.png film-poster.jpg film.mp4 desktop-wallpaper.svg og-card.jpg; do
   cp "$ROOT_DIR/site/media/$f" "$OUT/media/"
 done
 cp "$ROOT_DIR/site/media/icons/"*.png "$OUT/media/icons/"

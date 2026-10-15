@@ -9,7 +9,7 @@ const version = fs.readFileSync(path.join(root, 'VERSION'), 'utf8').trim();
 if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error('Invalid release version');
 const dmg = path.join(out, 'download', `Agent-Island-${version}.dmg`);
 if (!fs.existsSync(dmg)) throw new Error('Published installer missing; do not rebuild implicitly');
-for (const file of ['index.html', 'style.css', 'island.js', 'analytics.js', '_worker.js', '_routes.json']) {
+for (const file of ['index.html', 'style.css', 'island.js', 'analytics.js', '_worker.js', '_routes.json', 'dashboard.html']) {
   fs.copyFileSync(path.join(root, 'site', file), path.join(out, file));
 }
 const html = fs.readFileSync(path.join(out, 'index.html'), 'utf8')

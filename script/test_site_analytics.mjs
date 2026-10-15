@@ -23,6 +23,9 @@ assert.equal(rows.length, 1); assert.equal(rows[0][3], 'CN'); assert.equal(rows[
 assert.equal((await worker.fetch(req(event, {Origin: 'https://evil.example'}), env, ctx)).status, 403);
 assert.equal((await worker.fetch(req({...event, target: 'private content'}), env, ctx)).status, 400);
 assert.equal((await worker.fetch(req({...event, source: 'https://private.example/path'}), env, ctx)).status, 400);
+assert.equal((await worker.fetch(req({event: 'visible_time', bucket: '30_59s', source: 'direct', test: true}), env, ctx)).status, 204);
+assert.equal(rows.at(-1)[1], 'visible_time'); assert.equal(rows.at(-1)[2], '30_59s');
+assert.equal((await worker.fetch(req({event: 'scroll_depth', bucket: '101', source: 'direct', test: true}), env, ctx)).status, 400);
 assert.equal((await worker.fetch(req('x'.repeat(1025)), env, ctx)).status, 413);
 for (const header of [{DNT: '1'}, {'Sec-GPC': '1'}, {'User-Agent': 'Googlebot'}]) {
   const n = rows.length;
