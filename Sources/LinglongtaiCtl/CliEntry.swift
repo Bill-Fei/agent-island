@@ -242,6 +242,7 @@ struct LinglongtaiCtl {
             }
             HookHealth.record(provider: kind, parsed: mapped != nil, directory: LinglongtaiPaths.applicationSupport)
             if args.contains("--approval-relay"), ApprovalRelay.supports(AgentKind.resolve(provider)),
+               ApprovalRelay.hostHonorsHookDecision(),
                ApprovalRelay.hasActiveHUD, events.count == 1,
                let request = ApprovalRelay.makeRequest(payload: input, event: events[0]),
                ApprovalRelay.publish(request) {
@@ -265,7 +266,11 @@ struct LinglongtaiCtl {
                 "hookEventName": "PermissionRequest", "decision": ["behavior": decision.rawValue]
             ]]
             if let data = try? JSONSerialization.data(withJSONObject: result),
-               let json = String(data: data, encoding: .utf8) { print(json) }
+               let json = String(data: data, encoding: .utf8) {
+                print(json)
+                let flushed = fflush(stdout) == 0
+                ApprovalTrace.record(request.id, flushed ? "decision-output" : "decision-output-failed")
+            }
         }
     }
 

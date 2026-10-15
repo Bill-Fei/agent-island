@@ -42,7 +42,7 @@ def payload(provider="codex", session="session", event="PermissionRequest", argu
     return {"hook_event_name": event, "session_id": session, "turn_id": "turn",
             "cwd": "/tmp/release-fixture", "tool_name": "Bash", "tool_input": arguments or {"command": "printf harmless-fixture"}}
 
-def start(root, data, provider="claude", relay=True, hud=True):
+def start(root, data, provider="claude", relay=True, hud=True, entrypoint="cli"):
     if hud:
         with heartbeat_lock:
             heartbeat(root)
@@ -50,7 +50,10 @@ def start(root, data, provider="claude", relay=True, hud=True):
     args = [str(ctl), "hook", "--provider", provider, "--data-dir", str(root)]
     if relay:
         args += ["--approval-relay"]
-    process = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    env = {k: v for k, v in os.environ.items() if k != "CLAUDE_CODE_ENTRYPOINT"}
+    if entrypoint is not None:
+        env["CLAUDE_CODE_ENTRYPOINT"] = entrypoint
+    process = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
     process.stdin.write(json.dumps(data).encode())
     process.stdin.close()
     process.stdin = None
@@ -106,6 +109,47 @@ with tempfile.TemporaryDirectory(prefix="island-approval-") as temporary:
             check(provider + " PermissionRequest writes lifecycle metadata only", (root / "events.jsonl").exists())
             check(provider + " retains no transient approval context", not list((root / "pending-approvals").glob("*.json")))
 
+    def trace(root):
+        path = root / "approval-trace.jsonl"
+        return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+    root = base / "claude-legacy-flag"
+    stages = [entry["stage"] for entry in trace(root)]
+    check("trace records publish, consume and output in order", stages == ["published", "reply-consumed", "decision-output"])
+    check("trace is private metadata only", (root / "approval-trace.jsonl").stat().st_mode & 0o777 == 0o600
+          and "harmless-fixture" not in (root / "approval-trace.jsonl").read_text()
+          and all(set(entry) <= {"request", "stage", "at", "pid", "heartbeatAge"} for entry in trace(root)))
+
+    root = base / "hud-brief-stall"
+    proc = start(root, payload(provider="claude"))
+    path, _ = pending(root)
+    with heartbeat_lock:
+        heartbeat_roots.discard(root)  # live HUD process, heartbeat stops updating
+    time.sleep(6)
+    check("brief HUD stall keeps the published request", proc.poll() is None and path.exists())
+    approve_pending(root)
+    check("decision after a brief stall is still delivered", json.loads(finish(proc))["hookSpecificOutput"]["decision"]["behavior"] == "allow")
+
+    root = base / "hud-long-stall"
+    began = time.monotonic()
+    proc = start(root, payload(provider="claude"))
+    path, _ = pending(root)
+    with heartbeat_lock:
+        heartbeat_roots.discard(root)
+    check("prolonged HUD stall releases native flow", finish(proc, timeout=20) == b"" and not path.exists() and time.monotonic() - began < 16)
+    check("trace explains a stall release", trace(root)[-1]["stage"] == "released-hud-unavailable" and trace(root)[-1]["heartbeatAge"] >= 12)
+
+    for label, entrypoint in [("desktop-host", "claude-desktop-3p"), ("vscode-host", "claude-vscode"), ("sdk-host", "sdk-ts")]:
+        root = base / label
+        proc = start(root, payload(provider="claude"), entrypoint=entrypoint)
+        check(label + " never publishes an island approval", finish(proc) == b"" and not list((root / "pending-approvals").glob("*.json")))
+        event = json.loads((root / "events.jsonl").read_text().splitlines()[-1])
+        check(label + " still reports the permission check for observation", event.get("sourceEvent") == "PermissionRequest" and "approvalRequestID" not in event)
+    root = base / "unset-entrypoint"
+    proc = start(root, payload(provider="claude"), entrypoint=None)
+    approve_pending(root)
+    check("terminal CLI without entrypoint keeps the relay", json.loads(finish(proc))["hookSpecificOutput"]["decision"]["behavior"] == "allow")
+
     root = base / "deny"
     proc = start(root, payload(provider="claude"))
     approve_pending(root, "deny")
@@ -154,6 +198,7 @@ with tempfile.TemporaryDirectory(prefix="island-approval-") as temporary:
     path, _ = pending(root)
     check("no user choice returns no permission decision", finish(proc, timeout=50) == b"")
     check("45-second timeout removes transient context", 43 <= time.monotonic() - began < 50 and not path.exists())
+    check("trace explains a timeout release", trace(root)[-1]["stage"] == "released-expired")
 
     with heartbeat_lock:
         heartbeat_roots.clear()

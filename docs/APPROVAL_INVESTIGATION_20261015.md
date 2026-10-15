@@ -44,3 +44,17 @@
 4. 验收标准：同一请求在岛上批准一次后原应用恢复，不要求第二次确认；若原应用未接受，岛上明确提示未确认送达并给出回原应用入口，不伪造恢复或批准成功。
 
 当前没有实施审批代码修复，没有安装、替换、删除应用或发布新包。
+
+## 2026-10-16 补充：根因与修复（L3）
+
+**根因（真实事件）**：Bill 在 Claude Desktop 中复现两类现象：① 岛上批准后原应用确认卡不消失；② 原应用没有弹卡（工具被 Desktop 自动放行，如 `read_terminal`），岛上却弹出批准。Desktop 以 SDK 托管 Claude Code，hook 进程环境为 `CLAUDE_CODE_ENTRYPOINT=claude-desktop-3p`；它对每次权限检查都会触发 PermissionRequest hook，但审批由宿主自己的界面决定，hook 的回答不被采纳。所以岛上的按钮在 Desktop 下既会误弹，也无效。
+
+另一个问题：22:12 起 HUD 进程退出，心跳停止，导致 relay 不再发布，也就没有快速操作按钮。重启后恢复。
+
+**修复**：
+- `ApprovalRelay.hostHonorsHookDecision`：只有 entrypoint 为 `cli`（或未设置，即旧版终端 CLI）时才发布岛内审批。Desktop、VS Code、SDK 等宿主一律只观察；App 真正弹卡约 6 秒后会触发 Notification，岛上只提示回原应用处理。
+- 等待期间对已发布请求的心跳停滞容忍从 4s 放宽到 12s；HUD 退出或隐藏仍立即放行。发布前仍按 4s 判定。
+- 新增 `approval-trace.jsonl`，只记录元数据时间线：published / hud-actionable / hud-not-actionable / decision-written / reply-consumed / decision-output / released-*。不记录参数、对话或 stdout。
+- `script/check_store.sh` 补编 `ClaudeApprovalAcceptance.swift`（此前无法编译）。
+
+**检查**：relay 81 项、TaskStore 243 项、hook bridge、acceptance 558 项全部通过，均为隔离 fixture。终端 CLI 的真实批准往返、Desktop 不再误弹，目前都**未验证**，需在安装新包后用真实事件确认。

@@ -8,6 +8,15 @@ public enum ApprovalRelay {
     /// remain observation-only, and no standing permissions are returned.
     public static func supports(_ provider: AgentKind) -> Bool { provider == .claude }
 
+    /// Only the terminal CLI lets a PermissionRequest hook answer the prompt.
+    /// SDK hosts such as Claude Desktop (`claude-desktop*`) still decide in
+    /// their own UI: a relay there pops for auto-approved tools and its
+    /// decision is not applied. Unknown hosts stay observation-only.
+    public static func hostHonorsHookDecision(environment: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+        guard let entrypoint = environment["CLAUDE_CODE_ENTRYPOINT"], !entrypoint.isEmpty else { return true }
+        return entrypoint == "cli"
+    }
+
     public struct Request: Codable, Identifiable, Equatable, Sendable {
         public var protocolVersion = 2
         public var id: UUID
@@ -53,15 +62,25 @@ public enum ApprovalRelay {
               request.expiresAt.timeIntervalSinceNow <= 46 else { return false }
         guard prepareDirectory(), let data = try? JSONEncoder().encode(request) else { return false }
         cleanupExpired()
-        return writeExclusive(data, to: requestURL(request.id))
+        let published = writeExclusive(data, to: requestURL(request.id))
+        if published { ApprovalTrace.record(request.id, "published", heartbeatAge: hudStatus(stallTolerance: 4).age) }
+        return published
     }
 
     /// Only a live, recently responsive HUD can intercept a permission prompt.
-    public static var hasActiveHUD: Bool {
+    public static var hasActiveHUD: Bool { hudStatus(stallTolerance: 4).available }
+
+    /// A published request survives a brief main-thread stall of a live HUD.
+    /// A quit, crashed or hidden HUD still releases the provider immediately.
+    static let waitStallTolerance: TimeInterval = 12
+
+    /// One heartbeat read, so a traced age always matches the decision made.
+    static func hudStatus(stallTolerance: TimeInterval) -> (available: Bool, age: TimeInterval?) {
         guard let data = readPrivate(directory.appendingPathComponent("hud.heartbeat")),
-              let beat = try? JSONDecoder().decode(Heartbeat.self, from: data) else { return false }
+              let beat = try? JSONDecoder().decode(Heartbeat.self, from: data) else { return (false, nil) }
         let age = Date().timeIntervalSince(beat.updatedAt)
-        return beat.canPresent && age >= -1 && age < 4 && beat.processID > 0 && kill(beat.processID, 0) == 0
+        let available = beat.canPresent && age >= -1 && age < stallTolerance && beat.processID > 0 && kill(beat.processID, 0) == 0
+        return (available, age)
     }
 
     public static func updateHUDHeartbeat(canPresent: Bool) {
@@ -108,7 +127,9 @@ public enum ApprovalRelay {
     public static func respond(to request: Request, decision: Decision) -> Bool {
         guard pending(request.id, taskID: request.taskID) == request,
               let data = try? JSONEncoder().encode(Reply(id: request.id, decision: decision)) else { return false }
-        return writeExclusive(data, to: replyURL(request.id))
+        let written = writeExclusive(data, to: replyURL(request.id))
+        ApprovalTrace.record(request.id, written ? "decision-written" : "decision-write-failed")
+        return written
     }
 
     public static func wait(for request: Request) -> Decision? {
@@ -118,12 +139,18 @@ public enum ApprovalRelay {
         while Date() < request.expiresAt && ProcessInfo.processInfo.systemUptime < deadline {
             if let data = readPrivate(replyURL(request.id)),
                let reply = try? JSONDecoder().decode(Reply.self, from: data), reply.id == request.id {
+                ApprovalTrace.record(request.id, "reply-consumed")
                 return reply.decision
             }
-            // A HUD quit or stall must not hold the provider's normal prompt.
-            if !hasActiveHUD { return nil }
+            // A HUD quit, hide or prolonged stall must not hold the provider's normal prompt.
+            let hud = hudStatus(stallTolerance: waitStallTolerance)
+            if !hud.available {
+                ApprovalTrace.record(request.id, "released-hud-unavailable", heartbeatAge: hud.age)
+                return nil
+            }
             usleep(100_000)
         }
+        ApprovalTrace.record(request.id, "released-expired")
         return nil // No decision: provider's normal permission UI remains authoritative.
     }
 

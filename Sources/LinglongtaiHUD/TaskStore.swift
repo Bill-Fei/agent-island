@@ -1232,9 +1232,17 @@ final class TaskStore: ObservableObject {
                let requestID = current.approvalRequestID,
                current.status == .waiting,
                approvalRequest(for: current) != nil {
-                if approvalRequestStarts[requestID] == nil { approvalRequestStarts[requestID] = current.updatedAt }
-            } else if let previousApproval {
-                approvalRequestStarts.removeValue(forKey: previousApproval)
+                if approvalRequestStarts[requestID] == nil {
+                    approvalRequestStarts[requestID] = current.updatedAt
+                    ApprovalTrace.record(requestID, "hud-actionable")
+                }
+            } else {
+                // Once per newly arrived request; replays and later events stay silent.
+                if let requestID = event.approvalRequestID, requestID != previousApproval,
+                   (event.createdAt ?? .distantPast) > now().addingTimeInterval(-60) {
+                    ApprovalTrace.record(requestID, "hud-not-actionable")
+                }
+                if let previousApproval { approvalRequestStarts.removeValue(forKey: previousApproval) }
             }
             invalidateTaskCache()
             if let current = tasks.first(where: { $0.id == id }) {
