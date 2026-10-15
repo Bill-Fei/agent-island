@@ -9,9 +9,13 @@ const version = fs.readFileSync(path.join(root, 'VERSION'), 'utf8').trim();
 if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error('Invalid release version');
 const dmg = path.join(out, 'download', `Agent-Island-${version}.dmg`);
 if (!fs.existsSync(dmg)) throw new Error('Published installer missing; do not rebuild implicitly');
-for (const file of ['index.html', 'style.css', 'island.js', 'analytics.js', '_worker.js', '_routes.json', 'dashboard.html']) {
+// echarts.min.js: dashboard.html loads it from the site, not a CDN. og-card.jpg: referenced
+// by absolute URL from the og:image tags, so nothing on the page pulls it in.
+for (const file of ['index.html', 'style.css', 'island.js', 'analytics.js', '_worker.js', '_routes.json', 'dashboard.html', 'echarts.min.js']) {
   fs.copyFileSync(path.join(root, 'site', file), path.join(out, file));
 }
+fs.mkdirSync(path.join(out, 'media'), { recursive: true });
+fs.copyFileSync(path.join(root, 'site/media/og-card.jpg'), path.join(out, 'media/og-card.jpg'));
 const html = fs.readFileSync(path.join(out, 'index.html'), 'utf8')
   .replace("dmgUrl: ''", `dmgUrl: 'download/Agent-Island-${version}.dmg'`);
 fs.writeFileSync(path.join(out, 'index.html'), html);
