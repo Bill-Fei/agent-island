@@ -251,14 +251,28 @@ h2.title{font-size:30px;font-weight:800;letter-spacing:-.02em;margin:0 4px 8px;l
 
   function pct(c, total){ return total ? (c/total*100).toFixed(1) : '0.0'; }
 
+  // An ECharts instance owns the canvas inside its box. Wiping the box with innerHTML left the
+  // instance drawing into a canvas no longer on the page, so every chart went blank on the
+  // second load (refresh button, the 5-minute auto refresh). Reuse a live instance, and dispose
+  // it before swapping the box for a text placeholder.
+  function chartIn(el){
+    let inst = window.echarts.getInstanceByDom(el);
+    if(!inst){ el.innerHTML=''; inst = window.echarts.init(el); }
+    return inst;
+  }
+  function placeholder(el, html){
+    const inst = window.echarts && window.echarts.getInstanceByDom(el);
+    if(inst) inst.dispose();
+    el.innerHTML = html;
+  }
+
   // 横向条形图：排名 / 量级对比（地区、点击）
   function renderHBar(el, rows, color){
     const ec = window.echarts;
     if(!ec){ el.className='hbox loading'; el.innerHTML='<div style="color:#56605c;font-size:12px">图表库未加载</div>'; return; }
     el.className='hbox';
-    el.innerHTML='';
-    if(!rows||!rows.length){ el.innerHTML='<div style="color:#56605c;font-size:12px;padding-top:70px;text-align:center">暂无数据</div>'; return; }
-    const inst = ec.getInstanceByDom(el) || ec.init(el);
+    if(!rows||!rows.length){ placeholder(el, '<div style="color:#56605c;font-size:12px;padding-top:70px;text-align:center">暂无数据</div>'); return; }
+    const inst = chartIn(el);
     const total = rows.reduce((s,r)=>s+r.c,0);
     const names = rows.map(r=> NAMES[r.target] || COUNTRY_CN[r.country] || DEVICE_CN[r.device] || SOURCE_CN[r.source] || r.target || r.device || r.source || r.country || '');
     const vals = rows.map(r=>r.c);
@@ -283,9 +297,8 @@ h2.title{font-size:30px;font-weight:800;letter-spacing:-.02em;margin:0 4px 8px;l
     const ec = window.echarts;
     if(!ec){ el.className='dbox loading'; el.innerHTML='<div style="color:#56605c;font-size:12px">图表库未加载</div>'; return; }
     el.className='dbox';
-    el.innerHTML='';
-    if(!rows||!rows.length){ el.innerHTML='<div style="color:#56605c;font-size:12px;padding-top:60px;text-align:center">暂无数据</div>'; return; }
-    const inst = ec.getInstanceByDom(el) || ec.init(el);
+    if(!rows||!rows.length){ placeholder(el, '<div style="color:#56605c;font-size:12px;padding-top:60px;text-align:center">暂无数据</div>'); return; }
+    const inst = chartIn(el);
     const data = rows.map((r,i)=>{
       let name = r.device ? (DEVICE_CN[r.device]||r.device) : r.source ? (SOURCE_CN[r.source]||r.source) : r.country ? (COUNTRY_CN[r.country]||r.country) : (r.target||'');
       return { name, value:r.c, itemStyle:{color:PALETTE[i%PALETTE.length]} };
@@ -309,11 +322,10 @@ h2.title{font-size:30px;font-weight:800;letter-spacing:-.02em;margin:0 4px 8px;l
     const el=$('#chart');
     if(!window.echarts){ el.className='chart-box loading'; el.innerHTML='<div>图表库未加载（离线？）</div>'; return; }
     el.className='chart-box';
-    el.innerHTML='';
     const data=(daily||[]).map(d=>d.day.slice(5).replace('-','/'));
     const pv=(daily||[]).map(d=>d.c);
     const dl=(downloads||[]).map(d=>d.c);
-    if(!trend) trend=echarts.init(el);
+    trend=chartIn(el);
     trend.setOption({
       grid:{left:6,right:6,top:26,bottom:22,containLabel:true},
       tooltip:{trigger:'axis',confine:true,backgroundColor:'#0d1210',borderColor:'#1a211d',textStyle:{color:'#eef4ef',fontSize:12,fontFamily:'-apple-system,BlinkMacSystemFont,sans-serif'}},
