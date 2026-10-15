@@ -47,7 +47,7 @@ final class AgentPresence: ObservableObject {
         guard !opening.contains(kind) else { return }
         launchErrors[kind] = nil
         guard let url = applicationURL(for: kind) else {
-            launchErrors[kind] = "未找到 \(kind.displayName)，请确认应用已安装。"
+            launchErrors[kind] = LF("未找到 %@，请确认应用已安装。", L(kind.displayName))
             return
         }
         opening.insert(kind)
@@ -56,7 +56,7 @@ final class AgentPresence: ObservableObject {
             Task { @MainActor in
                 guard let self else { return }
                 if error != nil || app == nil {
-                    self.launchErrors[kind] = "未能打开 \(kind.displayName)，请重试或从访达打开。"
+                    self.launchErrors[kind] = LF("未能打开 %@，请重试或从访达打开。", L(kind.displayName))
                     self.opening.remove(kind)
                 } else if let app {
                     await self.verifyVisibleWindow(of: app, kind: kind)
@@ -122,9 +122,9 @@ final class AgentPresence: ObservableObject {
         bringForward(app)
         if await reached(polls: 8) { return }
         if app.isTerminated {
-            launchErrors[kind] = "\(kind.displayName) 在打开窗口时已退出，请重新打开。"
+            launchErrors[kind] = LF("%@ 在打开窗口时已退出，请重新打开。", L(kind.displayName))
         } else if Self.hasVisibleWindow(pid: pid) && !Self.isFrontmost(pid: pid) {
-            launchErrors[kind] = "\(kind.displayName) 的窗口已打开，但系统未允许切到前台，请点击程序坞图标。"
+            launchErrors[kind] = LF("%@ 的窗口已打开，但系统未允许切到前台，请点击程序坞图标。", L(kind.displayName))
         } else {
             launchErrors[kind] = Self.windowUnavailableMessage(kind: kind, restoration: restoration)
         }
@@ -253,13 +253,13 @@ final class AgentPresence: ObservableObject {
 
     static func windowUnavailableMessage(kind: AgentKind, restoration: WindowRestoration) -> String {
         if restoration == .permissionRequired {
-            return "\(kind.displayName) 已激活，但窗口未出现。灵动岛尚无辅助功能权限，无法恢复最小化窗口：请在系统设置 → 隐私与安全性 → 辅助功能中打开「Agent 灵动岛」后再点一次；若已打开仍无效，先用 − 删除该项再重试。"
+            return LF("%@ 已激活，但窗口未出现。灵动岛尚无辅助功能权限，无法恢复最小化窗口：请在系统设置 → 隐私与安全性 → 辅助功能中打开「Agent 灵动岛」后再点一次；若已打开仍无效，先用 − 删除该项再重试。", L(kind.displayName))
         }
         switch restoration {
         case .noWindow:
-            return "\(kind.displayName) 在运行，但没有打开的窗口，重新打开请求未被响应。请点击程序坞图标，或在 \(kind.displayName) 菜单中新建窗口。"
+            return LF("%1$@ 在运行，但没有打开的窗口，重新打开请求未被响应。请点击程序坞图标，或在 %1$@ 菜单中新建窗口。", L(kind.displayName))
         default:
-            return "\(kind.displayName) 已激活，但窗口仍未出现在当前桌面，可能在其他桌面或全屏空间。请点击程序坞图标恢复窗口，或检查其他桌面。"
+            return LF("%@ 已激活，但窗口仍未出现在当前桌面，可能在其他桌面或全屏空间。请点击程序坞图标恢复窗口，或检查其他桌面。", L(kind.displayName))
         }
     }
 

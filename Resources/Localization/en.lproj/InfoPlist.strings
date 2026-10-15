@@ -1,0 +1,5 @@
+/* Info.plist text shown by macOS itself: the app's name in Finder and Spotlight, and the
+   permission prompt. Chinese systems use zh-Hans / zh-Hant InfoPlist.strings. */
+"CFBundleName" = "Agent Island";
+"CFBundleDisplayName" = "Agent Island";
+"NSAppleEventsUsageDescription" = "When you click \"Open app\", Agent Island sends that agent's app the same reopen request as clicking its Dock icon, so its window comes back.";

@@ -17,6 +17,9 @@ class BuildWorkflowChecks(unittest.TestCase):
         (self.root / "VERSION").write_text("0.3.1\n")
         (self.root / "Sources/Fixture/main.swift").write_text("// Fixture only\n")
         (self.root / "Resources/AppIcon.icns").write_bytes(b"fixture-icon")
+        for lang in ["en", "zh-Hans"]:
+            (self.root / f"Resources/Localization/{lang}.lproj").mkdir(parents=True)
+            (self.root / f"Resources/Localization/{lang}.lproj/Localizable.strings").write_text("/* Fixture */\n")
         (self.root / "script/install_hooks.py").write_text("# Fixture only\n")
         for name in ["LinglongtaiHUD", "linglongtaictl"]:
             (self.root / "products" / name).write_bytes(b"unsigned-fixture-" + name.encode())
@@ -80,6 +83,21 @@ elif [[ -e "$FIXTURE_ROOT/invalid-seal" ]]; then exit 1; fi''',
         (self.root / "Resources/AppIcon.icns").write_bytes(b"changed")
         self.assertEqual(self.run_mode().returncode, 0)
         self.assertEqual(self.sign_count(), 6)
+
+    def test_translations_are_packaged_and_tracked(self):
+        result = self.run_mode()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        resources = self.bundle / "Contents/Resources"
+        for lang in ["en", "zh-Hans"]:
+            self.assertTrue((resources / f"{lang}.lproj/Localizable.strings").is_file(), lang)
+        plist = (self.bundle / "Contents/Info.plist").read_text()
+        self.assertIn("<key>CFBundleDevelopmentRegion</key>\n  <string>en</string>", plist)
+        self.assertIn("<string>zh-Hans</string>", plist)
+        # Editing a translation must repackage, or the change would never reach the app.
+        (self.root / "Resources/Localization/en.lproj/Localizable.strings").write_text("/* changed */\n")
+        self.assertEqual(self.run_mode().returncode, 0)
+        self.assertEqual(self.sign_count(), 6)
+        self.assertIn("changed", (resources / "en.lproj/Localizable.strings").read_text())
 
     def test_changed_binary_or_helper_is_repackaged(self):
         self.assertEqual(self.run_mode().returncode, 0)

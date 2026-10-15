@@ -16,10 +16,11 @@ public struct AIWorkDuration: Sendable {
             self.seconds = seconds; self.incomplete = incomplete; self.loading = loading
         }
         public var label: String {
-            if loading { return "统计中" }
+            // Display-only and built from numbers, so translated here rather than at render.
+            if loading { return L("统计中") }
             let minutes = Int(max(0, seconds) / 60)
-            if minutes == 0 { return seconds > 0 ? "不到 1 分钟" : "0 分钟" }
-            return minutes < 60 ? "\(minutes) 分钟" : "\(minutes / 60) 小时 \(minutes % 60) 分钟"
+            if minutes == 0 { return L(seconds > 0 ? "不到 1 分钟" : "0 分钟") }
+            return minutes < 60 ? LF("%lld 分钟", minutes) : LF("%lld 小时 %lld 分钟", minutes / 60, minutes % 60)
         }
     }
     private var active: [UUID: Active] = [:]

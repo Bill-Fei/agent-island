@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>%@ %lld 轮</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%@ %#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>one</key>
+			<string>%lld turn</string>
+			<key>other</key>
+			<string>%lld turns</string>
+		</dict>
+	</dict>
+	<key>%lld 个工具步骤已返回</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ returned</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>one</key>
+			<string>%lld tool step</string>
+			<key>other</key>
+			<string>%lld tool steps</string>
+		</dict>
+	</dict>
+	<key>· %lld 轮</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>· %#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>one</key>
+			<string>%lld turn</string>
+			<key>other</key>
+			<string>%lld turns</string>
+		</dict>
+	</dict>
+	<key>今日活跃轮次共 %lld 轮，%@，非模型调用次数</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ today: %@. Not the number of model calls.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>one</key>
+			<string>%lld turn</string>
+			<key>other</key>
+			<string>%lld turns</string>
+		</dict>
+	</dict>
+	<key>收到 %lld 条工具返回记录 · 未提供唯一步骤标识</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ received · no unique step IDs provided</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>one</key>
+			<string>%lld tool result</string>
+			<key>other</key>
+			<string>%lld tool results</string>
+		</dict>
+	</dict>
+</dict>
+</plist>

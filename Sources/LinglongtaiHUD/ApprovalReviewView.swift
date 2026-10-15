@@ -13,7 +13,7 @@ struct ApprovalReviewView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 AgentIcon(kind: request.provider, size: 28)
-                Text("\(request.provider.displayName) 请求批准").font(.headline)
+                Text("\(L(request.provider.displayName)) 请求批准").font(.headline)
                 Spacer()
                 Button("关闭") { store.closeApproval() }
                     .help("Esc · 不做决定")
@@ -23,7 +23,7 @@ struct ApprovalReviewView: View {
             if !riskLabels.isEmpty { riskBanner }
             Text("本次请求的完整参数 · 仅在本机临时展示").font(.caption).foregroundStyle(.secondary)
             ScrollView { parameters }.frame(height: 170)
-            Text(isPending ? "只批准这一次，不授予长期权限。请核对完整参数。" : "请求已过期或已处理，请回原应用核实。")
+            Text(L(isPending ? "只批准这一次，不授予长期权限。请核对完整参数。" : "请求已过期或已处理，请回原应用核实。"))
                 .font(.caption).foregroundStyle(.secondary)
             HStack {
                 Button { store.respondToApproval(request, decision: .deny) } label: { keyLabel("拒绝本次", "⌘⌫") }
@@ -46,13 +46,13 @@ struct ApprovalReviewView: View {
         let title = store.tasks.first(where: { $0.id == request.taskID })?.title
         let directory = fields?.first(where: { $0.key == "working_directory" })?.value
         let parts = [title, directory.map { ($0 as NSString).abbreviatingWithTildeInPath }].compactMap { $0 }.filter { !$0.isEmpty }
-        return parts.isEmpty ? nil : "来自：" + parts.joined(separator: " · ")
+        return parts.isEmpty ? nil : L("来自：") + parts.joined(separator: " · ")
     }
 
     private var riskBanner: some View {
         HStack(alignment: .top, spacing: 6) {
             Image(systemName: "exclamationmark.triangle.fill")
-            Text("含高风险操作：\(riskLabels.joined(separator: "、"))。请逐字核对下方标红部分。")
+            Text("含高风险操作：\(riskLabels.map(L).joined(separator: L("、")))。请逐字核对下方标红部分。")
         }
         .font(.caption).foregroundStyle(.red)
         .padding(8).frame(maxWidth: .infinity, alignment: .leading)
@@ -90,7 +90,7 @@ struct ApprovalReviewView: View {
 
     private func keyLabel(_ title: String, _ key: String) -> some View {
         HStack(spacing: 6) {
-            Text(title)
+            Text(L(title))
             Text(key).font(.system(size: 11, design: .rounded)).opacity(0.6)
         }
     }

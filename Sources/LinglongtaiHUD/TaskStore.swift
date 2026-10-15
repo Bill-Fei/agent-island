@@ -512,21 +512,23 @@ final class TaskStore: ObservableObject {
             .max { $0.updatedAt < $1.updatedAt }
     }
 
+    /// Display-only summary for Settings, so it is translated here rather than at render:
+    /// the age part is built from numbers and could not be looked up afterwards.
     func statusSummary(for kind: AgentKind) -> String {
         guard let task = liveTasks.first(where: { $0.profile.kind == kind }) else {
-            if latestKnownLiveTask(for: kind) != nil { return "当前无进行中的会话" }
-            return connections[kind.rawValue] == nil ? "等待首次任务回调" : "已收到连接 · 等待任务"
+            if latestKnownLiveTask(for: kind) != nil { return L("当前无进行中的会话") }
+            return L(connections[kind.rawValue] == nil ? "等待首次任务回调" : "已收到连接 · 等待任务")
         }
         let age = max(0, now().timeIntervalSince(task.updatedAt))
-        let freshness = age < 120 ? "刚刚" : "更新于 " + Self.relativeAge(age)
+        let freshness = age < 120 ? L("刚刚") : LF("更新于 %@", Self.relativeAge(age))
         if [.queued, .running, .waiting].contains(task.status) && !isRunning(task) {
-            return "结果未知 · \(freshness)"
+            return L("结果未知") + " · " + freshness
         }
         if task.status == .running || task.status == .queued {
             let progress = task.progressKnown ? " · \(Int(task.progress * 100))%" : ""
-            return "\(task.statusLabel)\(progress) · \(freshness)"
+            return L(task.statusLabel) + progress + " · " + freshness
         }
-        return "\(displayedStatus(for: task)) · \(freshness)"
+        return L(displayedStatus(for: task)) + " · " + freshness
     }
 
     func connectionLabel(for kind: AgentKind) -> String {
@@ -583,18 +585,20 @@ final class TaskStore: ObservableObject {
         return [front] + currentActivityTasks.filter { $0.id != front.id }.prefix(3)
     }
 
+    /// Translated here, not at render: the island measures this exact string to size its
+    /// wings, so it must be measured in the language it is shown in.
     var mediumStatusText: String {
-        if calibrationPreview != nil { return "中态预览" }
-        if waitingCount > 0 { return "\(waitingCount)项待确认" }
+        if calibrationPreview != nil { return L("中态预览") }
+        if waitingCount > 0 { return LF("%lld项待确认", waitingCount) }
         if let task = highlightedFeedbackTask,
            [.completed, .failed, .cancelled].contains(task.status) {
-            return currentActivityTasks.isEmpty ? task.statusLabel : "1项结束 · \(currentActivityTasks.count)项进行中"
+            return currentActivityTasks.isEmpty ? L(task.statusLabel) : LF("1项结束 · %lld项进行中", currentActivityTasks.count)
         }
         if currentActivityTasks.count > 1 {
-            return "\(currentActivityTasks.count)项进行中"
+            return LF("%lld项进行中", currentActivityTasks.count)
         }
-        guard let task = activeTask else { return "等待事件" }
-        return displayedStatus(for: task)
+        guard let task = activeTask else { return L("等待事件") }
+        return L(displayedStatus(for: task))
     }
 
     var compactCountText: String {
@@ -630,7 +634,7 @@ final class TaskStore: ObservableObject {
             pendingNarrowSince = nil
             return
         }
-        let name = calibrationPreview == nil ? primaryAgentName : "中态预览"
+        let name = L(calibrationPreview == nil ? primaryAgentName : "中态预览")
         let iconSize = min(24, max(0, 32 + notchOffset - 4))
             * (1 + Double(max(0, islandIconTasks.count - 1)) * 0.34)
         let content = IslandContentWidth.medium(agentName: name, statusText: mediumStatusText,
@@ -1316,10 +1320,10 @@ final class TaskStore: ObservableObject {
     }
 
     private static func relativeAge(_ age: TimeInterval) -> String {
-        if age < 60 { return "不到 1 分钟" }
+        if age < 60 { return L("不到 1 分钟") }
         let minutes = Int(age / 60)
-        if minutes < 60 { return "\(minutes) 分钟前" }
-        return "\(minutes / 60) 小时前"
+        if minutes < 60 { return LF("%lld 分钟前", minutes) }
+        return LF("%lld 小时前", minutes / 60)
     }
 
     private static func isLegacyDemoFixture(_ task: AgentTask) -> Bool {
