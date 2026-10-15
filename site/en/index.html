@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Agent Island — your AI agents, right in the notch</title>
+<meta name="description" content="Agent Island puts the status of Codex, Claude Code, Doubao and Work Buddy at the top of your Mac screen. It sees status, never content, and never goes online.">
+<meta name="theme-color" content="#000000">
+<link rel="canonical" href="https://agent-island.pages.dev/en/">
+<link rel="alternate" hreflang="zh-CN" href="https://agent-island.pages.dev/">
+<link rel="alternate" hreflang="en" href="https://agent-island.pages.dev/en/">
+<link rel="alternate" hreflang="x-default" href="https://agent-island.pages.dev/">
+<link rel="icon" href="../media/favicon.png">
+
+<!-- English twin of /index.html. Keep the two in step: same sections, same ids, same
+     data-* hooks (island.js and analytics.js rely on them). Paths are relative to /en/. -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Agent Island">
+<meta property="og:url" content="https://agent-island.pages.dev/en/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="zh_CN">
+<meta property="og:title" content="Agent Island — your AI agents, right in the notch">
+<meta property="og:description" content="See what Codex, Claude Code, Doubao and Work Buddy are running, and what's waiting on you, with one glance at the top of your Mac. Status only, never content, never online.">
+<meta property="og:image" content="https://agent-island.pages.dev/media/og-card-en.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:type" content="image/jpeg">
+<meta property="og:image:alt" content="The task overview unfolding from the Mac notch: a Codex database migration is waiting for confirmation.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Agent Island — your AI agents, right in the notch">
+<meta name="twitter:description" content="See what your coding agents are running, and what's waiting on you, with one glance at the top of your Mac.">
+<meta name="twitter:image" content="https://agent-island.pages.dev/media/og-card-en.jpg">
+<meta name="twitter:image:alt" content="The task overview unfolding from the Mac notch: a Codex database migration is waiting for confirmation.">
+
+<link rel="stylesheet" href="../style.css?v=2">
+<script>
+  // Same release links as the Chinese page. dmgUrl is injected by the publish scripts.
+  window.SITE = {
+    version: '0.3.4',
+    dmgUrl: '',     // injected by publish_site.sh: ../download/<version>.dmg
+    mirrorUrl: '',  // optional domestic mirror of the same file
+    sourceUrl: 'https://github.com/Bill-Fei/agent-island',
+    root: '../'
+  };
+</script>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="markStroke" x1="0" y1="10" x2="0" y2="30" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f7fcf7"/><stop offset="1" stop-color="#999e99"/>
+    </linearGradient>
+    <symbol id="mark" viewBox="0 0 40 40">
+      <path d="M1.6 10Q6.02 10 6.02 14.42L6.02 23Q6.02 30 13.02 30L26.98 30Q33.98 30 33.98 23L33.98 14.42Q33.98 10 38.4 10Z" fill="#0a0c0d" stroke="url(#markStroke)" stroke-width="2.4" stroke-linejoin="round"/>
+      <rect x="13" y="17.92" width="2.8" height="6.4" rx="1.4" fill="#79f2b5"/>
+      <rect x="18.6" y="16.12" width="2.8" height="10" rx="1.4" fill="#f7f7f4"/>
+      <rect x="24.2" y="18.72" width="2.8" height="4.8" rx="1.4" fill="#84dbf3"/>
+    </symbol>
+  </defs>
+</svg>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="menubar is-dark">
+  <a class="menubar-app" href="#top" aria-label="Agent Island home">
+    <svg class="menubar-mark" aria-hidden="true"><use href="#mark"/></svg>
+    <span>Agent Island</span>
+  </a>
+  <nav class="menubar-menu" aria-label="Page sections">
+    <a href="#film">Film</a>
+    <a href="#states">How it looks</a>
+    <a href="#privacy">Privacy</a>
+    <a href="#agents">Agents</a>
+  </nav>
+  <div class="menubar-right">
+    <a class="menubar-lang" href="../" hreflang="zh-CN" lang="zh-CN" data-lang-switch aria-label="查看中文版">中文</a>
+    <span class="menubar-clock" id="clock" aria-hidden="true"></span>
+    <a class="menubar-download" href="#download" data-download aria-label="Download"><span class="dl-full">Download</span><span class="dl-short" aria-hidden="true">Get</span></a>
+  </div>
+</header>
+
+<!-- Live demo island. Pure HTML/CSS replica of the app's three states, driven by island.js -->
+<div class="island" id="island" role="button" tabindex="0" aria-expanded="false"
+     aria-label="Agent Island demo. Hover for 0.2 seconds or press Return to open the task overview. Demo data.">
+  <div class="island-glow" aria-hidden="true"></div>
+  <svg class="island-shape" aria-hidden="true"><path/></svg>
+  <div class="island-body" aria-hidden="true">
+
+    <div class="i-small">
+      <img class="i-small-icon" src="../media/icons/claude.png" alt="">
+      <span class="i-pill"><span class="i-bars"><i></i><i></i><i></i></span><b>4</b></span>
+    </div>
+
+    <div class="i-med">
+      <span class="i-stack"><img alt=""><img alt=""><img alt=""></span>
+      <span class="i-med-title"></span>
+      <span class="i-med-status"><i></i><span></span></span>
+    </div>
+
+    <div class="i-panel">
+      <svg class="p-mark" style="--d:0"><use href="#mark"/></svg>
+      <span class="p-title" style="--d:0">Agent Island</span>
+      <span class="p-sub" style="--d:0">All your agents, at a glance</span>
+      <span class="p-count" style="--d:0;left:428px;--c:#8aaee8"><b>2</b>Active</span>
+      <span class="p-count" style="--d:0;left:476px;--c:#e6e8e4"><b>1</b>New</span>
+      <span class="p-count" style="--d:0;left:524px;--c:#e8b080"><b>1</b>To do</span>
+      <span class="p-collapse" style="--d:0"></span>
+      <span class="p-rule" style="--d:0;top:100px"></span>
+
+      <span class="p-today" style="--d:1">Today · 12 turns</span>
+      <span class="p-bar" style="--d:1"><i style="width:199px;background:#7aa8ff"></i><i style="width:159px;background:#ad7dff"></i><i style="width:80px;background:#33d69e"></i><i style="width:40px;background:#ff6e47"></i></span>
+      <span class="p-legend" style="--d:1">
+        <span><i style="background:#7aa8ff"></i>Codex<b>5</b></span>
+        <span><i style="background:#ad7dff"></i>Claude<b>4</b></span>
+        <span><i style="background:#33d69e"></i>Work Buddy<b>2</b></span>
+        <span><i style="background:#ff6e47"></i>Doubao<b>1</b></span>
+      </span>
+      <span class="p-rule" style="--d:1;top:160px"></span>
+      <span class="p-vrule" style="--d:1"></span>
+
+      <span class="p-list-head" style="--d:2"><span>Last 24 hours</span><span>Running first</span></span>
+      <span class="p-card is-current" style="--d:3;top:196px">
+        <img src="../media/icons/codex.png" alt=""><b>Codex</b><span>Database migration</span><small>A41C02&ensp;21:04</small>
+        <em style="color:#e8b080">Needs you</em>
+      </span>
+      <span class="p-card" style="--d:4;top:280px">
+        <img src="../media/icons/workbuddy.png" alt=""><b>Work Buddy</b><span>Weekly report notes</span><small>7F2E91&ensp;20:58</small>
+        <em style="color:#8aaee8">Running</em>
+      </span>
+      <span class="p-card" style="--d:5;top:364px">
+        <img src="../media/icons/claude.png" alt=""><b>Claude</b><span>Refactor login</span><small>C93B07&ensp;20:41</small>
+        <em style="color:#87c7ab">Turn done</em>
+      </span>
+
+      <span class="p-detail" style="--d:5">
+        <img src="../media/icons/codex.png" alt=""><b>Codex</b><span class="p-open">Open app</span>
+        <span class="p-desc">Database migration script: compare the old<br>and new schemas, then add rollback steps</span>
+        <span class="p-thread"><span>Thread · A41C02&ensp;21:04</span><span>Copy thread ID</span></span>
+      </span>
+      <span class="p-step" style="--d:6;top:296px"><span>Read file · returned</span><time>21:02</time></span>
+      <span class="p-step" style="--d:7;top:324px"><span>Ran command · returned</span><time>21:03</time></span>
+      <span class="p-step" style="--d:8;top:352px"><span>Edited file · returned</span><time>21:03</time></span>
+      <span class="p-step is-attn" style="--d:9;top:380px"><span>Permission request · needs you</span><time>21:04</time></span>
+      <span class="p-foot" style="--d:10">Web demo, not live data</span>
+    </div>
+  </div>
+</div>
+
+<main id="main">
+
+  <section class="hero tone-dark" id="top">
+    <p class="hero-hint" aria-hidden="true">
+      <span class="hint-pointer">Rest your pointer on the notch for 0.2 s to see every task</span>
+      <span class="hint-touch">Tap the notch above to see every task</span>
+    </p>
+
+    <div class="hero-copy wrap">
+      <h1><span class="nw h1-thin">Your AI agents,</span> <span class="nw h1-bold">right in the notch.</span></h1>
+      <p class="hero-lede">What Codex, Claude Code, Doubao and Work Buddy are running, and what's waiting on you. One glance at the top of your screen.</p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="#download" data-download>Download the Alpha</a>
+        <a class="btn btn-glass" href="#film">Watch the 30-second film</a>
+      </div>
+    </div>
+
+    <div class="hero-stage wrap">
+      <div class="hero-ring" aria-hidden="true"></div>
+      <div class="screen" role="img" aria-label="Top of a Mac screen: the task overview unfolds from the notch, and a Codex database migration is waiting for you. Demo data.">
+        <div class="screen-view" data-demo="panel" data-fit="hero">
+          <p class="screen-menu" aria-hidden="true"><span><b>Finder</b><span>File</span><span>Edit</span><span>View</span><span>Go</span><span>Window</span></span><span><svg viewBox="0 0 24 24"><path d="M12 18.6a1.6 1.6 0 1 1 0 .01ZM6.9 14.2a7.3 7.3 0 0 1 10.2 0l-1.3 1.4a5.4 5.4 0 0 0-7.6 0Zm-3-3a11.6 11.6 0 0 1 16.2 0l-1.3 1.4a9.7 9.7 0 0 0-13.6 0Z"/></svg><svg viewBox="0 0 28 24" style="width:calc(24px*var(--k,1))"><path d="M5 7h16a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Zm0 1.3a.7.7 0 0 0-.7.7v6c0 .4.3.7.7.7h16c.4 0 .7-.3.7-.7V9a.7.7 0 0 0-.7-.7Zm1 1.2h12.5v5H6Zm18.3 1.2c.6.2 1 .7 1 1.3s-.4 1.1-1 1.3Z"/></svg><span>Sat 21:04</span></span></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec film tone-dark" id="film" aria-labelledby="film-h">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 id="film-h">30 seconds. See how it works.</h2>
+        <p>From juggling windows to a single glance. The film's on-screen text is in Chinese.</p>
+      </div>
+      <div class="film-frame">
+        <video id="filmVideo" src="../media/film.mp4" poster="../media/film-poster.jpg?v=2" preload="metadata" playsinline></video>
+        <button class="film-play" id="filmPlay" type="button">
+          <span class="film-play-disc" aria-hidden="true"></span>
+          <span class="film-play-label">Play the film · 30 s · with sound</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec states" id="states" aria-labelledby="states-h">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 id="states-h">Quiet until something needs you.</h2>
+        <p>It only ever takes three shapes. No pop-ups, no stolen focus, no interruptions.</p>
+      </div>
+
+      <div class="state">
+        <div class="state-text">
+          <h3>At rest</h3>
+          <p>While tasks run, it stays tucked beside the notch. On the left is the agent that's working. On the right, the activity bar only means "still moving", not a progress percentage, and the number is how many tasks are running.</p>
+        </div>
+        <div class="demo" data-demo="small" role="img" aria-label="Beside the notch: the Claude icon on the left, an activity bar and the number 4 on the right"></div>
+      </div>
+
+      <div class="state">
+        <div class="state-text">
+          <h3>Alert</h3>
+          <p>When a task starts, needs your confirmation, or finishes a turn, it widens for about 10 seconds to tell you which task it is and where it stands, then tucks itself away again.</p>
+        </div>
+        <div class="demo" data-demo="med" role="img" aria-label="The island widened: database migration, needs you"></div>
+      </div>
+
+      <div class="state">
+        <div class="state-text">
+          <h3>Overview</h3>
+          <p>Rest your pointer at the top for 0.2 seconds to see the last 24 hours: who's waiting on you, who's still running, who's done, and the steps that have come back. Click "Open app" to jump to that agent; move the pointer away and it closes.</p>
+        </div>
+        <div class="demo" data-demo="panel" role="img" aria-label="Task overview: 12 turns today, three tasks, and the step details for Codex"></div>
+      </div>
+
+      <p class="states-note">These are web recreations of the app with demo data. You'll see your own tasks.</p>
+    </div>
+  </section>
+
+  <section class="sec privacy" id="privacy" aria-labelledby="privacy-h">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 id="privacy-h">It sees status. Never content.</h2>
+        <p>Agent Island runs entirely on your Mac. It doesn't go online, doesn't upload anything, doesn't call any model API, and doesn't need an API key.</p>
+      </div>
+      <div class="privacy-cols">
+        <div>
+          <h3>What it knows</h3>
+          <ul class="ledger">
+            <li>Which agent is working</li>
+            <li>When a turn starts, waits, finishes or fails</li>
+            <li>The kind of step, such as reading a file or running a command</li>
+            <li>The task title and a thread ID, so you can tell tasks apart</li>
+          </ul>
+        </div>
+        <div>
+          <h3>What it never touches</h3>
+          <ul class="ledger">
+            <li>Your prompts and chat messages</li>
+            <li>Tool inputs and outputs</li>
+            <li>Accounts, credentials and API keys</li>
+            <li>The contents of your files</li>
+          </ul>
+        </div>
+      </div>
+      <div class="privacy-notes">
+        <p>Before connecting each agent, it tells you which config file it's going to change. It only writes after you confirm, keeps a backup of the original, and you can disconnect at any time.</p>
+        <p>By default it only observes and never decides for you. The one exception is Claude Code: you can turn on one-time approval, which lets through a single request at a time. Confirmations for every other agent stay in that agent's own app.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec agents" id="agents" aria-labelledby="agents-h">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 id="agents-h">Agents you can connect today</h2>
+        <p>The Alpha starts with these. Each status is stated plainly, not oversold.</p>
+      </div>
+      <ul class="agent-list">
+        <li>
+          <img src="../media/icons/codex.png" alt="" width="48" height="48">
+          <span class="agent-name">Codex</span>
+          <span class="agent-how">Connects through lifecycle hooks</span>
+          <span class="agent-tag">Tested on real hardware</span>
+        </li>
+        <li>
+          <img src="../media/icons/claude.png" alt="" width="48" height="48">
+          <span class="agent-name">Claude Code</span>
+          <span class="agent-how">Connects through lifecycle hooks, with optional one-time approval</span>
+          <span class="agent-tag">Tested on real hardware</span>
+        </li>
+        <li>
+          <img src="../media/icons/workbuddy.png" alt="" width="48" height="48">
+          <span class="agent-name">Work Buddy</span>
+          <span class="agent-how">Connects through lifecycle hooks</span>
+          <span class="agent-tag">Tested on real hardware</span>
+        </li>
+        <li>
+          <img src="../media/icons/doubao.png" alt="" width="48" height="48">
+          <span class="agent-name">Doubao</span>
+          <span class="agent-how">Reads only local Agent-mode records; regular chats stay invisible</span>
+          <span class="agent-tag is-soft">Read-only</span>
+        </li>
+        <li>
+          <img src="../media/icons/claude.png" alt="" width="48" height="48">
+          <span class="agent-name">Claude desktop app</span>
+          <span class="agent-how">Needs Accessibility permission; not covered by the Alpha yet</span>
+          <span class="agent-tag is-soft">Experimental</span>
+        </li>
+      </ul>
+      <p class="agents-note">Icons in the app come from the agents installed on your Mac; any you don't have show a generic placeholder.</p>
+    </div>
+  </section>
+
+  <section class="sec download tone-dark" id="download" aria-labelledby="download-h">
+    <div class="wrap">
+      <img class="download-icon" src="../media/app-icon.png" width="128" height="128" alt="">
+      <h2 id="download-h">Download Agent Island</h2>
+      <p class="download-meta">Alpha <span data-version>0.3.4</span> for Macs with Apple silicon, macOS 13 or later. The app's interface is in Chinese for now.</p>
+      <div class="download-actions">
+        <a class="btn btn-primary btn-lg" id="dmgLink" href="#download" data-download>Download the Alpha</a>
+        <a class="btn btn-glass btn-lg" id="mirrorLink" href="#download" hidden>Mirror in China</a>
+      </div>
+      <p class="download-pending" id="pending">The installer is being prepared. Once it's published, you can download it here.</p>
+
+      <ol class="steps">
+        <li><b>Drag it into Applications</b>Open the downloaded .dmg and drag Agent Island into your Applications folder.</li>
+        <li><b>Open it the first time</b>If macOS says it can't be opened, go to System Settings › Privacy &amp; Security and click "Open Anyway".</li>
+        <li><b>Connect your agents</b>Click the island icon in the menu bar, choose "接入与验证…" (Connect &amp; Verify), and tick only the agents you use.</li>
+        <li><b>Run one task</b>Start a real task in the agent's own app, then come back and check that the island lights up.</li>
+      </ol>
+      <p class="download-note">Why step two: the Alpha isn't notarized by Apple yet, so macOS asks once on first launch.<span id="sourceNote" hidden> Prefer to build it yourself? <a id="sourceLink" href="#">View the source on GitHub</a>.</span></p>
+      <p class="download-privacy">This site counts visits, main button clicks, installer download requests and country/region totals, kept for 90 days. It uses no cookies, stores no raw IP addresses, and collects nothing from the app's tasks or conversations. A download request doesn't mean a finished download, and the Agent Island app itself never goes online. Nothing is recorded when your browser has Do Not Track or Global Privacy Control turned on.</p>
+    </div>
+  </section>
+
+</main>
+
+<footer class="foot tone-dark">
+  <div class="wrap foot-inner">
+    <div class="foot-brand">
+      <svg class="foot-mark" aria-hidden="true"><use href="#mark"/></svg>
+      <span>Agent Island</span>
+    </div>
+    <p>Interfaces on this site and in the film use demo data. Codex, Claude, Doubao and Work Buddy are trademarks of their respective owners; this project isn't affiliated with any of them.</p>
+  </div>
+</footer>
+
+<script src="../island.js?v=2"></script>
+<script src="../analytics.js?v=2" defer></script>
+</body>
+</html>

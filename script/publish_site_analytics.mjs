@@ -11,14 +11,19 @@ const dmg = path.join(out, 'download', `Agent-Island-${version}.dmg`);
 if (!fs.existsSync(dmg)) throw new Error('Published installer missing; do not rebuild implicitly');
 // echarts.min.js: dashboard.html loads it from the site, not a CDN. og-card.jpg: referenced
 // by absolute URL from the og:image tags, so nothing on the page pulls it in.
-for (const file of ['index.html', 'style.css', 'island.js', 'analytics.js', '_worker.js', '_routes.json', 'dashboard.html', 'echarts.min.js']) {
+for (const file of ['index.html', 'en/index.html', 'style.css', 'island.js', 'analytics.js', '_worker.js', '_routes.json', 'dashboard.html', 'echarts.min.js',
+  'media/og-card.jpg', 'media/og-card-en.jpg']) {
+  fs.mkdirSync(path.dirname(path.join(out, file)), { recursive: true });
   fs.copyFileSync(path.join(root, 'site', file), path.join(out, file));
 }
-fs.mkdirSync(path.join(out, 'media'), { recursive: true });
-fs.copyFileSync(path.join(root, 'site/media/og-card.jpg'), path.join(out, 'media/og-card.jpg'));
-const html = fs.readFileSync(path.join(out, 'index.html'), 'utf8')
-  .replace("dmgUrl: ''", `dmgUrl: 'download/Agent-Island-${version}.dmg'`);
-fs.writeFileSync(path.join(out, 'index.html'), html);
+// /en/ sits one level down, so its link climbs back to the shared download/ folder.
+for (const [page, prefix] of [['index.html', ''], ['en/index.html', '../']]) {
+  const file = path.join(out, page);
+  const want = `dmgUrl: '${prefix}download/Agent-Island-${version}.dmg'`;
+  const html = fs.readFileSync(file, 'utf8').replace("dmgUrl: ''", want);
+  if (!html.includes(want)) throw new Error(`Download link not injected into ${page}`);
+  fs.writeFileSync(file, html);
+}
 console.log(`Website prepared; existing installer preserved: ${version}`);
 if (!process.argv.includes('--deploy')) process.exit(0);
 const result = spawnSync('wrangler', ['pages', 'deploy', out, '--project-name', 'agent-island',

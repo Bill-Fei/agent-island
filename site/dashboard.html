@@ -161,6 +161,9 @@ h2.title{font-size:30px;font-weight:800;letter-spacing:-.02em;margin:0 4px 8px;l
   <div class="section-title" style="margin-top:4px">短片完成度 <span class="hint">播放到结尾的次数</span></div>
   <div class="chart-card"><div class="hbox loading" id="filmCompletion">加载中…</div></div>
 
+  <div class="section-title">中英文页面 <span class="hint">访问的是哪个语言版本 · 英文版上线后开始累计</span></div>
+  <div class="chart-card"><div class="dbox loading" id="pages">加载中…</div></div>
+
   <div class="section-title">设备与来源 <span class="hint">微信内打开可能没有来源信息</span></div>
   <div class="two-col">
     <div class="chart-card"><div class="dbox loading" id="devices">加载中…</div></div>
@@ -193,7 +196,8 @@ h2.title{font-size:30px;font-weight:800;letter-spacing:-.02em;margin:0 4px 8px;l
   const IS_LOCAL = location.protocol === 'file:' || location.hostname === '';
   const NAMES = { download_section:'下载区按钮', download_hero:'首页下载', download_menu:'顶栏下载', download_mirror:'镜像下载',
     download_blocked:'想下载但没包', film_play:'播放短片', source:'查看源码', island_demo:'灵动岛演示', film:'短片锚点', states:'状态锚点', privacy:'隐私锚点',
-    agents:'Agent 锚点', top:'回到顶部' };
+    agents:'Agent 锚点', top:'回到顶部', lang_switch:'切换语言', lang_hint:'英文提示条·点进英文版', lang_hint_close:'英文提示条·关闭' };
+  const PAGE_CN = { '':'中文页', en:'英文页' };
   const COUNTRY_CN = { CN:'中国', US:'美国', JP:'日本', SG:'新加坡', NL:'荷兰', DE:'德国', GB:'英国', FR:'法国', CA:'加拿大', AU:'澳大利亚', KR:'韩国', IN:'印度', HK:'中国香港', TW:'中国台湾', MO:'中国澳门', RU:'俄罗斯', IT:'意大利', ES:'西班牙', TH:'泰国', MY:'马来西亚', ID:'印尼', VN:'越南', PH:'菲律宾', AE:'阿联酋', SA:'沙特' };
   const DEVICE_CN = { mobile:'手机', desktop:'电脑', tablet:'平板' };
   const SOURCE_CN = { direct:'直接访问', social:'社交平台', search:'搜索引擎', referral:'外链', email:'邮件', other:'其他' };
@@ -219,7 +223,8 @@ h2.title{font-size:30px;font-weight:800;letter-spacing:-.02em;margin:0 4px 8px;l
     clicks:[{target:'island_demo',c:42},{target:'film_play',c:18},{target:'download_hero',c:11},{target:'film',c:6},{target:'download_section',c:4},{target:'source',c:3}],
     devices:[{device:'mobile',c:118},{device:'desktop',c:68}],
     sources:[{source:'direct',c:96},{source:'social',c:52},{source:'search',c:38}],
-    countries:[{country:'CN',c:142},{country:'US',c:21},{country:'JP',c:8},{country:'SG',c:6},{country:'NL',c:5},{country:'DE',c:4}]
+    countries:[{country:'CN',c:142},{country:'US',c:21},{country:'JP',c:8},{country:'SG',c:6},{country:'NL',c:5},{country:'DE',c:4}],
+    pages:[{page:'',c:131},{page:'en',c:55}]
     ,engagement:[{metric:'visible_time',bucket:'0_9s',c:12},{metric:'visible_time',bucket:'10_29s',c:28},{metric:'visible_time',bucket:'30_59s',c:19},{metric:'visible_time',bucket:'60s_plus',c:11},{metric:'scroll_depth',bucket:'25',c:31},{metric:'scroll_depth',bucket:'50',c:20},{metric:'scroll_depth',bucket:'75',c:13},{metric:'scroll_depth',bucket:'100',c:6},{metric:'film_complete',bucket:'complete',c:5}]
   };
 
@@ -337,6 +342,8 @@ h2.title{font-size:30px;font-weight:800;letter-spacing:-.02em;margin:0 4px 8px;l
     renderHBar($('#clicks'), j.clicks, '#79f2b5');
     renderDonut($('#devices'), j.devices);
     renderDonut($('#sources'), j.sources);
+    // Older stats responses have no pages field; render that as empty, not as an error.
+    renderDonut($('#pages'), (j.pages||[]).map(r=>({target:PAGE_CN[r.page]??r.page, c:r.c})));
     renderEngagement(j);
     $('#modeBadge').style.display = sample?'inline-block':'none';
     $('#demoNote').style.display = sample?'block':'none';
@@ -401,7 +408,7 @@ h2.title{font-size:30px;font-weight:800;letter-spacing:-.02em;margin:0 4px 8px;l
   setInterval(load, 300000);
   window.addEventListener('resize', ()=>{
     if(!window.echarts) return;
-    ['#chart','#countries','#clicks','#devices','#sources','#dwell','#scrollDepth','#filmCompletion'].forEach(sel=>{
+    ['#chart','#countries','#clicks','#devices','#sources','#pages','#dwell','#scrollDepth','#filmCompletion'].forEach(sel=>{
       const el=document.querySelector(sel);
       const inst=echarts.getInstanceByDom(el);
       if(inst) inst.resize();

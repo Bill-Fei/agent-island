@@ -4,6 +4,8 @@
   if (navigator.doNotTrack === '1' || navigator.globalPrivacyControl === true) return;
   if (!/^https?:$/.test(location.protocol)) return;
   const test = new URLSearchParams(location.search).get('analytics_test') === '1';
+  // Which language version was viewed. The Chinese page reports '' so existing rows stay comparable.
+  const page = document.documentElement?.lang?.startsWith('en') ? 'en' : '';
   function send(event, target = '', bucket = '') {
     let source = 'direct';
     try {
@@ -19,7 +21,7 @@
       headers: { 'Content-Type': 'application/json' }, body
     }).catch(() => {}); // Analytics must never block navigation or downloads.
   }
-  send('page_view');
+  send('page_view', page);
   const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
   let maxScroll = 0;
   let engagementReported = false;
@@ -64,6 +66,9 @@
     else if (element.id === 'filmPlay') send('click', 'film_play');
     else if (element.id === 'sourceLink') send('click', 'source');
     else if (element.id === 'island') send('click', 'island_demo');
+    else if (element.matches('[data-lang-switch]')) send('click', 'lang_switch');
+    else if (element.matches('[data-lang-hint]')) send('click', 'lang_hint');
+    else if (element.matches('[data-lang-hint-close]')) send('click', 'lang_hint_close');
     else {
       const section = element.getAttribute('href');
       if (['#film', '#states', '#privacy', '#agents', '#top'].includes(section)) send('click', section.slice(1));

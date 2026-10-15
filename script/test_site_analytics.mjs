@@ -32,6 +32,15 @@ for (const header of [{DNT: '1'}, {'Sec-GPC': '1'}, {'User-Agent': 'Googlebot'}]
   assert.equal((await worker.fetch(req(event, header), env, ctx)).status, 204);
   assert.equal(rows.length, n);
 }
+// Language versions: page_view carries the page, unknown values fold into the Chinese page.
+for (const [target, stored] of [['en', 'en'], ['', ''], ['de', ''], [undefined, '']]) {
+  assert.equal((await worker.fetch(req({event: 'page_view', target, source: 'direct', test: true}), env, ctx)).status, 204);
+  assert.equal(rows.at(-1)[2], stored);
+}
+for (const target of ['lang_switch', 'lang_hint', 'lang_hint_close']) {
+  assert.equal((await worker.fetch(req({...event, target}), env, ctx)).status, 204);
+  assert.equal(rows.at(-1)[2], target);
+}
 assert.equal((await worker.fetch(req(event), {...env, ANALYTICS_DB: null}, ctx)).status, 503);
 let n = rows.length;
 for (const method of ['HEAD', 'GET']) {
@@ -50,6 +59,7 @@ for (const optout of [false, true]) {
     fetch: (url, options) => {requests.push(JSON.parse(options.body)); return Promise.resolve()}};
   vm.runInNewContext(browserCode, context);
   assert.equal(requests.length, optout ? 0 : 1);
+  if (!optout) assert.equal(requests[0].target, '');  // no lang attribute → Chinese page
   if (!optout) {
     listener({target: {closest: () => ({id: 'dmgLink', getAttribute: () => null, matches: () => true})}});
     assert.equal(requests[1].target, 'download_section');
@@ -57,3 +67,30 @@ for (const optout of [false, true]) {
   }
 }
 console.log('Site analytics tests passed: collection, privacy opt-outs, validation, downloads, frontend.');
+
+// The English page reports itself, and the language controls report their clicks.
+{
+  let requests = [], listener;
+  const context = {navigator: {doNotTrack: '0'}, URL, URLSearchParams,
+    location: {protocol: 'https:', search: '', hostname: 'agent-island.pages.dev'},
+    document: {referrer: '', documentElement: {lang: 'en'}, addEventListener: (name, fn) => {listener = fn}},
+    window: {SITE: {dmgUrl: '../download/Agent-Island-0.3.4.dmg'}},
+    fetch: (url, options) => {requests.push(JSON.parse(options.body)); return Promise.resolve()}};
+  vm.runInNewContext(browserCode, context);
+  assert.equal(requests[0].event, 'page_view');
+  assert.equal(requests[0].target, 'en');
+  for (const [attr, target] of [['data-lang-switch', 'lang_switch'], ['data-lang-hint', 'lang_hint'], ['data-lang-hint-close', 'lang_hint_close']]) {
+    listener({target: {closest: () => ({id: '', getAttribute: () => null, matches: sel => sel === `[${attr}]`})}});
+    assert.equal(requests.at(-1).target, target);
+  }
+}
+
+// Both publish paths must ship the English page and its share card.
+for (const script of ['publish_site.sh', 'publish_site_analytics.mjs']) {
+  const src = fs.readFileSync(new URL(script, import.meta.url), 'utf8');
+  assert.ok(src.includes('en/index.html'), `${script} does not ship en/index.html`);
+  assert.ok(src.includes('og-card-en.jpg'), `${script} does not ship og-card-en.jpg`);
+  // The shell script writes the path out; the Node script builds it from a '../' prefix.
+  assert.ok(src.includes('../download/') || src.includes("['en/index.html', '../']"), `${script} does not point /en/ at ../download/`);
+}
+console.log('Site language tests passed: page tagging, language clicks, publish lists.');

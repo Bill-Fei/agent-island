@@ -32,15 +32,16 @@ shasum -a 256 "$DMG" | tee "$DMG.sha256"
 
 echo "==> 3/4 Assembling the site"
 rm -rf "$OUT"
-mkdir -p "$OUT/media/icons" "$OUT/download"
+mkdir -p "$OUT/media/icons" "$OUT/download" "$OUT/en"
 cp "$ROOT_DIR/site/index.html" "$ROOT_DIR/site/style.css" "$ROOT_DIR/site/island.js" "$ROOT_DIR/site/analytics.js" "$ROOT_DIR/site/_worker.js" "$ROOT_DIR/site/_routes.json" "$ROOT_DIR/site/dashboard.html" "$OUT/"
+cp "$ROOT_DIR/site/en/index.html" "$OUT/en/"
 # dashboard.html loads echarts from here, not a CDN: jsDelivr was unreachable on some
 # networks and left every chart blank. Without this copy the dashboard ships broken.
 cp "$ROOT_DIR/site/echarts.min.js" "$OUT/"
 # Only files the page actually uses; the unused state-*.jpg stay private.
 # og-card.jpg is referenced by absolute URL from the og:image/twitter:image tags, so it must
 # ship even though nothing on the page loads it.
-for f in app-icon.png favicon.png film-poster.jpg film.mp4 desktop-wallpaper.svg og-card.jpg; do
+for f in app-icon.png favicon.png film-poster.jpg film.mp4 desktop-wallpaper.svg og-card.jpg og-card-en.jpg; do
   cp "$ROOT_DIR/site/media/$f" "$OUT/media/"
 done
 cp "$ROOT_DIR/site/media/icons/"*.png "$OUT/media/icons/"
@@ -48,6 +49,9 @@ cp "$DMG" "$OUT/download/"
 # Point the download buttons at the file that ships next to the page.
 perl -0pi -e "s#dmgUrl: ''#dmgUrl: 'download/$DMG_NAME'#" "$OUT/index.html"
 grep -q "dmgUrl: 'download/$DMG_NAME'" "$OUT/index.html"
+# /en/ is one level down, so its link climbs back to the shared download/ folder.
+perl -0pi -e "s#dmgUrl: ''#dmgUrl: '../download/$DMG_NAME'#" "$OUT/en/index.html"
+grep -q "dmgUrl: '../download/$DMG_NAME'" "$OUT/en/index.html"
 echo "First-party website analytics: enabled via site/wrangler.jsonc"
 cat > "$OUT/_headers" <<EOF
 /download/*

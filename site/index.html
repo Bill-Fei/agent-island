@@ -7,6 +7,9 @@
 <meta name="description" content="Agent 灵动岛把 Codex、Claude、豆包、Work Buddy 的任务状态放在 Mac 屏幕顶部。只看状态，不碰内容，不联网。">
 <meta name="theme-color" content="#000000">
 <link rel="canonical" href="https://agent-island.pages.dev/">
+<link rel="alternate" hreflang="zh-CN" href="https://agent-island.pages.dev/">
+<link rel="alternate" hreflang="en" href="https://agent-island.pages.dev/en/">
+<link rel="alternate" hreflang="x-default" href="https://agent-island.pages.dev/">
 <link rel="icon" href="media/favicon.png">
 
 <!-- Link previews (X, Slack, Discord, iMessage, HN readers). Absolute URLs are required:
@@ -29,7 +32,7 @@
 <meta name="twitter:image" content="https://agent-island.pages.dev/media/og-card.jpg">
 <meta name="twitter:image:alt" content="Mac 屏幕顶部展开的任务总览：Codex 的数据库迁移正在等待确认。">
 
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=2">
 <script>
   // Release links. The download button points at the dmg shipped next to this page
   // (injected by script/publish_site.sh); sourceUrl links back to the public repo.
@@ -73,10 +76,19 @@
     <a href="#agents">支持的 Agent</a>
   </nav>
   <div class="menubar-right">
+    <a class="menubar-lang" href="en/" hreflang="en" lang="en" data-lang-switch aria-label="View this page in English">EN</a>
     <span class="menubar-clock" id="clock" aria-hidden="true"></span>
     <a class="menubar-download" href="#download" data-download>下载</a>
   </div>
 </header>
+
+<!-- Shown by island.js only when none of the browser's languages is Chinese. Written in
+     English on purpose: it is for exactly the visitors who cannot read the rest of the page. -->
+<div class="lang-hint" id="langHint" lang="en" role="region" aria-label="Language" hidden>
+  <p>This page is in Chinese.</p>
+  <a href="en/" hreflang="en" data-lang-hint>View in English</a>
+  <button type="button" data-lang-hint-close aria-label="Dismiss">×</button>
+</div>
 
 <!-- Live demo island. Pure HTML/CSS replica of the app's three states, driven by island.js -->
 <div class="island" id="island" role="button" tabindex="0" aria-expanded="false"
@@ -332,7 +344,7 @@
   </div>
 </footer>
 
-<script src="island.js"></script>
-<script src="analytics.js" defer></script>
+<script src="island.js?v=2"></script>
+<script src="analytics.js?v=2" defer></script>
 </body>
 </html>

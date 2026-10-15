@@ -88,6 +88,43 @@ ul, ol { padding: 0; list-style: none; }
   transition: background-color .35s ease, color .35s ease;
 }
 .menubar.is-dark .menubar-download { background: var(--on); color: var(--ink); }
+/* Language switch: reads like one more menu-bar item, not a second button next to Download. */
+.menubar-lang { padding: 5px 0; font-weight: 500; opacity: .8; transition: opacity .2s ease; }
+.menubar-lang:hover { opacity: 1; }
+
+/* ---------- language hint ----------
+   Floats at the bottom: the top of the page belongs to the notch demo. */
+
+.lang-hint {
+  position: fixed; left: 50%; bottom: max(18px, env(safe-area-inset-bottom)); z-index: 45;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 4px;
+  max-width: calc(100vw - 24px);
+  padding: 5px 5px 5px 16px; border-radius: 999px;
+  background: rgba(10, 15, 28, .84);
+  -webkit-backdrop-filter: saturate(1.6) blur(20px);
+  backdrop-filter: saturate(1.6) blur(20px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .28), inset 0 0 0 1px rgba(255, 255, 255, .08);
+  color: var(--on); font-size: 13.5px; line-height: 1.2; white-space: nowrap;
+  --focus: var(--aqua);
+  animation: hint-in .5s cubic-bezier(.2, .8, .2, 1) both;
+}
+.lang-hint[hidden] { display: none; }
+.lang-hint p { margin: 0; color: var(--on2); overflow: hidden; text-overflow: ellipsis; }
+.lang-hint a {
+  margin-left: 8px; padding: 7px 13px; border-radius: 999px;
+  background: rgba(255, 255, 255, .14); color: var(--on);
+  font-weight: 600; text-decoration: none; transition: background-color .2s ease;
+}
+.lang-hint a:hover { background: rgba(255, 255, 255, .24); }
+.lang-hint button {
+  display: grid; place-items: center; flex: none;
+  width: 30px; height: 30px; border: 0; border-radius: 50%;
+  background: transparent; color: var(--on3); font: inherit; font-size: 17px; cursor: pointer;
+  transition: color .2s ease, background-color .2s ease;
+}
+.lang-hint button:hover { color: var(--on); background: rgba(255, 255, 255, .08); }
+@keyframes hint-in { from { opacity: 0; transform: translate(-50%, 14px); } }
 
 /* ---------- the island ---------- */
 
@@ -547,9 +584,17 @@ ul, ol { padding: 0; list-style: none; }
 @media (max-width: 1040px) {
   .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+.dl-short { display: none; }
 @media (max-width: 760px) {
   .menubar { gap: 12px; padding: 0 10px; }
   .menubar-app span, .menubar-clock { display: none; }
+  /* The notch fills the middle of a phone's menu bar and leaves ~75 px on the right, which the
+     Download button already needs. The left side is empty once the app name folds away, so the
+     language switch moves there, next to the mark. island.js keeps the island clear of it. */
+  .menubar-lang { position: absolute; left: 40px; top: 50%; transform: translateY(-50%); }
+  /* English "Download" is too wide for that ~75 px; "Get" is the App Store's own word for it. */
+  .dl-full { display: none; }
+  .dl-short { display: inline; }
   .hero { padding: 222px 0 64px; }
   .hero-stage { margin-top: 44px; }
   .screen { padding: 6px; border-radius: 18px; }
@@ -573,4 +618,5 @@ ul, ol { padding: 0; list-style: none; }
   .i-bars i, .i-med-status i { animation: none; }
   .i-bars i { transform: scaleY(.62); }
   .island[data-state="panel"] .i-panel > * { transition-delay: 0s; transition-duration: .15s; }
+  .lang-hint { animation: none; }
 }

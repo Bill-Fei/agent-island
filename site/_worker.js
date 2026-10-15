@@ -1,6 +1,9 @@
 // Pages advanced-mode worker: assets + first-party aggregate analytics.
 const TARGETS = new Set(['download_section', 'download_menu', 'download_hero', 'download_mirror',
-  'download_blocked', 'film_play', 'source', 'island_demo', 'film', 'states', 'privacy', 'agents', 'top']);
+  'download_blocked', 'film_play', 'source', 'island_demo', 'film', 'states', 'privacy', 'agents', 'top',
+  'lang_switch', 'lang_hint', 'lang_hint_close']);
+// page_view target = which language version was viewed; '' is the Chinese page.
+const PAGES = new Set(['', 'en']);
 const SOURCES = new Set(['direct', 'search', 'social', 'other']);
 const ENGAGEMENT = new Set(['visible_time', 'scroll_depth', 'film_complete']);
 const VISIBLE_BUCKETS = new Set(['0_9s', '10_29s', '30_59s', '60s_plus']);
@@ -66,6 +69,7 @@ export default {
           env.ANALYTICS_DB.prepare(`SELECT country, SUM(count) AS c FROM daily_metrics WHERE event='page_view' AND traffic='visitor' GROUP BY country ORDER BY c DESC LIMIT 10`).bind(),
           env.ANALYTICS_DB.prepare(`SELECT source, SUM(count) AS c FROM daily_metrics WHERE event='page_view' AND traffic='visitor' GROUP BY source ORDER BY c DESC`).bind()
           ,env.ANALYTICS_DB.prepare(`SELECT metric,bucket,SUM(count) AS c FROM engagement_metrics WHERE traffic='visitor' AND day>=? GROUP BY metric,bucket ORDER BY metric,bucket`).bind(start)
+          ,env.ANALYTICS_DB.prepare(`SELECT target AS page, SUM(count) AS c FROM daily_metrics WHERE event='page_view' AND traffic='visitor' GROUP BY target ORDER BY c DESC`).bind()
         ]);
       } catch { return reply(503); }
       const val = (i) => rows[i].results?.[0]?.c ?? 0;
@@ -83,7 +87,8 @@ export default {
         devices: rows[7].results || [],
         countries: rows[8].results || [],
         sources: rows[9].results || [],
-        engagement: rows[10].results || []
+        engagement: rows[10].results || [],
+        pages: rows[11].results || []
       }), { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
     }
     if (url.pathname === '/api/analytics') {
@@ -122,7 +127,10 @@ export default {
         catch { return reply(503); }
       }
       try {
-        await record(env, request, data.event, data.event === 'click' ? data.target : '', data.source, data.test);
+        // Unknown page values fall back to '' rather than rejecting the hit: an old cached
+        // analytics.js must never lose a page view.
+        const target = data.event === 'click' ? data.target : PAGES.has(data.target) ? data.target : '';
+        await record(env, request, data.event, target, data.source, data.test);
         return reply(204);
       } catch { return reply(503); } // No request body or user data in logs.
     }

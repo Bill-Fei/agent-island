@@ -3,9 +3,13 @@
   'use strict';
 
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+  // One script serves both language versions; the page's lang attribute picks the strings.
+  const EN = document.documentElement.lang.startsWith('en');
 
   /* ---------- release links ---------- */
   const SITE = window.SITE || {};
+  // Path back to the site root: '' on the Chinese page, '../' on /en/.
+  const ROOT = SITE.root || '';
   const dmg = document.getElementById('dmgLink');
   if (SITE.dmgUrl) {
     document.querySelectorAll('[data-download]').forEach(a => { a.href = SITE.dmgUrl; });
@@ -19,12 +23,34 @@
   if (SITE.sourceUrl) { document.getElementById('sourceLink').href = SITE.sourceUrl; document.getElementById('sourceNote').hidden = false; }
   document.querySelectorAll('[data-version]').forEach(n => { n.textContent = SITE.version || n.textContent; });
 
+  /* ---------- language hint ----------
+     Chinese page only. Offer English when none of the browser's languages is Chinese: a
+     Chinese reader with an English system usually still lists zh, and should not be asked.
+     Never redirects — shared links must open the page they point to. Any answer (follow the
+     hint, close it, or pick a language from the menu bar) is remembered on this device only. */
+  const HINT_KEY = 'island_lang_hint';
+  const remember = () => { try { localStorage.setItem(HINT_KEY, '1'); } catch { /* storage off */ } };
+  const answered = () => { try { return localStorage.getItem(HINT_KEY) === '1'; } catch { return false; } };
+  document.querySelectorAll('[data-lang-switch]').forEach(a => a.addEventListener('click', remember));
+  const hint = document.getElementById('langHint');
+  if (hint) {
+    const langs = navigator.languages?.length ? navigator.languages : [navigator.language || ''];
+    const readsChinese = langs.some(l => /^zh(-|$)/i.test(l));
+    if (!answered() && !readsChinese) {
+      // Let the hero land first, so the hint reads as an offer rather than part of the page.
+      // Re-check on firing: the visitor may have picked a language in the meantime.
+      setTimeout(() => { if (!answered()) hint.hidden = false; }, 1200);
+    }
+    hint.querySelector('[data-lang-hint]').addEventListener('click', remember);
+    hint.querySelector('[data-lang-hint-close]').addEventListener('click', () => { hint.hidden = true; remember(); });
+  }
+
   /* ---------- menu bar clock ---------- */
   const clock = document.getElementById('clock');
-  const DAYS = '日一二三四五六';
+  const DAYS = EN ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] : [...'日一二三四五六'].map(d => `周${d}`);
   const tick = () => {
     const d = new Date();
-    clock.textContent = `周${DAYS[d.getDay()]} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+    clock.textContent = `${DAYS[d.getDay()]} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
   };
   tick(); setInterval(tick, 15000);
 
@@ -38,10 +64,10 @@
   });
 
   /* ---------- island ---------- */
-  const ICON = k => `media/icons/${k}.png`;
+  const ICON = k => `${ROOT}media/icons/${k}.png`;
   const EVENTS = [
-    { agent: 'claude', stack: ['claude', 'codex', 'doubao'], title: '重构登录模块', status: '本轮结束', color: '#87c7ab', glow: 'rgba(135,199,171,.28)' },
-    { agent: 'codex', stack: ['codex', 'claude', 'workbuddy'], title: '数据库迁移', status: '待你确认', color: '#e8b080', glow: 'rgba(232,176,128,.28)' }
+    { agent: 'claude', stack: ['claude', 'codex', 'doubao'], title: EN ? 'Refactor login' : '重构登录模块', status: EN ? 'Turn done' : '本轮结束', color: '#87c7ab', glow: 'rgba(135,199,171,.28)' },
+    { agent: 'codex', stack: ['codex', 'claude', 'workbuddy'], title: EN ? 'Database migration' : '数据库迁移', status: EN ? 'Needs you' : '待你确认', color: '#e8b080', glow: 'rgba(232,176,128,.28)' }
   ];
 
   // Geometry of each state, in app points (same values as the app / film).
@@ -107,8 +133,12 @@
   const menuLeft = document.querySelector('.menubar-app');
   const menuNav = document.querySelector('.menubar-menu');
   const menuRight = document.querySelector('.menubar-right');
+  const menuLang = document.querySelector('.menubar-lang');
   function medWidth() {
-    const leftEdge = Math.max(menuLeft.getBoundingClientRect().right, menuNav.getBoundingClientRect().right);
+    // On phones the language switch moves to the left half (style.css); count it there too.
+    const lang = menuLang?.getBoundingClientRect();
+    const langLeft = lang && lang.right < innerWidth / 2 ? lang.right : 0;
+    const leftEdge = Math.max(menuLeft.getBoundingClientRect().right, menuNav.getBoundingClientRect().right, langLeft);
     const clear = Math.max(leftEdge, innerWidth - menuRight.getBoundingClientRect().left) + 12;
     return Math.max(290, Math.min(520, (innerWidth - 2 * clear) / baseScale() - 14));
   }
