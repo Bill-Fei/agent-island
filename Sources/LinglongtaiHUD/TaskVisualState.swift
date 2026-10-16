@@ -59,11 +59,11 @@ enum TaskVisualState: Hashable {
     }
     var label: String {
         switch self {
-        case .attention: return "待你确认"
-        case .executing: return "进行中"
+        case .attention: return "等你批准"
+        case .executing: return "正在执行"
         case .queued: return "排队中"
-        case .checkingPermission: return "核对权限"
-        case .awaitingReceipt: return "等待回执"
+        case .checkingPermission: return "在 App 里处理"
+        case .awaitingReceipt: return "等 App 确认"
         case .unknown: return "结果未知"
         case .untracked: return "不再跟踪"
         case .completed: return "本轮结束"

@@ -87,33 +87,31 @@ final class TaskStore: ObservableObject {
     }
 
     func approvalFeedback(for task: AgentTask) -> String? {
-        if failedApprovals.contains(task.id) { return "未提交决定 · 请在原应用核实" }
+        if failedApprovals.contains(task.id) { return "没批成功 · 回 App 处理" }
         guard let id = task.approvalRequestID, let date = submittedApprovals[id], task.status == .waiting else { return nil }
-        return now().timeIntervalSince(date) < 30 ? "已提交决定 · 等待回执" : "尚未收到回执 · 请核实"
+        return now().timeIntervalSince(date) < 30 ? "已发送，等 App 确认" : "App 还没确认 · 回 App 看看"
     }
 
     /// Explain where the user must make a decision. A PermissionRequest is
     /// only a permission check until the relay publishes a live request.
     func approvalSurfaceText(for task: AgentTask) -> String? {
         guard task.status == .waiting else { return nil }
-        if approvalRequest(for: task) != nil { return "岛内单次审批" }
-        if task.profile.kind == .claude, task.sourceEvent == "PermissionRequest" { return "权限检查 · 无岛内操作" }
-        if task.profile.kind == .claude, task.sourceEvent == "Notification" { return "原应用通知 · 岛内仅观察" }
+        if approvalRequest(for: task) != nil { return "可以在岛上批准" }
+        if task.profile.kind == .claude, ["PermissionRequest", "Notification"].contains(task.sourceEvent ?? "") { return "在 App 里处理" }
         return nil
     }
 
     func currentStepText(for task: AgentTask) -> String {
         if task.sourceEvent == "ClaudeChatUnknown" { return task.detail }
         if let feedback = approvalFeedback(for: task) { return feedback }
-        if approvalRequest(for: task) != nil { return "岛内单次审批 · 请核对本次工具操作" }
+        if approvalRequest(for: task) != nil { return "等你批准 · 看清要做什么再点" }
         if displayedStatus(for: task) == "结果未知" { return "未收到结束信号，无法确认结果" }
         if task.status == .waiting && task.sourceEvent == "PermissionRequest" {
-            return task.profile.kind == .claude
-                ? "应用正在核对工具权限，尚未确认需要你操作；灵动岛不接管本次检查"
-                : "应用正在核对工具权限，灵动岛不接管审批"
+            // Never send the user hunting for a prompt that may not exist.
+            return "\(task.agent) 正在确认权限；需要你批准时会在 App 里问你"
         }
         if task.status == .waiting && task.sourceEvent == "Notification", task.profile.kind == .claude {
-            return "收到原应用确认通知 · 灵动岛仅观察，无法核实原窗口是否仍需操作"
+            return "\(task.agent) 可能在等你确认，请回 App 查看"
         }
         if task.sourceEvent == "PreToolUse",
            let step = task.toolSteps.filter({ $0.state == .running }).max(by: { $0.updatedAt < $1.updatedAt }) {
@@ -672,9 +670,9 @@ final class TaskStore: ObservableObject {
         }
         if task.status == .running || task.status == .queued {
             let progress = task.progressKnown ? " · \(Int(task.progress * 100))%" : ""
-            return "\(task.statusLabel)\(progress) · \(freshness)"
+            return "\(plainStatus(for: task))\(progress) · \(freshness)"
         }
-        return "\(displayedStatus(for: task)) · \(freshness)"
+        return "\(plainStatus(for: task)) · \(freshness)"
     }
 
     func connectionLabel(for kind: AgentKind) -> String {
@@ -697,6 +695,20 @@ final class TaskStore: ObservableObject {
             return task.approvalRequestID == nil ? "权限检查中" : "等待权限结果"
         }
         return task.statusLabel
+    }
+
+    /// The wording a person reads. displayedStatus stays the internal key that
+    /// visual-state mapping and checks rely on; only waiting phases collapse
+    /// into three plain states: 等你批准 / 在 App 里处理 / 正在执行.
+    func plainStatus(for task: AgentTask) -> String {
+        let status = displayedStatus(for: task)
+        switch status {
+        case "权限检查中", "确认通知观察中", "等待权限结果": return "在 App 里处理"
+        case "等待回执": return "已发送，等 App 确认"
+        case "等待确认": return approvalRequest(for: task) != nil ? "等你批准" : "在 App 里处理"
+        case "执行工具", "处理中": return "正在执行"
+        default: return status
+        }
     }
 
     var activeTask: AgentTask? {
@@ -742,7 +754,7 @@ final class TaskStore: ObservableObject {
             return "\(currentActivityTasks.count)项进行中"
         }
         guard let task = activeTask else { return "等待事件" }
-        return displayedStatus(for: task)
+        return plainStatus(for: task)
     }
 
     var compactCountText: String {

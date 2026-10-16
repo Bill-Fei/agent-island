@@ -43,7 +43,7 @@ struct ApprovalReviewView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
                     .lineLimit(1).truncationMode(.tail)
-                Text(request.tool).font(.system(size: 11)).foregroundStyle(.white.opacity(0.55)).lineLimit(1)
+                Text(actionSummary).font(.system(size: 11)).foregroundStyle(.white.opacity(0.55)).lineLimit(1)
             }
             Spacer(minLength: 6)
             let queue = store.pendingApprovalTasks.count
@@ -58,6 +58,19 @@ struct ApprovalReviewView: View {
     private var title: String {
         let conversation = task.map { conversationTitles.title(for: $0) } ?? ""
         return conversation.isEmpty ? "\(request.provider.displayName) 请求批准" : conversation
+    }
+
+    /// One plain line for what will happen, from the classified tool label.
+    private var actionSummary: String {
+        switch request.tool {
+        case "执行命令": return "要在终端运行命令"
+        case "编辑文件": return "要修改文件"
+        case "读取文件": return "要读取文件"
+        case "检索文件": return "要搜索文件"
+        case "读取网页": return "要打开网页"
+        case "搜索资料": return "要上网搜索"
+        default: return "要使用一个工具"
+        }
     }
 
     // MARK: Command
