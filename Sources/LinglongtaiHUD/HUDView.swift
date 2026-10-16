@@ -505,16 +505,9 @@ private struct HUDExpandedContent: View {
                     Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1)
                         .padding(.top, 14)
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 10) {
-                            // Ended turns need no card: the pill and 打开应用 say it all.
-                            // Live or unknown turns keep one plain line of what is happening.
-                            if state.group != .ended || state == .unknown || state == .untracked {
-                                Text(state.unknownExplanation ?? store.currentStepText(for: task))
-                                    .font(HUDTypography.body)
-                                    .foregroundStyle(.white.opacity(0.72))
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            stepDetails(for: task)
+                        VStack(alignment: .leading, spacing: 16) {
+                            outcomeCard(for: task, state: state)
+                            stepSummary(for: task, state: state)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.top, 14)
@@ -565,50 +558,134 @@ private struct HUDExpandedContent: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// Only long turns get a per-step list; the card's second line covers the rest.
-    @ViewBuilder private func stepDetails(for task: AgentTask) -> some View {
-        if task.hasUnidentifiedToolSteps {
-            Text("部分步骤没有编号，次数可能偏多")
-                .font(HUDTypography.caption).foregroundStyle(.secondary)
-        }
-        // The card stays one sentence; how much work happened lives behind
-        // a single quiet link, opened only when someone wants it.
-        if !task.returnedToolSteps.isEmpty {
-            let expanded = stepList.expandedTaskID == task.id
-            let failed = task.failedToolStepCount
-            VStack(alignment: .leading, spacing: 8) {
-                Button {
-                    stepList.expandedTaskID = expanded ? nil : task.id
-                } label: {
-                    HStack(spacing: 4) {
-                        Text("\(task.returnedToolSteps.count) 个步骤" + (failed > 0 ? " · \(failed) 次出错" : ""))
-                        Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                            .font(.system(size: 9, weight: .semibold))
-                    }
-                    .font(HUDTypography.caption)
-                    .foregroundStyle(HUDColorTokens.info)
-                    .contentShape(Rectangle())
+    /// One tinted card that says where things stand and where to go next.
+    /// The island never reads replies, so finished work points back to the app.
+    @ViewBuilder private func outcomeCard(for task: AgentTask, state: TaskVisualState) -> some View {
+        let app = task.profile.kind == .custom ? "原应用" : task.agent
+        let text: String = {
+            switch state {
+            case .completed: return "回复和改动在 \(app) 里"
+            case .failed: return "出错了 · 去 \(app) 看原因"
+            case .cancelled: return task.sourceEvent == "SessionEnd" ? "会话已关闭" : "这一轮被中断了"
+            case .unknown, .untracked: return state.unknownExplanation ?? store.currentStepText(for: task)
+            default: return store.currentStepText(for: task)
+            }
+        }()
+        let opens = task.profile.kind != .custom && [.completed, .failed, .attention, .checkingPermission].contains(state)
+        let tint = state == .completed ? HUDColorTokens.success : state.tint
+        let card = HStack(alignment: .center, spacing: 10) {
+            if state.animates {
+                CompactActivityGlyph(height: 20, active: store.presentation == .heavy)
+                    .frame(width: 13, height: 13)
+                    .foregroundStyle(tint)
+            } else {
+                Image(systemName: state.symbol)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(tint)
+            }
+            Text(text)
+                .font(HUDTypography.bodyEmphasis)
+                .foregroundStyle(.white.opacity(0.9))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if opens {
+                HStack(spacing: 3) {
+                    Text("查看")
+                    Image(systemName: "arrow.up.forward").font(.system(size: 9, weight: .bold))
                 }
+                .font(HUDTypography.captionEmphasis)
+                .foregroundStyle(HUDColorTokens.info)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(tint.opacity(0.18)))
+        if opens {
+            Button { presence.open(task.profile.kind) } label: { card.contentShape(Rectangle()) }
                 .buttonStyle(.plain)
-                if expanded {
-                    VStack(alignment: .leading, spacing: 7) {
-                        ForEach(Array(task.returnedToolSteps.prefix(30))) { step in
-                            HStack(alignment: .top) {
-                                Text(step.label + (step.state == .failed ? " · 出错" : ""))
-                                    .foregroundStyle(step.state == .failed ? HUDColorTokens.attention : .white.opacity(0.72))
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                Text(step.updatedAt, style: .time).monospacedDigit().foregroundStyle(.secondary)
-                            }.font(HUDTypography.caption)
-                        }
-                        if task.returnedToolSteps.count > 30 {
-                            Text("只列出最近 30 条").font(HUDTypography.caption).foregroundStyle(.secondary)
-                        }
+                .disabled(presence.opening.contains(task.profile.kind))
+                .help("打开 \(app)")
+        } else {
+            card
+        }
+    }
+
+    @ViewBuilder private func stepSummary(for task: AgentTask, state: TaskVisualState) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(state.group == .ended ? "做了什么" : "已完成的步骤")
+                .font(HUDTypography.captionEmphasis).foregroundStyle(.secondary)
+            let counts = task.toolStepCounts
+            if counts.isEmpty {
+                Text(state.group == .ended ? "没有收到工具记录" : "还没有完成的步骤")
+                    .font(HUDTypography.body).foregroundStyle(.secondary)
+            } else {
+                let failed = task.failedToolStepCount
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 64), spacing: 8)], alignment: .leading, spacing: 8) {
+                    ForEach(counts, id: \.verb) { item in
+                        countTile(value: item.count, label: item.verb, tint: .white)
                     }
-                    .padding(10)
-                    .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    if failed > 0 {
+                        countTile(value: failed, label: "出错", tint: HUDColorTokens.attention)
+                    }
+                }
+                if task.hasUnidentifiedToolSteps {
+                    Text("部分步骤没有编号，次数可能偏多")
+                        .font(HUDTypography.caption).foregroundStyle(.secondary)
+                }
+                // Tiles already tell short turns; the list is only worth it for longer ones.
+                if task.returnedToolSteps.count >= 3 {
+                    let expanded = stepList.expandedTaskID == task.id
+                    Button {
+                        stepList.expandedTaskID = expanded ? nil : task.id
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(expanded ? "收起明细" : "查看明细")
+                            Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 9, weight: .semibold))
+                        }
+                        .font(HUDTypography.caption)
+                        .foregroundStyle(HUDColorTokens.info)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 2)
+                    if expanded {
+                        VStack(alignment: .leading, spacing: 7) {
+                            ForEach(Array(task.returnedToolSteps.prefix(30))) { step in
+                                HStack(alignment: .top) {
+                                    Text(step.label + (step.state == .failed ? " · 出错" : ""))
+                                        .foregroundStyle(step.state == .failed ? HUDColorTokens.attention : .white.opacity(0.72))
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                    Text(step.updatedAt, style: .time).monospacedDigit().foregroundStyle(.secondary)
+                                }.font(HUDTypography.caption)
+                            }
+                            if task.returnedToolSteps.count > 30 {
+                                Text("只列出最近 30 条，上面的次数包含全部").font(HUDTypography.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(10)
+                        .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
                 }
             }
         }
+    }
+
+    private func countTile(value: Int, label: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("\(value)")
+                .font(.system(size: 18, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(tint)
+            Text(label)
+                .font(HUDTypography.caption)
+                .foregroundStyle(tint == .white ? .white.opacity(0.5) : tint.opacity(0.8))
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(tint.opacity(tint == .white ? 0.05 : 0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private func hasDetailActions(for task: AgentTask) -> Bool {
