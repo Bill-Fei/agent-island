@@ -156,6 +156,10 @@ with tempfile.TemporaryDirectory(prefix="island-approval-") as temporary:
         finish(proc)
         newer = list((root / "pending-approvals").glob("*.json"))
         check(label + " newer check supersedes the session's earlier request", len(newer) == 1 and newer[0] != files[0])
+    root = base / "desktop-host"
+    proc = start(root, payload(provider="claude", arguments={"token": "private-fixture"}), entrypoint="claude-desktop-3p", host_session=host_session)
+    finish(proc)
+    check("an unpublished Desktop check still retires the session's earlier request", not list((root / "pending-approvals").glob("*.json")))
     for label, session in [("desktop-no-session", None), ("desktop-bad-session", "local_../../etc")]:
         root = base / label
         proc = start(root, payload(provider="claude"), entrypoint="claude-desktop-3p", host_session=session)

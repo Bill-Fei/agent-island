@@ -100,6 +100,14 @@ public struct ClaudePromptLog {
         var inode: ino_t = 0
         var partial = Data()
 
+        mutating func drainRotated() -> [String] {
+            let rotated = url.deletingLastPathComponent().appendingPathComponent("main1.log")
+            var info = stat()
+            guard lstat(rotated.path, &info) == 0, info.st_ino == inode, info.st_size > offset else { return [] }
+            var old = Follower(url: rotated, offset: offset, inode: inode, partial: partial)
+            return old.readNewLines()
+        }
+
         mutating func readNewLines() -> [String] {
             let fd = Darwin.open(url.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
             guard fd >= 0 else { return [] }
@@ -111,9 +119,14 @@ public struct ClaudePromptLog {
                 offset = max(0, info.st_size - 524_288)
                 inode = info.st_ino
             } else if info.st_ino != inode || info.st_size < offset {
+                // Desktop renames main.log to main1.log; finish the old file first
+                // so an answer written just before rotation is not lost.
+                var lines = drainRotated()
                 offset = 0
                 inode = info.st_ino
                 partial.removeAll()
+                lines += readNewLines()
+                return lines
             }
             guard info.st_size > offset else { return [] }
             let length = Int(min(info.st_size - offset, 4_194_304))

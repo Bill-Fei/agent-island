@@ -137,7 +137,7 @@ public enum ApprovalRelay {
 
     /// A host session asks one permission at a time; a newer check supersedes
     /// its earlier (auto-approved or answered) requests.
-    static func cleanupHostSession(_ session: String) {
+    public static func cleanupHostSession(_ session: String) {
         guard directoryIsPrivate(), let urls = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else { return }
         for url in urls {
             guard url.pathExtension == "json", let id = UUID(uuidString: url.deletingPathExtension().lastPathComponent),

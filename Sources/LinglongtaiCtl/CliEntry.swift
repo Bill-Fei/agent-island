@@ -222,6 +222,14 @@ struct LinglongtaiCtl {
         }
         var publishedEvent = false
         var approval: ApprovalRelay.Request?
+        // Every new Desktop permission check, published or not (sensitive,
+        // subagent, HUD away), retires the session's earlier request so it can
+        // never be matched to this check's card.
+        if args.contains("--approval-relay"), ApprovalRelay.hostShowsOwnPrompt(),
+           let session = ApprovalRelay.hostSessionID(),
+           (try? JSONSerialization.jsonObject(with: input) as? [String: Any])?["hook_event_name"] as? String == "PermissionRequest" {
+            ApprovalRelay.cleanupHostSession(session)
+        }
         // Explicit opt-in applies ONLY to Claude Code's documented contract.
         withEventLock { fd in
             let kind = AgentKind.resolve(provider)

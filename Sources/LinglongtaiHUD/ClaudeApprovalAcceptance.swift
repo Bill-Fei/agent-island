@@ -82,9 +82,10 @@ func runClaudeApprovalStoreChecks(check: (String, Bool) -> Void, emit: (AgentEve
     check("two open cards in one session are never pressed", store.approvalRequest(for: desktopTask) == nil)
     hostLine("Permission request \(otherCard) for Bash aborted")
     store.pollHostPrompts()
-    check("an aborted card no longer counts", store.approvalRequest(for: desktopTask) == desktop)
+    check("an aborted card no longer counts; the request keeps its first card", store.approvalRequest(for: desktopTask) == desktop && store.hostPrompt(for: desktop)?.id == cardID)
     var pressed: (String, String, ApprovalRelay.Decision)?
-    store.hostApprovalDelivery = { session, prompt, decision, completion in
+    store.hostApprovalDelivery = { session, prompt, decision, stillOpen, _, completion in
+        guard stillOpen() else { completion(.failed(code: "card-changed", reason: "")); return }
         pressed = (session, prompt, decision)
         hostLine("Received permission response for \(prompt): once (tool: Bash)")
         completion(.pressed)
@@ -92,12 +93,24 @@ func runClaudeApprovalStoreChecks(check: (String, Bool) -> Void, emit: (AgentEve
     store.respondToApproval(desktop, decision: .allow)
     check("island approval presses exactly that session's card", pressed?.0 == hostSession && pressed?.1 == cardID && pressed?.2 == .allow)
     check("Desktop's own log confirms the press", store.notice == "已在 App 中允许本次请求" && !store.failedApprovals.contains(desktop.taskID) && store.approvalRequest(for: desktopTask) == nil)
+    guard let stale = try publish(desktopHost: true), let staleTask = store.tasks.first(where: { $0.id == stale.taskID }) else {
+        check("Claude Desktop stale fixture publishes", false); return
+    }
+    date.addTimeInterval(8)
+    let lateCard = UUID().uuidString.lowercased()
+    hostLine("Emitted tool permission request \(lateCard) for Bash in session \(hostSession)")
+    store.pollHostPrompts()
+    check("an old unanswered check is never matched to a later card", store.approvalRequest(for: staleTask) == nil)
+    hostLine("Permission request \(lateCard) for Bash aborted")
+    store.pollHostPrompts()
+    ApprovalRelay.cleanup(stale.id)
+    date.addTimeInterval(-8) // publish() only accepts requests created at the real present
     guard let unanswered = try publish(desktopHost: true), let unansweredTask = store.tasks.first(where: { $0.id == unanswered.taskID }) else {
         check("Claude Desktop second fixture publishes", false); return
     }
     hostLine("Emitted tool permission request \(UUID().uuidString.lowercased()) for Bash in session \(hostSession)")
     store.pollHostPrompts()
-    store.hostApprovalDelivery = { _, _, _, completion in completion(.failed("没找到 App 中的确认卡")) }
+    store.hostApprovalDelivery = { _, _, _, _, _, completion in completion(.failed(code: "no-card", reason: "没找到 App 中的确认卡")) }
     store.respondToApproval(unanswered, decision: .allow)
     check("a failed press is reported, never shown as approved", store.failedApprovals.contains(unansweredTask.id) && store.notice.hasPrefix("未能在 App 中确认"))
     ApprovalRelay.cleanup(unanswered.id)
