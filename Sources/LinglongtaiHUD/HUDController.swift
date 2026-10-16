@@ -293,9 +293,22 @@ final class HUDController: NSObject {
 
 @MainActor
 private enum IslandAppActions {
+    private static var settingsWindow: NSWindow?
+
+    /// Our own window, not SwiftUI's `showSettingsWindow:` hook: that private action
+    /// silently did nothing for this menu-bar-only app (seen on the English build).
     static func showSettings() {
+        if settingsWindow == nil {
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 620),
+                                  styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+            window.title = L("Agent 灵动岛设置")
+            window.contentView = NSHostingView(rootView: AppSettingsView(store: TaskStore.shared))
+            window.isReleasedWhenClosed = false
+            window.center()
+            settingsWindow = window
+        }
         NSApp.activate(ignoringOtherApps: true)
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        settingsWindow?.makeKeyAndOrderFront(nil)
     }
 
     static func quit() { NSApp.terminate(nil) }
