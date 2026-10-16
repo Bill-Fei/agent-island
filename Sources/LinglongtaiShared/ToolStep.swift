@@ -44,4 +44,26 @@ extension AgentTask {
         toolSteps.filter { $0.state != .running }.sorted { $0.updatedAt > $1.updatedAt }
     }
     public var hasUnidentifiedToolSteps: Bool { toolSteps.contains { $0.id.hasPrefix("observation:") } }
+
+    /// One line a person can read at a glance, built only from classified
+    /// labels: "改文件 2 次 · 跑命令 1 次 · 读文件 6 次". Edits and commands
+    /// lead because they change things; reads and searches trail.
+    public var toolStepSummary: String? {
+        let steps = returnedToolSteps
+        guard !steps.isEmpty else { return nil }
+        let order: [(label: String, verb: String)] = [
+            ("编辑文件", "改文件"), ("执行命令", "跑命令"), ("读取文件", "读文件"),
+            ("检索文件", "搜文件"), ("读取网页", "看网页"), ("搜索资料", "搜资料"), ("工具调用", "其他工具"),
+        ]
+        var parts = order.compactMap { entry -> String? in
+            let count = steps.filter { $0.label == entry.label }.count
+            return count == 0 ? nil : "\(entry.verb) \(count) 次"
+        }
+        let known = Set(order.map(\.label))
+        let other = steps.filter { !known.contains($0.label) }.count
+        if other > 0 { parts.append("其他 \(other) 次") }
+        return parts.joined(separator: " · ")
+    }
+
+    public var failedToolStepCount: Int { returnedToolSteps.filter { $0.state == .failed }.count }
 }

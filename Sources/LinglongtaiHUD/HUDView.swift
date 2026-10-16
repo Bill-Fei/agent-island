@@ -298,6 +298,7 @@ private struct HUDExpandedContent: View {
     @ObservedObject var store: TaskStore
     @ObservedObject private var presence = AgentPresence.shared
     @ObservedObject private var conversationTitles = ConversationTitleStore.shared
+    @ObservedObject private var stepList = StepListDisclosure.shared
 
     var body: some View {
         let sections = TaskVisualSection.grouped(store.sortedTasks.map { task in
@@ -491,43 +492,31 @@ private struct HUDExpandedContent: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.top, 14)
                         .textSelection(.enabled)
-                    HStack {
-                        Text("会话线索 · \(String(task.id.uuidString.prefix(6)))")
+                    HStack(spacing: 4) {
                         Text(task.updatedAt, style: .time).monospacedDigit()
-                        Spacer()
-                        Button("复制会话线索") {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(conversationTitles.title(for: task) + "\n" + task.agent + " · " + String(task.id.uuidString.prefix(6)), forType: .string)
-                        }.buttonStyle(.plain)
+                        Text(state.group == .ended ? "结束" : "更新")
                     }.font(HUDTypography.caption).foregroundStyle(.secondary).padding(.top, 6)
                     ScrollView {
                         VStack(alignment: .leading, spacing: 12) {
-                            Text(state == .unknown || state == .untracked ? "状态说明" : state.group == .ended ? "最后状态" : "当前步骤")
-                                .font(HUDTypography.captionEmphasis).foregroundStyle(.secondary)
-                            Text(state.unknownExplanation ?? store.currentStepText(for: task))
-                                .font(HUDTypography.bodyEmphasis)
-                                .foregroundStyle(.white.opacity(0.9))
+                            if let outcome = endedOutcome(for: task, state: state) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(outcome.headline)
+                                        .font(HUDTypography.bodyEmphasis)
+                                        .foregroundStyle(.white.opacity(0.9))
+                                    if let hint = outcome.hint {
+                                        Text(hint).font(HUDTypography.body).foregroundStyle(.secondary)
+                                    }
+                                }
                                 .fixedSize(horizontal: false, vertical: true)
-                            Text("已执行步骤").font(HUDTypography.captionEmphasis).foregroundStyle(.secondary)
-                            if task.returnedToolSteps.isEmpty {
-                                Text("尚未收到工具完成事件").font(HUDTypography.body).foregroundStyle(.secondary)
                             } else {
-                                Text(task.hasUnidentifiedToolSteps ? "收到 \(task.returnedToolSteps.count) 条工具返回记录 · 未提供唯一步骤标识" : "\(task.returnedToolSteps.count) 个工具步骤已返回")
-                                    .font(HUDTypography.caption).foregroundStyle(.secondary)
-                                ForEach(Array(task.returnedToolSteps.prefix(30))) { step in
-                                    HStack(alignment: .top) {
-                                        Image(systemName: step.state == .failed ? "exclamationmark.circle" : "arrow.turn.down.right")
-                                        Text(step.label + (step.state == .failed ? " · 返回错误" : " · 已返回"))
-                                            .fixedSize(horizontal: false, vertical: true)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                        Spacer()
-                                        Text(step.updatedAt, style: .time).foregroundStyle(.secondary)
-                                    }.font(HUDTypography.body)
-                                }
-                                if task.returnedToolSteps.count > 30 {
-                                    Text("显示最近 30 条，计数包含全部返回记录").font(HUDTypography.caption).foregroundStyle(.secondary)
-                                }
+                                Text(state == .unknown || state == .untracked ? "状态说明" : "当前步骤")
+                                    .font(HUDTypography.captionEmphasis).foregroundStyle(.secondary)
+                                Text(state.unknownExplanation ?? store.currentStepText(for: task))
+                                    .font(HUDTypography.bodyEmphasis)
+                                    .foregroundStyle(.white.opacity(0.9))
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
+                            stepSummary(for: task, state: state)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         // Same as the task list: the scroll runs to the pane's
@@ -571,6 +560,74 @@ private struct HUDExpandedContent: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    /// Plain-language outcome for a finished turn: what happened and where to
+    /// look next. The island never reads replies, so it points back to the app.
+    private func endedOutcome(for task: AgentTask, state: TaskVisualState) -> (headline: String, hint: String?)? {
+        let where_ = task.profile.kind == .custom ? "原应用" : task.agent
+        switch state {
+        case .completed:
+            return ("这一轮做完了", "回复和改动在 \(where_) 里查看")
+        case .failed:
+            return ("这一轮出错了", "回到 \(where_) 查看原因；↻ 只重新同步状态，不会重跑")
+        case .cancelled:
+            return task.sourceEvent == "SessionEnd" ? ("会话已关闭", nil) : ("这一轮被中断了", nil)
+        default:
+            return nil
+        }
+    }
+
+    @ViewBuilder private func stepSummary(for task: AgentTask, state: TaskVisualState) -> some View {
+        Text(state.group == .ended ? "这一轮做了什么" : "已完成的步骤")
+            .font(HUDTypography.captionEmphasis).foregroundStyle(.secondary)
+            .padding(.top, 4)
+        if let summary = task.toolStepSummary {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(summary)
+                    .font(HUDTypography.body)
+                    .foregroundStyle(.white.opacity(0.82))
+                    .fixedSize(horizontal: false, vertical: true)
+                let failed = task.failedToolStepCount
+                if failed > 0 || task.hasUnidentifiedToolSteps {
+                    Text([failed > 0 ? "其中 \(failed) 次出错" : nil,
+                          task.hasUnidentifiedToolSteps ? "部分步骤没有编号，次数可能偏多" : nil]
+                        .compactMap { $0 }.joined(separator: " · "))
+                        .font(HUDTypography.caption)
+                        .foregroundStyle(failed > 0 ? HUDColorTokens.attention : .secondary)
+                }
+                let expanded = stepList.expandedTaskID == task.id
+                Button {
+                    stepList.expandedTaskID = expanded ? nil : task.id
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(expanded ? "收起明细" : "查看明细")
+                        Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 9, weight: .semibold))
+                    }
+                    .font(HUDTypography.caption)
+                    .foregroundStyle(HUDColorTokens.info)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                if expanded {
+                    ForEach(Array(task.returnedToolSteps.prefix(30))) { step in
+                        HStack(alignment: .top) {
+                            Text(step.label + (step.state == .failed ? " · 出错" : ""))
+                                .foregroundStyle(step.state == .failed ? HUDColorTokens.attention : .white.opacity(0.72))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Text(step.updatedAt, style: .time).monospacedDigit().foregroundStyle(.secondary)
+                        }.font(HUDTypography.caption)
+                    }
+                    if task.returnedToolSteps.count > 30 {
+                        Text("只列出最近 30 条，上面的次数包含全部").font(HUDTypography.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+        } else {
+            Text(state.group == .ended ? "没有收到工具记录" : "还没有完成的步骤")
+                .font(HUDTypography.body).foregroundStyle(.secondary)
+        }
+    }
+
     private func hasDetailActions(for task: AgentTask) -> Bool {
         store.approvalRequest(for: task) != nil || store.displayedStatus(for: task) == "结果未知"
             || detailFooterText(for: task) != nil
@@ -611,6 +668,12 @@ private struct HUDExpandedContent: View {
     }
 }
 
+
+/// Which task's step list is open. Keyed by task so switching tasks closes it.
+private final class StepListDisclosure: ObservableObject {
+    static let shared = StepListDisclosure()
+    @Published var expandedTaskID: UUID?
+}
 
 private struct LiveOrb: View {
     var size: CGFloat = 24

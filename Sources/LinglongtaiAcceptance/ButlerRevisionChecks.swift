@@ -22,6 +22,17 @@ func runButlerRevisionChecks(check: (String, Bool) -> Void) {
     task.recordToolEvent(event("PostToolUse", id: nil, seconds: 4))
     check("unidentified callbacks are marked observations", task.hasUnidentifiedToolSteps)
     check("unexpected tool names are not copied into UI", ToolStep.label(for: "PRIVATE_DATA") == "工具调用")
+    check("step summary counts each kind once per execution", task.toolStepSummary == "跑命令 3 次" && task.failedToolStepCount == 1)
+    var mixed = AgentTask(agent: "Claude", title: "test", status: .completed, detail: "", model: "")
+    check("no summary without returned steps", mixed.toolStepSummary == nil)
+    for (index, label) in ["读取文件", "编辑文件", "读取文件", "执行命令"].enumerated() {
+        var e = AgentEvent(type: "upsert", createdAt: date.addingTimeInterval(Double(index)), sourceEvent: "PostToolUse")
+        e.toolStepID = "mixed-\(index)"
+        e.toolLabel = label
+        mixed.recordToolEvent(e)
+    }
+    check("step summary leads with changes, then reads",
+          mixed.toolStepSummary == "改文件 1 次 · 跑命令 1 次 · 读文件 2 次")
     let encoded = try! JSONEncoder().encode(task)
     check("tool ledger survives snapshot roundtrip", (try? JSONDecoder().decode(AgentTask.self, from: encoded)) == task)
 
