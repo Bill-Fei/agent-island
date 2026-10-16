@@ -1,0 +1,332 @@
+/* English for Agent Island. Keys are the Chinese source text, exactly as written in code;
+   see docs/APP_LOCALIZATION.md for the approach and the glossary. A key that does not match
+   byte for byte is silently ignored and the Chinese shows through. */
+
+/* ---------- Menu bar and context menu (HUDController.swift) ---------- */
+"Agent 灵动岛" = "Agent Island";
+"Agent 灵动岛 · 任务" = "Agent Island · Tasks";
+"Agent 灵动岛 · 你的 Agent 管家" = "Agent Island · All your agents, at a glance";
+"灵动岛" = "Island";
+"设置…" = "Settings…";
+"退出灵动岛" = "Quit Agent Island";
+"接入与验证…" = "Connect & Verify…";
+"查看任务" = "Show Tasks";
+"显示 / 隐藏 Agent 灵动岛" = "Show / Hide Agent Island";
+"Agent 灵动岛设置…" = "Agent Island Settings…";
+"退出 Agent 灵动岛" = "Quit Agent Island";
+"接入升级未完成：%@ 请打开接入与验证。" = "Couldn't finish updating the connections: %@ Open Connect & Verify.";
+
+/* ---------- First-run guide: Connect & Verify (AlphaOnboardingView.swift) ---------- */
+"Agent 灵动岛 · 接入与验证" = "Agent Island · Connect & Verify";
+"让 Agent 状态，在这里汇合" = "All your agents' status, in one place";
+"Alpha · 本地状态层，不是任务调度器" = "Alpha · A local status layer, not a task scheduler";
+"忙时收成小态，需要你时轻轻展开。当前只观察状态；批准、停止和回复仍在原应用完成。" = "It stays small while agents work and opens up when one needs you. For now it only observes: approving, stopping and replying still happen in each agent's own app.";
+"1 · 选择接入，知情安装" = "1 · Choose what to connect";
+"无需 API Key 或 Python。仅合并所选本地 Hook 配置，保留其他设置，并生成备份。" = "No API key or Python needed. It only merges the local hook config for the agents you pick, keeps every other setting, and makes a backup first.";
+"Claude Code（不是 Claude Chat）" = "Claude Code (not the Claude chat app)";
+"正在检查接入" = "Checking…";
+"查看并安装所选接入" = "Review & Connect";
+"重新检查" = "Check Again";
+"移除所选接入" = "Disconnect Selected";
+"2 · 用真实任务验证" = "2 · Verify with a real task";
+"在所选应用发起一轮你自己的任务。安装成功、收到过回调、任务正在运行，是三件不同的事。这里不会替你发请求或填充模拟状态。" = "Start a task of your own in the agent you connected. Connected, has sent an event, and has a task running are three different things. Nothing here sends requests for you or fills in made-up status.";
+"最近收到 " = "Last event ";
+"尚未收到真实回调" = "No events yet";
+"%@：收到回调，但轮次无法识别；不视为正常执行。请在下一轮请求后核实。" = "%@: an event arrived, but its turn couldn't be identified, so it isn't treated as a normal run. Check again after the next request.";
+"升级时仅维护已接入的观察器；被移除的接入不会自动恢复。未收到回调不等于断连或任务结束，可能正在长时间执行。配置异常请检查，Codex 的信任仍需在 /hooks 审阅；第三方协议变更不能保证自动兼容。豆包仅观察本地 Agent 轨迹，普通聊天不可见。" = "Updates only maintain the integrations you've connected; one you removed won't come back on its own. No events doesn't mean disconnected or finished; a task may simply be running for a long time. If a config looks wrong, check it. Codex still asks you to review trust in /hooks, and changes to a third party's protocol can't be guaranteed to keep working. For Doubao, only local Agent-mode activity is visible, never regular chats.";
+"3 · 看清隐私与能力边界" = "3 · Privacy and what it can do";
+"Hook 仅保留状态元数据，不保存输入和工具内容。为区分任务，会只读 Codex / WorkBuddy 的会话标题；标题可能包含敏感信息。最近 24 小时是显示窗口，不是自动删除期限。退出不会卸载 Hook，卸载不会删除历史。没有联网分析或云端同步；不要把原始日志和真实标题截图提交到 GitHub。" = "Hooks keep status metadata only, never your input or tool content. To tell tasks apart, it reads the session titles of Codex and Work Buddy, and titles can contain sensitive information. \"Last 24 hours\" is what's shown, not when data is deleted. Quitting doesn't remove the hooks, and removing them doesn't delete history. There are no online analytics and no cloud sync. Don't post raw logs or screenshots of real titles to GitHub.";
+
+/* ---------- Connect & Verify: actions and results (AlphaIntegrationSetup.swift) ---------- */
+"尚未安装。请选择要接入的 Agent。" = "Nothing connected yet. Choose the agents to connect.";
+"收到未识别回调 · 可能是协议变更或非支持事件" = "Unrecognized event · the protocol may have changed, or the event isn't supported";
+"配置无法安全读取 · 请检查权限或路径" = "Config can't be read safely · check its permissions or path";
+"移除所选接入？" = "Disconnect the selected agents?";
+"安装所选状态观察器？" = "Connect the selected agents?";
+"以上配置先备份再合并。接入使用固定桥接入口；后续灵动岛升级会原子更新桥接，保留旧版用于回退，已运行的回调不中断。保留其他设置和已有审批选择，不新增信任或审批权限，不启动任务。卸载不删除历史。安装前请暂时关闭会编辑这些配置的原应用。" = "Each file above is backed up before it's merged. The connection goes through a fixed bridge; future updates replace the bridge atomically, keep the old one for rollback, and don't interrupt events already in flight. Your other settings and approval choices stay as they are; no new trust or approval permissions are added and no tasks are started. Disconnecting doesn't delete history. Before connecting, quit any app that edits these files.";
+"取消" = "Cancel";
+"备份并移除" = "Back Up & Disconnect";
+"备份并安装" = "Back Up & Connect";
+"已移除所选观察器，历史保留。" = "Disconnected. History is kept.";
+"已安装，尚未证明连接成功。请用真实任务验证；Codex 在 /hooks 审阅信任。" = "Connected, but not proven to work yet. Verify with a real task. For Codex, review trust in /hooks.";
+"未完成：%@ 请重新检查；不会自动重试。" = "Not finished: %@ Check again; it won't retry on its own.";
+"路径包含符号链接；原配置未修改，请使用手动接入。" = "The path contains a symbolic link. The config wasn't changed; connect manually instead.";
+"配置在写入前发生变化，已停止覆盖；请重新检查。" = "The config changed before it could be written, so nothing was overwritten. Check again.";
+"另一个接入操作正在进行，请稍后重试。" = "Another connect operation is in progress. Try again in a moment.";
+"缺少桥接程序，请使用完整 .app；无需 Python。" = "The bridge is missing. Use the complete .app; Python isn't needed.";
+"原应用同时更新配置，已停止合并。请重新检查。" = "The agent's app updated the config at the same time, so the merge stopped. Check again.";
+"缺少可执行桥接程序" = "The bridge isn't executable";
+"配置同时发生变化，已停止迁移；请重新检查。" = "The config changed at the same time, so the migration stopped. Check again.";
+
+/* ---------- Per-agent connection health (IntegrationConfiguration.swift) ---------- */
+"尚未接入" = "Not connected";
+"配置无法读取" = "Config can't be read";
+"原应用已禁用 Hook" = "Hooks are turned off in the agent's app";
+"旧版桥接 · 待迁移" = "Old bridge · needs migrating";
+"桥接缺失或版本不匹配" = "Bridge missing or out of date";
+"配置就绪 · 不代表任务运行中" = "Connected · doesn't mean a task is running";
+"配置不完整 · 请检查接入" = "Incomplete config · check the connection";
+"配置无法安全合并或超过读取上限；原文件未修改。" = "The config can't be merged safely or is too large to read. The original file wasn't changed.";
+
+/* ---------- Agent names and task status (Models.swift) ---------- */
+"豆包" = "Doubao";
+"豆包 Agent" = "Doubao Agent";
+"排队中" = "Queued";
+"运行中" = "Running";
+"待确认" = "Needs you";
+"已完成" = "Done";
+"失败" = "Failed";
+"已停止" = "Stopped";
+"本轮已结束" = "Turn done";
+"本轮响应失败" = "Turn failed";
+"已停止跟踪 · 状态未知" = "No longer tracked · status unknown";
+"会话已关闭" = "Session closed";
+"本轮已中断" = "Turn interrupted";
+"状态未知" = "Status unknown";
+"结果未知" = "Result unknown";
+"等待确认" = "Waiting for you";
+"执行工具" = "Using a tool";
+"处理中" = "Working";
+
+/* ---------- Island: compact and alert states (HUDView.swift, TaskStore.mediumStatusText) ---------- */
+"Agent 灵动岛，点击查看任务" = "Agent Island, click to see tasks";
+"展开 %@ 任务详情" = "Show %@ task details";
+"%@，展开任务详情" = "%@, show task details";
+"%@ · 连续悬停 0.2 秒查看详情" = "%@ · hover for 0.2 s to see details";
+"连续悬停 0.2 秒或点击查看详情" = "Hover for 0.2 s or click to see details";
+"中态预览" = "Alert preview";
+"查看并批准本次请求" = "Review and approve this request";
+"查看本次请求并直接批准，无需打开应用" = "Review this request and approve it here, without opening the app";
+"请在原应用核实；没有自动批准" = "Check in the agent's app; nothing was approved automatically";
+"未提交决定" = "No decision sent";
+"批准…" = "Approve…";
+"等待回执" = "Waiting for agent";
+"%lld项待确认" = "%lld waiting for you";
+"%lld项进行中" = "%lld running";
+"1项结束 · %lld项进行中" = "1 done · %lld running";
+"等待事件" = "Waiting for events";
+
+/* ---------- Task overview panel (HUDView.swift) ---------- */
+"你的 Agent 管家" = "All your agents, at a glance";
+"演示预览 · 非真实状态" = "Demo preview · not real status";
+"进行中" = "Running";
+"已结束" = "Done";
+"收起灵动岛" = "Collapse";
+"最近 24 小时" = "Last 24 hours";
+"进行中优先" = "Running first";
+"最近 24 小时暂无会话记录" = "No sessions in the last 24 hours";
+"正在打开…" = "Opening…";
+"打开应用" = "Open app";
+"打开桌面应用；终端和 IDE 任务请回到原会话处理。" = "Opens the desktop app. For tasks in a terminal or IDE, go back to that session.";
+"重新同步状态；不会重新执行任务" = "Re-sync status; the task won't run again";
+"重新同步状态，不会重新执行任务" = "Re-sync status; the task won't run again";
+"会话线索 · %@" = "Thread · %@";
+"复制会话线索" = "Copy thread ID";
+"状态说明" = "About this status";
+"最后状态" = "Last status";
+"当前步骤" = "Current step";
+"已执行步骤" = "Steps so far";
+"尚未收到工具完成事件" = "No tool has finished yet";
+"收到 %lld 条工具返回记录 · 未提供唯一步骤标识" = "%lld tool results received · no unique step IDs provided";
+"%lld 个工具步骤已返回" = "%lld tool steps returned";
+" · 返回错误" = " · returned an error";
+" · 已返回" = " · returned";
+"显示最近 30 条，计数包含全部返回记录" = "Showing the latest 30; the count includes every result";
+"等待任务事件" = "Waiting for task events";
+"收到真实事件后显示；不推测任务进度。" = "Shown once real events arrive; progress is never guessed.";
+"需在原应用确认" = "Confirm in the agent's app";
+"批准请求…" = "Approve Request…";
+"从岛上移除" = "Remove from Island";
+"只移除本地显示，不会停止 Agent；后续真实事件仍可再次出现。" = "Only removes it from this list; the agent keeps running, and it can come back with the next real event.";
+"%@，%@，%@" = "%@, %@, %@";
+"，已选中" = ", selected";
+"，" = ", ";
+
+/* ---------- Status and step text (TaskStore.swift, TaskVisualState.swift) ---------- */
+"未提交决定 · 请在原应用核实" = "No decision sent · check in the agent's app";
+"已提交决定 · 等待回执" = "Decision sent · waiting for agent";
+"尚未收到回执 · 请核实" = "No reply from the agent yet · please check";
+"岛内单次审批" = "One-time approval here";
+"权限检查 · 无岛内操作" = "Permission check · nothing to do here";
+"原应用通知 · 岛内仅观察" = "Notice from the agent's app · observing only";
+"岛内单次审批 · 请核对本次工具操作" = "One-time approval here · check this tool action";
+"未收到结束信号，无法确认结果" = "No end signal received, so the result can't be confirmed";
+"应用正在核对工具权限，尚未确认需要你操作；灵动岛不接管本次检查" = "The app is checking tool permissions and hasn't said it needs you yet. The island doesn't take over this check.";
+"应用正在核对工具权限，灵动岛不接管审批" = "The app is checking tool permissions. The island doesn't take over approval.";
+"收到原应用确认通知 · 灵动岛仅观察，无法核实原窗口是否仍需操作" = "The agent's app asked for confirmation · the island only observes and can't tell whether that window still needs you";
+"批准请求已过期或被处理，请在原应用核实" = "The approval request expired or was already handled. Check in the agent's app.";
+"已提交本次决定，等待 Agent 的真实回调" = "Decision sent. Waiting for the agent to respond.";
+"灵动岛已重启，等待 Claude Chat 窗口状态" = "Agent Island restarted. Waiting for the Claude chat window's status.";
+"当前无进行中的会话" = "No active session";
+"等待首次任务回调" = "Waiting for the first task event";
+"已收到连接 · 等待任务" = "Connected · waiting for a task";
+"刚刚" = "just now";
+"更新于 %@" = "updated %@";
+"不到 1 分钟" = "under 1 min";
+"%lld 分钟前" = "%lld min ago";
+"%lld 小时前" = "%lld hr ago";
+"读本地轨迹" = "Reads local activity";
+"未收到回调" = "No events yet";
+"收到过回调" = "Has sent events";
+"历史记录 · 不再跟踪" = "History · no longer tracked";
+"正在生成" = "Generating";
+"权限检查中" = "Checking permission";
+"确认通知观察中" = "Watching for confirmation";
+"等待权限结果" = "Waiting for permission result";
+"已迁移到豆包 Agent" = "Moved to Doubao Agent";
+"同一会话有多个请求，上游未提供轮次，等待明确回调。" = "Several requests in one session and no turn info from the agent. Waiting for a clear event.";
+"未命名任务" = "Untitled task";
+"等待 Agent 提供下一步" = "Waiting for the agent's next step";
+"待你确认" = "Needs you";
+"核对权限" = "Checking permission";
+"不再跟踪" = "No longer tracked";
+"本轮结束" = "Turn done";
+"响应失败" = "Failed";
+"暂未收到明确的最新状态，无法确认是否仍在执行；不会把静默当作完成。" = "No clear status has come in, so it can't be confirmed whether this is still running. Silence is never treated as done.";
+"这条记录已不再跟踪，结果未知；没有证据证明仍在执行或已经完成。" = "This record is no longer tracked and its result is unknown. There's no evidence that it's still running or that it finished.";
+
+/* ---------- Stored event text, translated when shown (HookEventMapper.swift, ToolStep.swift) ---------- */
+"已收到会话连接事件" = "Session connected";
+"正在处理本轮请求" = "Working on this turn";
+"正在执行工具步骤" = "Running a tool step";
+"工具已返回，正在处理本轮请求" = "Tool returned; working on this turn";
+"工具返回错误，等待应用继续处理" = "The tool returned an error; waiting for the app to continue";
+"正在核对工具权限" = "Checking tool permissions";
+"应用正在等待你的确认" = "The app is waiting for you to confirm";
+"本轮响应已结束" = "This turn is done";
+"本轮响应发生错误，请查看原应用" = "This turn hit an error. Check the agent's app.";
+"本轮响应已中断" = "This turn was interrupted";
+"执行命令" = "Ran command";
+"读取文件" = "Read file";
+"编辑文件" = "Edited file";
+"检索文件" = "Searched files";
+"搜索资料" = "Web search";
+"读取网页" = "Read web page";
+"工具调用" = "Tool call";
+"Claude Code 会话" = "Claude Code session";
+"Claude 会话" = "Claude session";
+"Codex 会话" = "Codex session";
+"WorkBuddy 会话" = "Work Buddy session";
+"豆包 Agent 会话" = "Doubao Agent session";
+"豆包 会话" = "Doubao session";
+
+/* ---------- Opening an agent's app (AgentPresence.swift) ---------- */
+"应用在前台" = "App in front";
+"应用运行中" = "App running";
+"应用未运行" = "App not running";
+"未找到 %@，请确认应用已安装。" = "Couldn't find %@. Make sure it's installed.";
+"未能打开 %@，请重试或从访达打开。" = "Couldn't open %@. Try again, or open it from Finder.";
+"%@ 在打开窗口时已退出，请重新打开。" = "%@ quit while opening its window. Open it again.";
+"%@ 的窗口已打开，但系统未允许切到前台，请点击程序坞图标。" = "%@'s window is open, but macOS didn't let it come to the front. Click its icon in the Dock.";
+"%@ 已激活，但窗口未出现。灵动岛尚无辅助功能权限，无法恢复最小化窗口：请在系统设置 → 隐私与安全性 → 辅助功能中打开「Agent 灵动岛」后再点一次；若已打开仍无效，先用 − 删除该项再重试。" = "%@ is active, but its window didn't appear. Agent Island doesn't have Accessibility permission, so it can't restore a minimized window: turn on \"Agent Island\" in System Settings → Privacy & Security → Accessibility, then click again. If it's already on and still doesn't work, remove it with − and try again.";
+"%1$@ 在运行，但没有打开的窗口，重新打开请求未被响应。请点击程序坞图标，或在 %1$@ 菜单中新建窗口。" = "%1$@ is running but has no open window, and didn't respond to the request to reopen one. Click its icon in the Dock, or open a new window from the %1$@ menu.";
+"%@ 已激活，但窗口仍未出现在当前桌面，可能在其他桌面或全屏空间。请点击程序坞图标恢复窗口，或检查其他桌面。" = "%@ is active, but its window isn't on this desktop; it may be on another desktop or in a full-screen space. Click its icon in the Dock, or check your other desktops.";
+
+/* ---------- One-time approval (ApprovalReviewView.swift, ApprovalRisk.swift) ---------- */
+"%@ 请求批准" = "%@ is asking for approval";
+"关闭" = "Close";
+"Esc · 不做决定" = "Esc · decide later";
+"本次请求的完整参数 · 仅在本机临时展示" = "Full parameters of this request · shown only on this Mac, only for now";
+"只批准这一次，不授予长期权限。请核对完整参数。" = "Approves this one request only, with no lasting permission. Check every parameter.";
+"请求已过期或已处理，请回原应用核实。" = "This request expired or was already handled. Check in the agent's app.";
+"拒绝本次" = "Deny";
+"仅允许这一次" = "Allow Once";
+"来自：" = "From: ";
+"含高风险操作：%@。请逐字核对下方标红部分。" = "High-risk action: %@. Read the parts marked in red word for word.";
+"、" = ", ";
+"递归删除" = "recursive delete";
+"管理员权限" = "admin privileges";
+"强制推送" = "force push";
+"丢弃本地改动" = "discarding local changes";
+"下载后直接执行" = "downloading and running code";
+"放开权限" = "loosening permissions";
+"磁盘级操作" = "disk-level operation";
+"删除数据库表" = "dropping a database table";
+
+/* ---------- Today bar and AI working time (TodayUsageBar.swift, AIWorkDuration*.swift) ---------- */
+"今日活跃" = "Today";
+"· %lld 轮" = "· %lld turns";
+"今天还没有真实轮次记录" = "No turns recorded today";
+"今日没有真实轮次记录" = "No turns recorded today";
+"统计保留记录中今日有活动的轮次；色段表示各 Agent 占比，不是任务完成进度。" = "Turns with activity today, from the records kept. Each color is one agent's share, not task progress.";
+"%@ %lld 轮" = "%@ %lld turns";
+"今日活跃轮次共 %lld 轮，%@，非模型调用次数" = "%lld turns today: %@. Not the number of model calls.";
+"AI 工作 · %@" = "AI working time · %@";
+"AI 工作统计不完整，点击查看说明" = "AI working time is incomplete. Click for details.";
+"点击查看 AI 工作时间统计说明" = "Click to see how AI working time is counted";
+"今日 AI 工作 %@，统计不完整，查看统计说明" = "AI working time today: %@, incomplete. Show how it's counted";
+"今日 AI 工作 %@，查看统计说明" = "AI working time today: %@. Show how it's counted";
+"只计可确认的 AI 工作时间" = "Only AI working time that can be confirmed";
+"根据已接入 Claude Code、Codex、WorkBuddy 的真实执行回调统计，按今天本地日期汇总。并行区间只算一次，等待审批和回复不计入。" = "Counted from real execution events sent by connected Claude Code, Codex and Work Buddy, totaled by today's local date. Overlapping periods count once; time spent waiting for your approval or reply doesn't count.";
+"只累计真实事件之间可确认的区间；当前尚未闭合的执行尾段、轮次不明及超过 30 分钟无回调的区间不推算，因此可能低于实际时间。豆包、Claude Chat 暂不纳入。" = "Only periods confirmed between real events are added up. A run that hasn't ended yet, turns that can't be identified, and gaps of over 30 minutes without events aren't estimated, so this may be lower than the real time. Doubao and the Claude chat app aren't included yet.";
+"不是你注视屏幕或前台使用 AI 的时间。数据仅在本机，不生成排行榜。" = "This isn't how long you looked at the screen or had an AI app open. The data stays on this Mac, and there are no leaderboards.";
+"统计中" = "Counting…";
+"0 分钟" = "0 min";
+"%lld 分钟" = "%lld min";
+"%lld 小时 %lld 分钟" = "%lld hr %lld min";
+
+/* ---------- 0.3.5: plain status words (TaskStore.plainStatus, TaskVisualState) ---------- */
+"等你批准" = "Needs you";
+"正在执行" = "Working";
+"在 App 里处理" = "Handle in the app";
+"出错了" = "Error";
+"已发送，等 App 确认" = "Sent, waiting for the app";
+"等 App 确认" = "Waiting for app";
+"%lld 项等你批准" = "%lld need you";
+"%lld 项正在执行" = "%lld working";
+
+/* ---------- 0.3.5: detail pane (HUDView.swift) ---------- */
+"原应用" = "the app";
+"回复和改动在 %@ 里" = "Replies and changes are in %@";
+"出错了 · 去 %@ 看原因" = "Something went wrong · See %@ for why";
+"这一轮被中断了" = "This turn was interrupted";
+"打开 %@" = "Open %@";
+"做了什么" = "What it did";
+"已完成的步骤" = "Finished steps";
+"没有收到工具记录" = "No tool activity received";
+"还没有完成的步骤" = "No finished steps yet";
+"查看明细" = "Show details";
+"收起明细" = "Hide details";
+"查看" = "View";
+" · 出错" = " · error";
+"出错" = "Error";
+"只列出最近 30 条，上面的次数包含全部" = "Showing the latest 30; the counts above include all";
+"部分步骤没有编号，次数可能偏多" = "Some steps had no ID, so counts may run high";
+"%@ %lld 次" = "%1$@ ×%2$lld";
+"改文件" = "Edits";
+"跑命令" = "Commands";
+"读文件" = "Reads";
+"搜文件" = "Searches";
+"看网页" = "Web pages";
+"搜资料" = "Web searches";
+"其他工具" = "Other tools";
+"其他" = "Other";
+
+/* ---------- 0.3.5: island approval card (ApprovalReviewView.swift, HUDView.swift) ---------- */
+"%@ 请求批准" = "%@ asks for approval";
+"要在终端运行命令" = "Wants to run a terminal command";
+"要修改文件" = "Wants to edit a file";
+"要读取文件" = "Wants to read a file";
+"要搜索文件" = "Wants to search files";
+"要打开网页" = "Wants to open a web page";
+"要上网搜索" = "Wants to search the web";
+"要使用一个工具" = "Wants to use a tool";
+"高风险：%@" = "High risk: %@";
+"展开全文" = "Show all";
+"收起" = "Collapse";
+"拒绝" = "Deny";
+"允许" = "Allow";
+"只允许这一次，不授予长期权限" = "Allows this once only; grants no standing permission";
+"长按允许" = "Hold to allow";
+"继续按住…" = "Keep holding…";
+"长按允许高风险操作" = "Hold to allow a high-risk action";
+"高风险操作：按住 0.6 秒才会允许，松开即取消" = "High-risk action: hold for 0.6 s to allow; release to cancel";
+"请求已过期或已处理，请回原应用核实" = "This request expired or was handled. Check the app.";
+"还剩 %@ 秒，超时后回 App 处理" = "%@ s left; after that, handle it in the app";
+"已允许" = "Allowed";
+"已拒绝" = "Denied";
+"已超时 · 回 App 处理" = "Timed out · Use the app";
+"已在别处处理" = "Handled elsewhere";
+"回 App 处理" = "Use the app";
+"没有自动批准；点这里打开对应的对话处理" = "Nothing was approved. Click to open that conversation.";
+"有请求等你批准，移到岛上即可展开" = "A request needs you. Point at the island to open it.";

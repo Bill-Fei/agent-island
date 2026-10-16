@@ -1,5 +1,6 @@
-import SwiftUI
 import Combine
+import LinglongtaiShared
+import SwiftUI
 
 private final class DurationExplanationState: ObservableObject {
     @Published var explains = false
@@ -28,8 +29,8 @@ struct AIWorkDurationRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(duration.summary.incomplete ? "AI 工作统计不完整，点击查看说明" : "点击查看 AI 工作时间统计说明")
-        .accessibilityLabel("今日 AI 工作 \(duration.summary.label)\(duration.summary.incomplete ? "，统计不完整" : "")，查看统计说明")
+        .help(L(duration.summary.incomplete ? "AI 工作统计不完整，点击查看说明" : "点击查看 AI 工作时间统计说明"))
+        .accessibilityLabel(LF(duration.summary.incomplete ? "今日 AI 工作 %@，统计不完整，查看统计说明" : "今日 AI 工作 %@，查看统计说明", duration.summary.label))
         .popover(isPresented: $explanation.explains) {
             VStack(alignment: .leading, spacing: 8) {
                 Text("只计可确认的 AI 工作时间").font(.headline)

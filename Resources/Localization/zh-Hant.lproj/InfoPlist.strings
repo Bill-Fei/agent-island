@@ -1,0 +1,4 @@
+/* Info.plist text shown by macOS itself. Matches the Chinese values in script/build_and_run.sh. */
+"CFBundleName" = "Agent 灵动岛";
+"CFBundleDisplayName" = "Agent 灵动岛";
+"NSAppleEventsUsageDescription" = "点击「打开应用」时，向对应 Agent 应用发送与点击程序坞图标相同的重新打开请求，以恢复窗口。";

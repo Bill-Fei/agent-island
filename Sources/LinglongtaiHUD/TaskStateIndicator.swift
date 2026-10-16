@@ -17,13 +17,13 @@ struct TaskStateIndicator: View {
                     .font(.system(size: 11, weight: .medium))
                     .frame(width: 12, height: 12)
             }
-            Text(label ?? state.label)
+            Text(L(label ?? state.label))
                 .font(HUDTypography.captionEmphasis)
                 .lineLimit(1)
         }
         .foregroundStyle(state.tint)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(label ?? state.label)
+        .accessibilityLabel(L(label ?? state.label))
     }
 }
 

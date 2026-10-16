@@ -50,7 +50,7 @@ fi
 SIGNING_FLAG="${SIGNING_IDENTITY:--}"
 ISLAND_SOURCE_HASH="$(cd "$ROOT_DIR" && shasum -a 256 Package.swift VERSION Sources/*/*.swift | shasum -a 256 | awk '{print $1}')"
 input_hash() {
-  shasum -a 256 Package.swift VERSION Sources/*/*.swift Resources/AppIcon.icns script/install_hooks.py script/build_and_run.sh | shasum -a 256 | awk '{print $1}'
+  shasum -a 256 Package.swift VERSION Sources/*/*.swift Resources/AppIcon.icns Resources/Localization/*.lproj/* script/install_hooks.py script/build_and_run.sh | shasum -a 256 | awk '{print $1}'
 }
 ISLAND_INPUT_HASH="$(cd "$ROOT_DIR" && input_hash)"
 ISLAND_CONFIGURATION=debug
@@ -137,6 +137,9 @@ cp "$ROOT_DIR/Resources/AppIcon.icns" "$APP_CONTENTS/Resources/AppIcon.icns"
 mkdir -p "$APP_CONTENTS/Helpers" "$APP_CONTENTS/Resources/Integration"
 cp "$BUILD_HELPER" "$APP_CONTENTS/Helpers/linglongtaictl"
 cp "$ROOT_DIR/script/install_hooks.py" "$APP_CONTENTS/Resources/Integration/install_hooks.py"
+# UI translations (en, zh-Hans, zh-Hant). Required: without them an English system would get
+# the Chinese source text with no warning. See docs/APP_LOCALIZATION.md.
+cp -R "$ROOT_DIR/Resources/Localization/"*.lproj "$APP_CONTENTS/Resources/"
 
 cat >"$INFO_PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -151,6 +154,18 @@ cat >"$INFO_PLIST" <<PLIST
   <string>Agent 灵动岛</string>
   <key>CFBundleDisplayName</key>
   <string>Agent 灵动岛</string>
+  <!-- English is the fallback for every language without its own table, so a Japanese or
+       French system gets English rather than Chinese. Chinese systems get the zh tables. -->
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
+  <key>CFBundleLocalizations</key>
+  <array>
+    <string>en</string>
+    <string>zh-Hans</string>
+    <string>zh-Hant</string>
+  </array>
+  <key>LSHasLocalizedDisplayName</key>
+  <true/>
   <key>CFBundleShortVersionString</key>
   <string>$ISLAND_VERSION</string>
   <key>CFBundleVersion</key>

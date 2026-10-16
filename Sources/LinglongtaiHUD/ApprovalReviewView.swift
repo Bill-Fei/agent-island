@@ -41,9 +41,9 @@ struct ApprovalReviewView: View {
         HStack(spacing: 10) {
             AgentIcon(kind: request.provider, size: 34)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
+                Text(L(title)).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
                     .lineLimit(1).truncationMode(.tail)
-                Text(actionSummary).font(.system(size: 11)).foregroundStyle(.white.opacity(0.55)).lineLimit(1)
+                Text(L(actionSummary)).font(.system(size: 11)).foregroundStyle(.white.opacity(0.55)).lineLimit(1)
             }
             Spacer(minLength: 6)
             let queue = store.pendingApprovalTasks.count
@@ -57,7 +57,7 @@ struct ApprovalReviewView: View {
 
     private var title: String {
         let conversation = task.map { conversationTitles.title(for: $0) } ?? ""
-        return conversation.isEmpty ? "\(request.provider.displayName) 请求批准" : conversation
+        return conversation.isEmpty ? LF("%@ 请求批准", L(request.provider.displayName)) : conversation
     }
 
     /// One plain line for what will happen, from the classified tool label.
@@ -110,14 +110,14 @@ struct ApprovalReviewView: View {
             }
             HStack(spacing: 6) {
                 if !riskLabels.isEmpty {
-                    Label("高风险：\(riskLabels.joined(separator: "、"))", systemImage: "exclamationmark.triangle.fill")
+                    Label("高风险：\(riskLabels.map(L).joined(separator: L("、")))", systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(HUDColorTokens.attention).lineLimit(1)
                 } else if let directory, !expanded {
                     Text(directory).foregroundStyle(.white.opacity(0.4)).lineLimit(1).truncationMode(.middle)
                 }
                 Spacer(minLength: 0)
                 if hasMore {
-                    Button(expanded ? "收起" : "展开全文") { store.approvalReviewExpanded.toggle() }
+                    Button(L(expanded ? "收起" : "展开全文")) { store.approvalReviewExpanded.toggle() }
                         .buttonStyle(.plain).foregroundStyle(HUDColorTokens.info)
                 }
             }
@@ -187,7 +187,7 @@ struct ApprovalReviewView: View {
     private func pill(icon: String, title: String, key: String, tint: Color, fill: Color) -> some View {
         HStack(spacing: 5) {
             Image(systemName: icon).font(.system(size: 10, weight: .bold))
-            Text(title).font(.system(size: 13, weight: .semibold))
+            Text(L(title)).font(.system(size: 13, weight: .semibold))
             Text(key).font(.system(size: 10, design: .rounded)).opacity(0.55)
         }
         .foregroundStyle(tint)
@@ -214,7 +214,7 @@ private struct ApprovalHoldButton: View {
                 }
                 HStack(spacing: 5) {
                     Image(systemName: "hand.tap.fill").font(.system(size: 10, weight: .bold))
-                    Text(progress > 0 ? "继续按住…" : "长按允许").font(.system(size: 13, weight: .semibold))
+                    Text(L(progress > 0 ? "继续按住…" : "长按允许")).font(.system(size: 13, weight: .semibold))
                 }
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)

@@ -34,7 +34,7 @@ struct TodayUsageBar: View {
                             Circle()
                                 .fill(HUDColorTokens.agent(item.kind))
                                 .frame(width: 5, height: 5)
-                            Text(item.kind.displayName)
+                            Text(L(item.kind.displayName))
                                 .font(HUDTypography.caption)
                             Text("\(item.count)")
                                 .font(HUDTypography.captionEmphasis)
@@ -57,9 +57,9 @@ struct TodayUsageBar: View {
     }
 
     private var accessibilitySummary: String {
-        if usage.isEmpty { return "今日没有真实轮次记录" }
-        let details = usage.map { "\($0.kind.displayName) \($0.count) 轮" }.joined(separator: "，")
-        return "今日活跃轮次共 \(total) 轮，\(details)，非模型调用次数"
+        if usage.isEmpty { return L("今日没有真实轮次记录") }
+        let details = usage.map { LF("%@ %lld 轮", L($0.kind.displayName), $0.count) }.joined(separator: L("，"))
+        return LF("今日活跃轮次共 %lld 轮，%@，非模型调用次数", total, details)
     }
 }
 

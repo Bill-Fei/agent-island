@@ -17,6 +17,6 @@ struct AgentIcon: View {
             }
         }
         .frame(width: size, height: size)
-        .accessibilityLabel(kind.displayName)
+        .accessibilityLabel(L(kind.displayName))
     }
 }

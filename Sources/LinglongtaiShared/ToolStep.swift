@@ -51,7 +51,7 @@ extension AgentTask {
     public var toolStepSummary: String? {
         let counts = toolStepCounts
         guard !counts.isEmpty else { return nil }
-        return counts.map { "\($0.verb) \($0.count) 次" }.joined(separator: " · ")
+        return counts.map { LF("%@ %lld 次", L($0.verb), $0.count) }.joined(separator: " · ")
     }
 
     /// The same tally as structured pairs, in display order, for count tiles.

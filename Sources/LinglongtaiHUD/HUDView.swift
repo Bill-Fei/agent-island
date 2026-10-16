@@ -133,7 +133,7 @@ private struct HUDActivityContent: View {
                 }.contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("展开 \(store.primaryAgentName) 任务详情")
+            .accessibilityLabel("展开 \(L(store.primaryAgentName)) 任务详情")
             Color.clear.frame(width: layout.centerExclusionWidth)
             Group {
                 if let task = store.approvalTask {
@@ -153,13 +153,13 @@ private struct HUDActivityContent: View {
                         }.contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("\(store.mediumStatusText)，展开任务详情")
+                    .accessibilityLabel("\(L(store.mediumStatusText))，展开任务详情")
                 }
             }
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("\(store.primaryAgentName)，\(store.mediumStatusText)")
-        .help("\(store.mediumStatusText) · 连续悬停 0.2 秒查看详情")
+        .accessibilityLabel("\(L(store.primaryAgentName))，\(L(store.mediumStatusText))")
+        .help("\(L(store.mediumStatusText)) · 连续悬停 0.2 秒查看详情")
     }
 
     private var compactSymbol: String {
@@ -189,7 +189,7 @@ private struct HUDActivityContent: View {
                             .modifier(AgentActivityEffect(executing: store.activeTaskIsExecuting,
                                                           visible: animationActive))
                             .fixedSize()
-                        IslandAgentLabel(text: store.calibrationPreview == nil ? store.primaryAgentName : "中态预览",
+                        IslandAgentLabel(text: L(store.calibrationPreview == nil ? store.primaryAgentName : "中态预览"),
                                          width: labelWidth,
                                          active: animationActive)
                             .id(store.activeTask?.id)
@@ -197,7 +197,7 @@ private struct HUDActivityContent: View {
                 }.contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("展开 \(store.primaryAgentName) 任务详情")
+            .accessibilityLabel("展开 \(L(store.primaryAgentName)) 任务详情")
             // Equal outside insets leave all spare space toward the camera.
             // Its full exclusion width remains unavailable for content.
             Color.clear.frame(width: layout.centerExclusionWidth)
@@ -218,7 +218,7 @@ private struct HUDActivityContent: View {
                     HStack(spacing: 5) {
                         Circle().fill(HUDColorTokens.attention).frame(width: 6, height: 6)
                             .modifier(AgentActivityEffect(executing: true, visible: animationActive))
-                        Text(store.pendingApprovalTasks.count > 1 ? "\(store.pendingApprovalTasks.count) 项等你批准" : "等你批准")
+                        Text(store.pendingApprovalTasks.count > 1 ? LF("%lld 项等你批准", store.pendingApprovalTasks.count) : L("等你批准"))
                     }
                     .foregroundStyle(HUDColorTokens.attention)
                     .padding(.horizontal, 9).padding(.vertical, 3)
@@ -247,11 +247,11 @@ private struct HUDActivityContent: View {
     @ViewBuilder private func outcomeLabel(_ outcome: TaskStore.ApprovalOutcome) -> some View {
         switch outcome.kind {
         case .allowed:
-            Label(outcome.text, systemImage: "checkmark.circle.fill")
+            Label(L(outcome.text), systemImage: "checkmark.circle.fill")
                 .foregroundStyle(Color(red: 0.3, green: 0.85, blue: 0.45))
                 .frame(maxWidth: .infinity, minHeight: surface.layout.notchHeight, alignment: .trailing)
         case .denied:
-            Label(outcome.text, systemImage: "xmark.circle.fill")
+            Label(L(outcome.text), systemImage: "xmark.circle.fill")
                 .foregroundStyle(.white.opacity(0.7))
                 .frame(maxWidth: .infinity, minHeight: surface.layout.notchHeight, alignment: .trailing)
         case .failed:
@@ -268,7 +268,7 @@ private struct HUDActivityContent: View {
             else { AgentPresence.shared.open(task.profile.kind) }
         } label: {
             HStack(spacing: 4) {
-                Text(text)
+                Text(L(text))
                 Image(systemName: "arrow.up.forward").font(.system(size: 9, weight: .bold))
             }
             .foregroundStyle(HUDColorTokens.attention)
@@ -281,7 +281,7 @@ private struct HUDActivityContent: View {
 
     private func detailButton(title: String, tint: Color) -> some View {
         Button(action: store.toggleExpanded) {
-            IslandAgentLabel(text: title, width: wingLayout(for: .medium).wingWidth,
+            IslandAgentLabel(text: L(title), width: wingLayout(for: .medium).wingWidth,
                              active: animationActive,
                              isStatus: true, tint: tint)
                 .id(store.activeTask?.id)
@@ -289,7 +289,7 @@ private struct HUDActivityContent: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(title)，展开任务详情")
+        .accessibilityLabel("\(L(title))，展开任务详情")
     }
 
 }
@@ -312,7 +312,7 @@ private struct HUDExpandedContent: View {
                         .font(HUDTypography.pageTitle)
                         .tracking(0.2)
                         .foregroundStyle(.white)
-                    Text(store.demoPreviewActive ? "演示预览 · 非真实状态" : "你的 Agent 管家")
+                    Text(L(store.demoPreviewActive ? "演示预览 · 非真实状态" : "你的 Agent 管家"))
                         .font(HUDTypography.caption)
                         .foregroundStyle(.white.opacity(0.48))
                         .lineLimit(1)
@@ -377,7 +377,7 @@ private struct HUDExpandedContent: View {
                             }
                             ForEach(sections) { section in
                                 HStack(spacing: 6) {
-                                    Text(section.group.title)
+                                    Text(L(section.group.title))
                                     Text(String(section.items.count)).monospacedDigit()
                                     Spacer()
                                 }
@@ -434,7 +434,7 @@ private struct HUDExpandedContent: View {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(alignment: .center, spacing: 8) {
                         AgentAvatar(task: task, size: 32)
-                        Text(task.agent)
+                        Text(L(task.agent))
                             .font(HUDTypography.bodyEmphasis)
                             .foregroundStyle(.white)
                             .lineLimit(1)
@@ -444,7 +444,7 @@ private struct HUDExpandedContent: View {
                             Button {
                                 presence.open(task.profile.kind)
                             } label: {
-                                Text(presence.opening.contains(task.profile.kind) ? "正在打开…" : "打开应用")
+                                Text(L(presence.opening.contains(task.profile.kind) ? "正在打开…" : "打开应用"))
                                     .font(HUDTypography.captionEmphasis)
                                     .foregroundStyle(HUDColorTokens.info)
                                     .padding(.horizontal, 11)
@@ -462,11 +462,11 @@ private struct HUDExpandedContent: View {
                     }
 
                     if let error = presence.launchErrors[task.profile.kind] {
-                        Text(error).font(HUDTypography.caption)
+                        Text(L(error)).font(HUDTypography.caption)
                             .foregroundStyle(HUDColorTokens.attention).padding(.top, 8)
                     }
                     // Fixed identity: which conversation, and its state at a glance.
-                    Text(conversationTitles.title(for: task))
+                    Text(L(conversationTitles.title(for: task)))
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.white)
                         .lineLimit(2)
@@ -542,9 +542,9 @@ private struct HUDExpandedContent: View {
                         .foregroundStyle(.white.opacity(0.58))
                     ForEach(AgentCatalog.supportedKinds, id: \.self) { kind in
                         HStack {
-                            Text(kind.displayName)
+                            Text(L(kind.displayName))
                             Spacer()
-                            Text(store.connectionLabel(for: kind)).foregroundStyle(.secondary)
+                            Text(L(store.connectionLabel(for: kind))).foregroundStyle(.secondary)
                         }
                         .font(HUDTypography.body)
                     }
@@ -561,11 +561,11 @@ private struct HUDExpandedContent: View {
     /// One tinted card that says where things stand and where to go next.
     /// The island never reads replies, so finished work points back to the app.
     @ViewBuilder private func outcomeCard(for task: AgentTask, state: TaskVisualState) -> some View {
-        let app = task.profile.kind == .custom ? "原应用" : task.agent
+        let app = L(task.profile.kind == .custom ? "原应用" : task.agent)
         let text: String = {
             switch state {
-            case .completed: return "回复和改动在 \(app) 里"
-            case .failed: return "出错了 · 去 \(app) 看原因"
+            case .completed: return LF("回复和改动在 %@ 里", app)
+            case .failed: return LF("出错了 · 去 %@ 看原因", app)
             case .cancelled: return task.sourceEvent == "SessionEnd" ? "会话已关闭" : "这一轮被中断了"
             case .unknown, .untracked: return state.unknownExplanation ?? store.currentStepText(for: task)
             default: return store.currentStepText(for: task)
@@ -583,7 +583,7 @@ private struct HUDExpandedContent: View {
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(tint)
             }
-            Text(text)
+            Text(L(text))
                 .font(HUDTypography.bodyEmphasis)
                 .foregroundStyle(.white.opacity(0.9))
                 .fixedSize(horizontal: false, vertical: true)
@@ -613,11 +613,11 @@ private struct HUDExpandedContent: View {
 
     @ViewBuilder private func stepSummary(for task: AgentTask, state: TaskVisualState) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(state.group == .ended ? "做了什么" : "已完成的步骤")
+            Text(L(state.group == .ended ? "做了什么" : "已完成的步骤"))
                 .font(HUDTypography.captionEmphasis).foregroundStyle(.secondary)
             let counts = task.toolStepCounts
             if counts.isEmpty {
-                Text(state.group == .ended ? "没有收到工具记录" : "还没有完成的步骤")
+                Text(L(state.group == .ended ? "没有收到工具记录" : "还没有完成的步骤"))
                     .font(HUDTypography.body).foregroundStyle(.secondary)
             } else {
                 let failed = task.failedToolStepCount
@@ -640,7 +640,7 @@ private struct HUDExpandedContent: View {
                         stepList.expandedTaskID = expanded ? nil : task.id
                     } label: {
                         HStack(spacing: 4) {
-                            Text(expanded ? "收起明细" : "查看明细")
+                            Text(L(expanded ? "收起明细" : "查看明细"))
                             Image(systemName: expanded ? "chevron.up" : "chevron.down")
                                 .font(.system(size: 9, weight: .semibold))
                         }
@@ -654,7 +654,7 @@ private struct HUDExpandedContent: View {
                         VStack(alignment: .leading, spacing: 7) {
                             ForEach(Array(task.returnedToolSteps.prefix(30))) { step in
                                 HStack(alignment: .top) {
-                                    Text(step.label + (step.state == .failed ? " · 出错" : ""))
+                                    Text(L(step.label) + (step.state == .failed ? L(" · 出错") : ""))
                                         .foregroundStyle(step.state == .failed ? HUDColorTokens.attention : .white.opacity(0.72))
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                     Text(step.updatedAt, style: .time).monospacedDigit().foregroundStyle(.secondary)
@@ -678,7 +678,7 @@ private struct HUDExpandedContent: View {
                 .font(.system(size: 18, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(tint)
-            Text(label)
+            Text(L(label))
                 .font(HUDTypography.caption)
                 .foregroundStyle(tint == .white ? .white.opacity(0.5) : tint.opacity(0.8))
         }
@@ -742,7 +742,7 @@ private struct Metric: View {
     var body: some View {
         VStack(spacing: 1) {
             Text(value).font(HUDTypography.metric).monospacedDigit().foregroundStyle(tint)
-            Text(label).font(HUDTypography.caption).foregroundStyle(.white.opacity(0.35))
+            Text(L(label)).font(HUDTypography.caption).foregroundStyle(.white.opacity(0.35))
         }
         .frame(minWidth: 36)
     }
@@ -779,7 +779,7 @@ private struct StatusBadge: View {
     let status: AgentTaskStatus
 
     var body: some View {
-        Label(status.label, systemImage: status.symbolName)
+        Label(L(status.label), systemImage: status.symbolName)
             .font(.system(size: 10, weight: .semibold, design: .rounded))
             .foregroundStyle(status.tint)
             .padding(.horizontal, 9)
@@ -799,6 +799,14 @@ private struct TaskRow: View {
 
     private var isEnded: Bool { state.group == .ended }
     private var isEmphasized: Bool { state.group == .active }
+    // Precomputed so the row body stays cheap for the type checker.
+    private var agentName: String { L(task.agent) }
+    private var displayTitle: String { L(title) }
+    private var stateText: String { L(state.label) }
+    private var accessibilityText: String {
+        LF("%@，%@，%@", agentName, displayTitle, stateText) + (isSelected ? L("，已选中") : "")
+    }
+    private var helpText: String { displayTitle + " · " + stateText }
 
     var body: some View {
         Button(action: onSelect) {
@@ -808,7 +816,7 @@ private struct TaskRow: View {
                     .padding(.top, 2)
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(spacing: 6) {
-                        Text(task.agent)
+                        Text(agentName)
                             .font(.system(size: 12, weight: isEmphasized ? .semibold : .medium))
                             .foregroundStyle(.white.opacity(isEnded ? 0.58 : state == .unknown || state == .untracked ? 0.76 : 1))
                         Spacer(minLength: 4)
@@ -817,12 +825,12 @@ private struct TaskRow: View {
                             .foregroundStyle(.white.opacity(0.42))
                             .fixedSize()
                     }
-                    Text(title)
+                    Text(displayTitle)
                         .font(HUDTypography.caption)
                         .foregroundStyle(.white.opacity(isEnded ? 0.48 : 0.65))
                         .lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .help(title)
+                        .help(displayTitle)
                     HStack(spacing: 6) {
                         TaskStateIndicator(state: state, visible: animationActive)
                         Spacer(minLength: 4)
@@ -853,9 +861,9 @@ private struct TaskRow: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(task.agent)，\(title)，\(state.label)\(isSelected ? "，已选中" : "")")
+        .accessibilityLabel(accessibilityText)
         .accessibilityAddTraits(.isButton)
-        .help(title + " · " + state.label)
+        .help(helpText)
     }
 }
 
@@ -867,7 +875,7 @@ private struct ActionButton: View {
 
     var body: some View {
         Button(action: action) {
-            Label(title, systemImage: systemName)
+            Label(L(title), systemImage: systemName)
                 .font(HUDTypography.captionEmphasis)
                 .foregroundStyle(tint)
                 .padding(.horizontal, 11)
