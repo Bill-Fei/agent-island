@@ -37,8 +37,8 @@ public struct IslandMetrics: Equatable, Sendable {
     /// The approval card grows taller while its full parameters are shown.
     public var approvalExpanded = false
 
-    public static let approvalWidth = 420.0
-    public static func approvalContentHeight(expanded: Bool) -> Double { expanded ? 316 : 162 }
+    public static let approvalWidth = 380.0
+    public static func approvalContentHeight(expanded: Bool) -> Double { expanded ? 308 : 154 }
 
     public init(notchWidth: Double = 184, notchHeight: Double = 32, hasPhysicalNotch: Bool = true,
                 safeTop: Double? = nil, activityWidth: Double = 228,

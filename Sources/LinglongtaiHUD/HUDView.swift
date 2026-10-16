@@ -38,7 +38,7 @@ struct HUDRootView: View {
                 if let request = store.displayedApproval {
                     ApprovalReviewView(request: request, store: store)
                         .scaleEffect(frame.approvalScale, anchor: .top)
-                        .padding(.top, surface.layout.safeTop + 4)
+                        .padding(.top, surface.layout.safeTop)
                         .opacity(frame.approvalOpacity)
                         .allowsHitTesting(store.presentation == .approval && frame.approvalOpacity >= 0.95)
                         .accessibilityHidden(store.presentation != .approval)
