@@ -7,12 +7,25 @@ func runClaudeApprovalStoreChecks(check: (String, Bool) -> Void, emit: (AgentEve
     let store = TaskStore(now: { date })
     store.clearAllTasks()
     let payload = try JSONSerialization.data(withJSONObject: ["hook_event_name": "PermissionRequest", "tool_name": "Bash", "cwd": "/tmp/approval-store-fixture", "tool_input": ["command": "printf harmless-fixture"]])
+    let hostSession = "local_" + UUID().uuidString.lowercased()
+    let hostLog = LinglongtaiPaths.applicationSupport.appendingPathComponent("fixture-claude-main.log")
+    func hostLine(_ text: String) {
+        let stamp = DateFormatter()
+        stamp.locale = Locale(identifier: "en_US_POSIX")
+        stamp.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        let line = Data((stamp.string(from: date) + " [info] " + text + "\n").utf8)
+        if let handle = try? FileHandle(forWritingTo: hostLog) { handle.seekToEndOfFile(); handle.write(line); try? handle.close() }
+        else { try? line.write(to: hostLog) }
+    }
     func publish(desktopHost: Bool = false) throws -> ApprovalRelay.Request? {
         var event = AgentEvent(type: "upsert", id: UUID(), agent: "Claude", status: .waiting,
                                requiresApproval: true, createdAt: date, sourceEvent: "PermissionRequest")
         // Pin the host explicitly; the checks must not depend on the caller's environment.
         guard var request = ApprovalRelay.makeRequest(payload: payload, event: event, now: date) else { return nil }
-        request.waitsForProviderPrompt = desktopHost ? true : nil
+        request.hostSessionID = desktopHost ? hostSession : nil
+        request.toolName = desktopHost ? "Bash" : nil
+        request.createdAt = desktopHost ? date : nil
+        request.expiresAt = date.addingTimeInterval(desktopHost ? 600 : 45)
         guard ApprovalRelay.publish(request) else { return nil }
         event.approvalRequestID = request.id
         try emit(event)
@@ -56,18 +69,39 @@ func runClaudeApprovalStoreChecks(check: (String, Bool) -> Void, emit: (AgentEve
     guard let desktop = try publish(desktopHost: true), let desktopTask = store.tasks.first(where: { $0.id == desktop.taskID }) else {
         check("Claude Desktop fixture publishes", false); return
     }
-    date.addTimeInterval(1.2)
-    store.refreshPresentation()
-    check("Desktop permission check alone never pops the island", store.approvalRequest(for: desktopTask) == nil && !store.needsUserAttention(desktopTask) && store.waitingCount == 0)
-    date.addTimeInterval(4.8)
-    try emit(AgentEvent(type: "upsert", id: desktop.taskID, agent: "Claude", status: .waiting, requiresApproval: true, createdAt: date, sourceEvent: "Notification"))
-    store.consumeEvents()
-    let prompted = store.tasks.first(where: { $0.id == desktop.taskID })
-    check("Desktop prompt notification makes the same request actionable", prompted.flatMap { store.approvalRequest(for: $0) } == desktop)
-    date.addTimeInterval(1.2)
-    store.refreshPresentation()
-    check("Desktop prompt shows the island quick action", prompted.map { store.needsUserAttention($0) } == true && store.approvalTask?.id == desktop.taskID)
-    ApprovalRelay.cleanup(desktop.id)
+    store.pollHostPrompts()
+    check("Desktop permission check without a card never pops the island", store.approvalRequest(for: desktopTask) == nil && !store.needsUserAttention(desktopTask) && store.waitingCount == 0)
+    check("Desktop request cannot be answered through the hook", !ApprovalRelay.respond(to: desktop, decision: .allow))
+    let cardID = UUID().uuidString.lowercased()
+    hostLine("Emitted tool permission request \(cardID) for Bash in session \(hostSession)")
+    store.pollHostPrompts()
+    check("Desktop card log line makes the request actionable at once", store.approvalRequest(for: desktopTask) == desktop && store.needsUserAttention(desktopTask) && store.approvalTask?.id == desktop.taskID)
+    let otherCard = UUID().uuidString.lowercased()
+    hostLine("Emitted tool permission request \(otherCard) for Bash in session \(hostSession)")
+    store.pollHostPrompts()
+    check("two open cards in one session are never pressed", store.approvalRequest(for: desktopTask) == nil)
+    hostLine("Permission request \(otherCard) for Bash aborted")
+    store.pollHostPrompts()
+    check("an aborted card no longer counts", store.approvalRequest(for: desktopTask) == desktop)
+    var pressed: (String, String, ApprovalRelay.Decision)?
+    store.hostApprovalDelivery = { session, prompt, decision, completion in
+        pressed = (session, prompt, decision)
+        hostLine("Received permission response for \(prompt): once (tool: Bash)")
+        completion(.pressed)
+    }
+    store.respondToApproval(desktop, decision: .allow)
+    check("island approval presses exactly that session's card", pressed?.0 == hostSession && pressed?.1 == cardID && pressed?.2 == .allow)
+    check("Desktop's own log confirms the press", store.notice == "已在 App 中允许本次请求" && !store.failedApprovals.contains(desktop.taskID) && store.approvalRequest(for: desktopTask) == nil)
+    guard let unanswered = try publish(desktopHost: true), let unansweredTask = store.tasks.first(where: { $0.id == unanswered.taskID }) else {
+        check("Claude Desktop second fixture publishes", false); return
+    }
+    hostLine("Emitted tool permission request \(UUID().uuidString.lowercased()) for Bash in session \(hostSession)")
+    store.pollHostPrompts()
+    store.hostApprovalDelivery = { _, _, _, completion in completion(.failed("没找到 App 中的确认卡")) }
+    store.respondToApproval(unanswered, decision: .allow)
+    check("a failed press is reported, never shown as approved", store.failedApprovals.contains(unansweredTask.id) && store.notice.hasPrefix("未能在 App 中确认"))
+    ApprovalRelay.cleanup(unanswered.id)
+    store.hostApprovalDelivery = nil
     store.clearAllTasks()
 
     let claudeNotification = UUID()

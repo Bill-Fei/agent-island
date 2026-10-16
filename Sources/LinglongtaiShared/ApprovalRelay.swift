@@ -8,14 +8,25 @@ public enum ApprovalRelay {
     /// remain observation-only, and no standing permissions are returned.
     public static func supports(_ provider: AgentKind) -> Bool { provider == .claude }
 
-    /// The terminal CLI asks only when it will show a prompt. SDK hosts such as
-    /// Claude Desktop (`claude-desktop*`) run this hook for every permission
-    /// check, including tools they then auto-approve in their own UI. There the
-    /// island must wait for the provider's real prompt (its Notification).
+    /// The terminal CLI applies the hook's decision. SDK hosts such as Claude
+    /// Desktop (`claude-desktop*`) run this hook for every permission check,
+    /// including tools they then auto-approve, and decide only in their own
+    /// card. There the island answers by pressing that card (see
+    /// ClaudePromptLog), never through the hook, and the hook does not wait.
     public static func hostShowsOwnPrompt(environment: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
         guard let entrypoint = environment["CLAUDE_CODE_ENTRYPOINT"], !entrypoint.isEmpty else { return false }
         return entrypoint != "cli"
     }
+
+    /// Desktop's own session identity, e.g. `local_<uuid>`; nil when absent or malformed.
+    public static func hostSessionID(environment: [String: String] = ProcessInfo.processInfo.environment) -> String? {
+        guard let value = environment["CLAUDE_CODE_HOST_SESSION_ID"], value.hasPrefix("local_"),
+              UUID(uuidString: String(value.dropFirst(6))) != nil else { return nil }
+        return value
+    }
+
+    /// A Desktop card may stay open while the user works elsewhere.
+    static let hostPromptLifetime: TimeInterval = 600
 
     public struct Request: Codable, Identifiable, Equatable, Sendable {
         public var protocolVersion = 2
@@ -26,8 +37,15 @@ public enum ApprovalRelay {
         public var context: String
         public var expiresAt: Date
         public var processID: Int32
-        /// Set for SDK hosts: actionable only after the provider's prompt appears.
-        public var waitsForProviderPrompt: Bool?
+        /// Desktop delivery: the card lives in this host session and is pressed
+        /// there. Nil for the terminal CLI, which answers through the hook.
+        public var hostSessionID: String?
+        /// Raw provider tool name, matched against the host's own prompt record.
+        public var toolName: String?
+        public var createdAt: Date?
+
+        public var deliversThroughHost: Bool { hostSessionID != nil }
+        var lifetime: TimeInterval { deliversThroughHost ? ApprovalRelay.hostPromptLifetime : 45 }
     }
     public enum Decision: String, Codable { case allow, deny }
     private struct Reply: Codable { var id: UUID; var decision: Decision }
@@ -53,18 +71,25 @@ public enum ApprovalRelay {
         // Unsupported/sensitive requests fall through to the provider UI.
         let sensitive = "(?i)(api[_-]?key|authorization|bearer |password|secret|token|sk-[a-z0-9]|private.key|credential|\\.env)"
         guard context.range(of: sensitive, options: .regularExpression) == nil else { return nil }
+        var host: String?
+        if hostShowsOwnPrompt() {
+            // An SDK host without a verifiable session cannot be pressed safely.
+            guard let session = hostSessionID() else { return nil }
+            host = session
+        }
         return Request(id: UUID(), taskID: taskID, provider: provider,
                        tool: ToolStep.label(for: tool), context: context,
-                       expiresAt: now.addingTimeInterval(45), processID: getpid(),
-                       waitsForProviderPrompt: hostShowsOwnPrompt() ? true : nil)
+                       expiresAt: now.addingTimeInterval(host == nil ? 45 : hostPromptLifetime), processID: getpid(),
+                       hostSessionID: host, toolName: host == nil ? nil : tool, createdAt: host == nil ? nil : now)
     }
 
     public static func publish(_ request: Request) -> Bool {
         guard supports(request.provider), request.protocolVersion == 2,
               request.processID == getpid(), request.expiresAt > Date(),
-              request.expiresAt.timeIntervalSinceNow <= 46 else { return false }
+              request.expiresAt.timeIntervalSinceNow <= request.lifetime + 1 else { return false }
         guard prepareDirectory(), let data = try? JSONEncoder().encode(request) else { return false }
         cleanupExpired()
+        if let session = request.hostSessionID { cleanupHostSession(session) }
         let published = writeExclusive(data, to: requestURL(request.id))
         if published { ApprovalTrace.record(request.id, "published", heartbeatAge: hudStatus(stallTolerance: 4).age) }
         return published
@@ -104,7 +129,19 @@ public enum ApprovalRelay {
         for url in urls {
             guard url.pathExtension == "json", let id = UUID(uuidString: url.deletingPathExtension().lastPathComponent),
                   let request = readRequest(id),
-                  request.expiresAt <= now || (request.processID > 0 && kill(request.processID, 0) != 0) else { continue }
+                  request.expiresAt <= now ||
+                  (!request.deliversThroughHost && request.processID > 0 && kill(request.processID, 0) != 0) else { continue }
+            cleanup(id)
+        }
+    }
+
+    /// A host session asks one permission at a time; a newer check supersedes
+    /// its earlier (auto-approved or answered) requests.
+    static func cleanupHostSession(_ session: String) {
+        guard directoryIsPrivate(), let urls = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else { return }
+        for url in urls {
+            guard url.pathExtension == "json", let id = UUID(uuidString: url.deletingPathExtension().lastPathComponent),
+                  let request = readRequest(id), request.hostSessionID == session else { continue }
             cleanup(id)
         }
     }
@@ -121,14 +158,15 @@ public enum ApprovalRelay {
 
     public static func pending(_ id: UUID, taskID: UUID, now: Date = Date()) -> Request? {
         guard let request = readRequest(id), supports(request.provider), request.protocolVersion == 2, request.taskID == taskID,
-              request.expiresAt > now, request.expiresAt.timeIntervalSince(now) <= 46,
-              request.processID > 0, kill(request.processID, 0) == 0,
+              request.expiresAt > now, request.expiresAt.timeIntervalSince(now) <= request.lifetime + 1,
+              request.deliversThroughHost || (request.processID > 0 && kill(request.processID, 0) == 0),
               !FileManager.default.fileExists(atPath: replyURL(id).path) else { return nil }
         return request
     }
 
     public static func respond(to request: Request, decision: Decision) -> Bool {
-        guard pending(request.id, taskID: request.taskID) == request,
+        // A host-delivered request has no listener; its card must be pressed.
+        guard !request.deliversThroughHost, pending(request.id, taskID: request.taskID) == request,
               let data = try? JSONEncoder().encode(Reply(id: request.id, decision: decision)) else { return false }
         let written = writeExclusive(data, to: replyURL(request.id))
         ApprovalTrace.record(request.id, written ? "decision-written" : "decision-write-failed")

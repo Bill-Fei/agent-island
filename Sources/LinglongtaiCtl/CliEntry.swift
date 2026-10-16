@@ -259,6 +259,8 @@ struct LinglongtaiCtl {
             ApprovalRelay.cleanup(request.id)
             approval = nil
         }
+        // The host decides in its own card; nothing waits on this process.
+        if approval?.deliversThroughHost == true { return }
         // Wait outside the journal lock. No decision falls back to the provider.
         if let request = approval, let decision = ApprovalRelay.wait(for: request) {
             let result: [String: Any] = ["hookSpecificOutput": [

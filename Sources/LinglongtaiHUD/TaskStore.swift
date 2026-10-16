@@ -47,9 +47,9 @@ final class TaskStore: ObservableObject {
               let id = current.approvalRequestID else { return nil }
         guard let request = ApprovalRelay.pending(id, taskID: task.id, now: now()),
               request.provider == task.profile.kind else { return nil }
-        // SDK hosts check permissions they then auto-approve; only their own
-        // prompt notification proves there is a decision waiting for the user.
-        if request.waitsForProviderPrompt == true, current.sourceEvent != "Notification" { return nil }
+        // Desktop checks permissions it then auto-approves; only its own card,
+        // recorded in its log, proves there is a decision waiting for the user.
+        if request.deliversThroughHost, hostPrompt(for: request) == nil || hostDeliveries[request.id] != nil { return nil }
         return request
     }
 
@@ -108,6 +108,10 @@ final class TaskStore: ObservableObject {
     }
 
     func respondToApproval(_ request: ApprovalRelay.Request, decision: ApprovalRelay.Decision) {
+        if request.deliversThroughHost {
+            respondThroughHost(request, decision: decision)
+            return
+        }
         guard let task = tasks.first(where: { $0.id == request.taskID }),
               approvalRequest(for: task) == request,
               ApprovalRelay.respond(to: request, decision: decision) else {
@@ -124,6 +128,95 @@ final class TaskStore: ObservableObject {
         failedApprovals.remove(request.taskID)
         closeApproval()
     }
+    /// One exact open card in the request's own session and tool, shown no
+    /// earlier than the request. Two open cards in a session are ambiguous.
+    func hostPrompt(for request: ApprovalRelay.Request) -> ClaudePromptLog.Prompt? {
+        guard let session = request.hostSessionID else { return nil }
+        let prompts = promptLog.openPrompts(in: session)
+        guard prompts.count == 1, let prompt = prompts.first, prompt.tool == request.toolName,
+              prompt.shownAt >= (request.createdAt ?? .distantFuture).addingTimeInterval(-3) else { return nil }
+        return prompt
+    }
+
+    func pollHostPrompts() {
+        guard promptLog.poll(now: now()) else { return }
+        invalidateTaskCache()
+        for task in tasks {
+            guard let id = task.approvalRequestID, !tracedHostActionable.contains(id),
+                  let request = approvalRequest(for: task), request.deliversThroughHost else { continue }
+            tracedHostActionable.insert(id)
+            ApprovalTrace.record(id, "hud-actionable")
+        }
+        refreshPresentation()
+    }
+
+    private func respondThroughHost(_ request: ApprovalRelay.Request, decision: ApprovalRelay.Decision) {
+        _ = promptLog.poll(now: now())
+        guard let task = tasks.first(where: { $0.id == request.taskID }),
+              approvalRequest(for: task) == request, let prompt = hostPrompt(for: request),
+              let deliver = hostApprovalDelivery else {
+            failHostDelivery(request, reason: "App 中的确认卡已不在")
+            return
+        }
+        hostDeliveries[request.id] = decision
+        submittedApprovals[request.id] = now()
+        failedApprovals.remove(request.taskID)
+        notice = decision == .allow ? "正在 App 中允许本次请求…" : "正在 App 中拒绝本次请求…"
+        ApprovalTrace.record(request.id, decision == .allow ? "host-press-allow" : "host-press-deny")
+        closeApproval()
+        deliver(prompt.session, prompt.id, decision) { [weak self] outcome in
+            guard let self else { return }
+            switch outcome {
+            case .pressed:
+                self.confirmHostDelivery(request, prompt: prompt, decision: decision, deadline: Date().addingTimeInterval(3))
+            case .failed(let reason):
+                self.failHostDelivery(request, reason: reason)
+            }
+        }
+    }
+
+    /// Success only when Desktop itself logs the answer for this exact card.
+    private func confirmHostDelivery(_ request: ApprovalRelay.Request, prompt: ClaudePromptLog.Prompt,
+                                     decision: ApprovalRelay.Decision, deadline: Date) {
+        _ = promptLog.poll(now: now())
+        if let resolution = promptLog.resolved[prompt.id] {
+            let matches = decision == .allow ? ["once", "always"].contains(resolution.decision) : resolution.decision == "deny"
+            ApprovalTrace.record(request.id, matches ? "host-confirmed" : "host-mismatch")
+            ApprovalRelay.cleanup(request.id)
+            hostDeliveries.removeValue(forKey: request.id)
+            if matches {
+                notice = decision == .allow ? "已在 App 中允许本次请求" : "已在 App 中拒绝本次请求"
+            } else {
+                notice = "App 记录的结果与岛上的选择不一致，请回 App 核实"
+                failedApprovals.insert(request.taskID)
+            }
+            invalidateTaskCache()
+            refreshPresentation()
+            return
+        }
+        guard Date() < deadline else {
+            failHostDelivery(request, reason: "App 没有确认收到")
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            self?.confirmHostDelivery(request, prompt: prompt, decision: decision, deadline: deadline)
+        }
+    }
+
+    private func failHostDelivery(_ request: ApprovalRelay.Request, reason: String) {
+        ApprovalTrace.record(request.id, "host-press-failed")
+        hostDeliveries.removeValue(forKey: request.id)
+        submittedApprovals.removeValue(forKey: request.id)
+        notice = "未能在 App 中确认（\(reason)），请回 App 处理"
+        failedApprovals.insert(request.taskID)
+        mediumUntil = now().addingTimeInterval(10)
+        eventPulseUntil = mediumUntil
+        highlightedTaskID = request.taskID
+        closeApproval()
+        invalidateTaskCache()
+        refreshPresentation()
+    }
+
     private var previewTasks: [AgentTask] = [] {
         didSet { invalidateTaskCache() }
     }
@@ -167,6 +260,19 @@ final class TaskStore: ObservableObject {
     private var claudeNotificationStarts: [UUID: Date] = [:]
     private var surfacedClaudeNotifications: [UUID: Date] = [:]
     private var approvalRequestStarts: [UUID: Date] = [:]
+    /// Desktop's own card lifecycle, followed from its log (see ClaudePromptLog).
+    private var promptLog = ClaudePromptLog(urls: [])
+    private var hostDeliveries: [UUID: ApprovalRelay.Decision] = [:]
+    private var tracedHostActionable: Set<UUID> = []
+
+    enum HostPressOutcome: Equatable {
+        case pressed
+        case failed(String)
+    }
+    /// Presses Allow/Deny on the Desktop card of (session, prompt ID). Injected by
+    /// the HUD so the store stays free of AppKit and accessibility I/O.
+    var hostApprovalDelivery: ((_ session: String, _ promptID: String, _ decision: ApprovalRelay.Decision,
+                                _ completion: @escaping (HostPressOutcome) -> Void) -> Void)?
     private var surfacedApprovalRequests: Set<UUID> = []
     private static let notificationSettleDelay: TimeInterval = 2
     private static let approvalSettleDelay: TimeInterval = 1.2
@@ -259,6 +365,11 @@ final class TaskStore: ObservableObject {
         }
         LinglongtaiPaths.prepare()
         ApprovalRelay.cleanupExpired()
+        // Isolated runs follow a fixture inside their own data directory only.
+        promptLog = ClaudePromptLog(urls: isIsolatedRun
+            ? [LinglongtaiPaths.applicationSupport.appendingPathComponent("fixture-claude-main.log")]
+            : ClaudePromptLog.defaultURLs)
+        _ = promptLog.poll(now: now())
         loadTasks()
         selectedTaskID = sortedTasks.first?.id
         consumeEvents()
@@ -267,6 +378,7 @@ final class TaskStore: ObservableObject {
         let timer = Timer(timeInterval: 0.8, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.pollEvents()
+                self?.pollHostPrompts()
                 self?.consumeDoubaoTrajectories()
                 self?.refreshPresentation()
             }
@@ -483,6 +595,8 @@ final class TaskStore: ObservableObject {
         guard task.status == .waiting, task.sourceEvent != "AmbiguousTurn", isFresh(task) else { return false }
         if task.approvalRequestID != nil || task.sourceEvent == "PermissionRequest" {
             guard let request = approvalRequest(for: task) else { return false }
+            // The card is already on screen; its log line needs no further settling.
+            if request.deliversThroughHost { return true }
             let started = approvalRequestStarts[request.id] ?? task.updatedAt
             return now().timeIntervalSince(started) >= Self.approvalSettleDelay
         }

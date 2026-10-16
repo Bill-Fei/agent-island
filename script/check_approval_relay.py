@@ -42,7 +42,7 @@ def payload(provider="codex", session="session", event="PermissionRequest", argu
     return {"hook_event_name": event, "session_id": session, "turn_id": "turn",
             "cwd": "/tmp/release-fixture", "tool_name": "Bash", "tool_input": arguments or {"command": "printf harmless-fixture"}}
 
-def start(root, data, provider="claude", relay=True, hud=True, entrypoint="cli"):
+def start(root, data, provider="claude", relay=True, hud=True, entrypoint="cli", host_session=None):
     if hud:
         with heartbeat_lock:
             heartbeat(root)
@@ -50,7 +50,9 @@ def start(root, data, provider="claude", relay=True, hud=True, entrypoint="cli")
     args = [str(ctl), "hook", "--provider", provider, "--data-dir", str(root)]
     if relay:
         args += ["--approval-relay"]
-    env = {k: v for k, v in os.environ.items() if k != "CLAUDE_CODE_ENTRYPOINT"}
+    env = {k: v for k, v in os.environ.items() if k not in ("CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_HOST_SESSION_ID")}
+    if host_session is not None:
+        env["CLAUDE_CODE_HOST_SESSION_ID"] = host_session
     if entrypoint is not None:
         env["CLAUDE_CODE_ENTRYPOINT"] = entrypoint
     process = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
@@ -139,17 +141,29 @@ with tempfile.TemporaryDirectory(prefix="island-approval-") as temporary:
     check("prolonged HUD stall releases native flow", finish(proc, timeout=20) == b"" and not path.exists() and time.monotonic() - began < 16)
     check("trace explains a stall release", trace(root)[-1]["stage"] == "released-hud-unavailable" and trace(root)[-1]["heartbeatAge"] >= 12)
 
+    host_session = "local_0f0e0d0c-0b0a-4908-8706-050403020100"
     for label, entrypoint in [("desktop-host", "claude-desktop-3p"), ("vscode-host", "claude-vscode"), ("sdk-host", "sdk-ts")]:
         root = base / label
-        proc = start(root, payload(provider="claude"), entrypoint=entrypoint)
-        _, request = pending(root)
-        check(label + " request waits for the provider's own prompt", request.get("waitsForProviderPrompt") is True)
-        approve_pending(root)
-        check(label + " still delivers the one-shot decision", json.loads(finish(proc))["hookSpecificOutput"]["decision"]["behavior"] == "allow")
+        began = time.monotonic()
+        proc = start(root, payload(provider="claude"), entrypoint=entrypoint, host_session=host_session)
+        out = finish(proc)
+        check(label + " hook returns at once and never answers for the host", out == b"" and time.monotonic() - began < 3)
+        files = list((root / "pending-approvals").glob("*.json"))
+        request = json.loads(files[0].read_text()) if len(files) == 1 else {}
+        check(label + " request is bound to the host session and raw tool", request.get("hostSessionID") == host_session and request.get("toolName") == "Bash" and request.get("protocolVersion") == 2)
+        check(label + " request outlives the hook process for the card's lifetime", 590 < request.get("expiresAt", 0) - request.get("createdAt", 0) <= 600)
+        proc = start(root, payload(provider="claude"), entrypoint=entrypoint, host_session=host_session)
+        finish(proc)
+        newer = list((root / "pending-approvals").glob("*.json"))
+        check(label + " newer check supersedes the session's earlier request", len(newer) == 1 and newer[0] != files[0])
+    for label, session in [("desktop-no-session", None), ("desktop-bad-session", "local_../../etc")]:
+        root = base / label
+        proc = start(root, payload(provider="claude"), entrypoint="claude-desktop-3p", host_session=session)
+        check(label + " stays observation-only", finish(proc) == b"" and not list((root / "pending-approvals").glob("*.json")))
     root = base / "cli-host"
     proc = start(root, payload(provider="claude"), entrypoint="cli")
     _, request = pending(root)
-    check("terminal CLI request is actionable immediately", "waitsForProviderPrompt" not in request)
+    check("terminal CLI request keeps the hook relay", "hostSessionID" not in request and request["expiresAt"] - time.time() + 978307200 < 46)
     approve_pending(root)
     finish(proc)
     root = base / "unset-entrypoint"

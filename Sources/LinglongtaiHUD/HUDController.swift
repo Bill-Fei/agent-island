@@ -33,6 +33,9 @@ final class HUDController: NSObject {
         configureContextMenu()
         configureApprovalShortcuts()
         observeState()
+        store.hostApprovalDelivery = { session, promptID, decision, completion in
+            ClaudeHostApproval.deliver(session: session, promptID: promptID, decision: decision, completion: completion)
+        }
         // Sample the existing spring at 120 Hz for smoother high-refresh
         // display motion. Task history caching and background polling remain
         // independent; this does not change spring timing or rebound.
