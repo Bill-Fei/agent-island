@@ -573,16 +573,8 @@ private struct HUDExpandedContent: View {
         }()
         let opens = task.profile.kind != .custom && [.completed, .failed, .attention, .checkingPermission].contains(state)
         // A plain gray block: the status pill above already carries the color.
+        // No icon either: the pill already shows the state.
         let card = HStack(alignment: .center, spacing: 10) {
-            if state.animates {
-                CompactActivityGlyph(height: 20, active: store.presentation == .heavy)
-                    .frame(width: 13, height: 13)
-                    .foregroundStyle(.white.opacity(0.55))
-            } else {
-                Image(systemName: state.symbol)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.55))
-            }
             VStack(alignment: .leading, spacing: 3) {
                 Text(text)
                     .font(HUDTypography.bodyEmphasis)
