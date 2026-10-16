@@ -197,6 +197,10 @@ with tempfile.TemporaryDirectory(prefix="island-approval-") as temporary:
     for label, data, hud in [
         ("no-hud", payload(provider="claude"), False),
         ("sensitive", payload(provider="claude", arguments={"token": "private-fixture"}), True),
+        ("sensitive-export", payload(provider="claude", arguments={"command": "export GITHUB_TOKEN=private-fixture"}), True),
+        ("sensitive-header", payload(provider="claude", arguments={"command": "curl -H 'Authorization: Bearer private-fixture-value'"}), True),
+        ("sensitive-envfile", payload(provider="claude", arguments={"command": "cat .env.local"}), True),
+        ("sensitive-key", payload(provider="claude", arguments={"command": "echo sk-abcdefghijklmnopqrstu"}), True),
         ("oversized", payload(provider="claude", arguments={"command": "x" * 9000}), True),
         ("subagent", dict(payload(provider="claude"), agent_id="child"), True),
         ("missing-input", {k:v for k,v in payload(provider="claude").items() if k != "tool_input"}, True),
@@ -205,6 +209,14 @@ with tempfile.TemporaryDirectory(prefix="island-approval-") as temporary:
         proc = start(root, data, hud=hud)
         check(label + " falls back without decision", finish(proc) == b"")
         check(label + " stores no approval context", not list((root / "pending-approvals").glob("*.json")))
+
+    for label, command in [("code-mentions-tokens", "sed -n 1,5p Sources/HUDColorTokens.swift"),
+                           ("code-mentions-environment", "grep -n '.environment(' HUDView.swift"),
+                           ("script-named-secret", "sh set-secret.sh doubao")]:
+        root = base / label
+        proc = start(root, payload(provider="claude", arguments={"command": command}))
+        approve_pending(root)
+        check(label + " is not mistaken for a credential", json.loads(finish(proc))["hookSpecificOutput"]["decision"]["behavior"] == "allow")
 
     root = base / "hud-disappears"
     proc = start(root, payload(provider="claude"))

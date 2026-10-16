@@ -67,8 +67,7 @@ public enum ApprovalRelay {
               !context.isEmpty else { return nil }
         // Do not move likely credentials into the secondary approval surface.
         // Unsupported/sensitive requests fall through to the provider UI.
-        let sensitive = "(?i)(api[_-]?key|authorization|bearer |password|secret|token|sk-[a-z0-9]|private.key|credential|\\.env)"
-        guard context.range(of: sensitive, options: .regularExpression) == nil else { return nil }
+        guard context.range(of: sensitivePattern, options: .regularExpression) == nil else { return nil }
         var host: String?
         if hostShowsOwnPrompt() {
             // An SDK host without a verifiable session cannot be pressed safely.
@@ -81,6 +80,27 @@ public enum ApprovalRelay {
                        hostSessionID: host, toolName: host == nil ? nil : tool, createdAt: now,
                        sessionKey: SiblingDecision.key(input["session_id"] as? String))
     }
+
+    /// Credential-shaped content only. Plain words are not enough: code edits
+    /// routinely mention `HUDColorTokens`, `.environment(` or `set-secret.sh`,
+    /// and treating those as secrets silently kept the island from showing.
+    static let sensitivePattern = [
+        // A credential-named field being given a value (also inside escaped JSON).
+        #"(?i)(?<![a-z0-9])(api[_-]?key|access[_-]?key|secret[_-]?key|client[_-]?secret|(auth|access|refresh|api)?[_-]?token|password|passwd|secret|credentials?)\\?["']?\s*[:=]"#,
+        #"(?i)--(password|passwd|token|secret|api-key)\b"#,
+        // A credential-named JSON field holding any value, e.g. {"authorization": "..."}.
+        #"(?i)"(authorization|password|passwd|secret|token|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|credentials?|private[_-]?key)"\s*:\s*""#,
+        #"(?i)\bauthorization\s*:"#,
+        #"(?i)\bbearer\s+[a-z0-9._~+/=-]{6,}"#,
+        #"\bsk-[A-Za-z0-9_-]{16,}"#,
+        #"\bgh[pousr]_[A-Za-z0-9]{20,}"#,
+        #"\bxox[abprs]-[A-Za-z0-9-]{10,}"#,
+        #"\bAKIA[0-9A-Z]{16}\b"#,
+        #"-----BEGIN [A-Z ]*PRIVATE KEY-----"#,
+        #"(?i)private[._-]key"#,
+        // .env files, never `.environment(`.
+        #"(?i)(?<![a-z0-9_])\.env(\.[a-z0-9_-]+)?(?![a-z0-9_])"#,
+    ].joined(separator: "|")
 
     public static func publish(_ request: Request) -> Bool {
         guard supports(request.provider), request.protocolVersion == 2,
