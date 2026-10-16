@@ -79,3 +79,21 @@ Bill 依赖岛内审批来跨多个对话处理请求，所以不再关闭 Deskt
 5. 风险：没有卡片时发 ⌘⏎ 可能把输入框草稿发送出去，所以发送前必须用日志确认卡片仍打开。
 
 **当前已安装（ecf9843）的状态**：Desktop 卡片弹出约 6s 后岛上会亮按钮，但在 Desktop 下点击**无效**，仍需在 App 内确认。终端 CLI 不受影响。
+
+## 2026-10-16 10:41 最终根因与验收（005ce94）
+
+**更正**：前文"Desktop 不采纳 hook 决定"的结论有误，B 方案（AX 模拟点击）已删除。
+
+**根因**：Claude Code 要等**所有** PermissionRequest hook 都返回才应用决定。飞书桥 `notify.mjs` 的审批 hook 会一直挂着等手机答复，最长 25 分钟。岛上的决定其实已经输出了，但 Claude 仍在等飞书 hook，直到用户在 App 里手点。前面 8 次岛上批准，每次都有飞书 hook 同时在等。2026-10-14 晚上飞书改成"审批一直等手机"之后，这个问题才出现。
+
+**修复**：
+- Desktop 请求重新走普通 hook relay。
+- 按钮只在 main.log 出现 `Emitted tool permission request` 时才亮，所以 1 秒内出现，也不会因 Desktop 自行放行而误弹。
+- 任一 hook 先拿到答复，就 touch `decided/<session_id>`，另一方看到后放手（契约见 `SiblingDecision.swift`）。
+
+**真实事件验收**：
+- 10:41:25 卡片出现。
+- 10:41:26 岛上亮按钮。
+- 10:41:33 岛上允许，同一秒 Desktop 记录 `aborted`（hook 应用）、飞书 hook 放手，工具继续执行。
+
+已验证 1 次。按钮存在受 45 秒 relay 时限约束。
