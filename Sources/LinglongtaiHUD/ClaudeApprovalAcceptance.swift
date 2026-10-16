@@ -107,6 +107,43 @@ func runClaudeApprovalStoreChecks(check: (String, Bool) -> Void, emit: (AgentEve
     check("island decision on a Desktop card reaches the hook", store.submittedApprovals[unanswered.id] != nil && !store.failedApprovals.contains(unansweredTask.id) && ApprovalRelay.wait(for: unanswered) == .allow)
     store.clearAllTasks()
 
+    // Codex: the island relay holds Codex's own card back, so it is short and
+    // hands over to Codex once it lapses.
+    func publishCodex() throws -> ApprovalRelay.Request? {
+        var event = AgentEvent(type: "upsert", id: UUID(), agent: "Codex", status: .waiting,
+                               requiresApproval: true, createdAt: date, sourceEvent: "PermissionRequest")
+        guard let request = ApprovalRelay.makeRequest(payload: payload, event: event, now: date),
+              ApprovalRelay.publish(request) else { return nil }
+        event.approvalRequestID = request.id
+        try emit(event)
+        store.consumeEvents()
+        return request
+    }
+    date = Date()
+    guard let codex = try publishCodex(), let codexTask = store.tasks.first(where: { $0.id == codex.taskID }) else {
+        check("Codex relay fixture publishes", false); return
+    }
+    check("Codex relay hands over within 20 seconds", codex.provider == .codex && codex.expiresAt.timeIntervalSince(date) <= 20.5)
+    date.addTimeInterval(1.2)
+    store.refreshPresentation()
+    check("Codex approval shows the island button", store.approvalRequest(for: codexTask) == codex && store.approvalTask?.id == codex.taskID)
+    store.respondToApproval(codex, decision: .allow)
+    let decided = store.tasks.first(where: { $0.id == codex.taskID })!
+    check("a Codex decision made on the island is not re-asked as a Codex card",
+          ApprovalRelay.wait(for: codex) == .allow && !store.codexPromptInApp(decided) && !store.needsUserAttention(decided))
+    store.clearAllTasks()
+    date = Date()
+    guard let lapsed = try publishCodex(), let lapsedTask = store.tasks.first(where: { $0.id == lapsed.taskID }) else {
+        check("Codex lapse fixture publishes", false); return
+    }
+    date = lapsed.expiresAt.addingTimeInterval(0.2)
+    store.refreshPresentation()
+    check("an unanswered Codex relay hands the prompt to Codex's own card",
+          store.approvalRequest(for: lapsedTask) == nil && store.codexPromptInApp(lapsedTask) &&
+          store.needsUserAttention(lapsedTask) && store.approvalSurfaceText(for: lapsedTask) == "在 Codex 里批准")
+    ApprovalRelay.cleanup(lapsed.id)
+    store.clearAllTasks()
+
     let claudeNotification = UUID()
     date = Date()
     func notification(_ sourceEvent: String, status: AgentTaskStatus) throws {

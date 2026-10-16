@@ -6,7 +6,11 @@ import Darwin
 public enum ApprovalRelay {
     /// Claude Code only; hook callers must explicitly opt in. Other providers
     /// remain observation-only, and no standing permissions are returned.
-    public static func supports(_ provider: AgentKind) -> Bool { provider == .claude }
+    public static func supports(_ provider: AgentKind) -> Bool { provider == .claude || provider == .codex }
+
+    /// Codex shows its own card only after every PermissionRequest hook has
+    /// returned, so an unanswered island request must hand over quickly.
+    public static func lifetime(for provider: AgentKind) -> TimeInterval { provider == .codex ? 20 : 45 }
 
     /// SDK hosts such as Claude Desktop (`claude-desktop*`) run this hook for
     /// every permission check, including tools they then approve themselves;
@@ -76,7 +80,7 @@ public enum ApprovalRelay {
         }
         return Request(id: UUID(), taskID: taskID, provider: provider,
                        tool: ToolStep.label(for: tool), context: context,
-                       expiresAt: now.addingTimeInterval(45), processID: getpid(),
+                       expiresAt: now.addingTimeInterval(lifetime(for: provider)), processID: getpid(),
                        hostSessionID: host, toolName: host == nil ? nil : tool, createdAt: now,
                        sessionKey: SiblingDecision.key(input["session_id"] as? String))
     }
