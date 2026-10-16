@@ -66,8 +66,8 @@
   /* ---------- island ---------- */
   const ICON = k => `${ROOT}media/icons/${k}.png`;
   const EVENTS = [
-    { agent: 'claude', stack: ['claude', 'codex', 'doubao'], title: EN ? 'Refactor login' : '重构登录模块', status: EN ? 'Turn done' : '本轮已结束', color: '#87c7ab', glow: 'rgba(135,199,171,.28)' },
-    { agent: 'codex', stack: ['codex', 'claude', 'workbuddy'], title: EN ? 'Database migration' : '数据库迁移', status: EN ? 'Needs you' : '1项待确认', color: '#e8b080', glow: 'rgba(232,176,128,.28)' }
+    { agent: 'claude', stack: ['claude', 'codex', 'doubao'], title: EN ? 'Refactor login' : '重构登录模块', status: EN ? 'Done' : '已完成', color: '#87c7ab', glow: 'rgba(135,199,171,.28)' },
+    { agent: 'codex', stack: ['codex', 'claude', 'workbuddy'], title: EN ? 'Database migration' : '数据库迁移', status: EN ? 'Needs you' : '等你批准', color: '#e8b080', glow: 'rgba(232,176,128,.28)' }
   ];
 
   // Geometry of each state, in app points (same values as the app / film).
