@@ -472,7 +472,11 @@ private struct HUDExpandedContent: View {
                                     Text("显示最近 30 条，计数包含全部返回记录").font(HUDTypography.caption).foregroundStyle(.secondary)
                                 }
                             }
-                        }.frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        // Same as the task list: the scroll runs to the pane's
+                        // bottom edge and the breathing room lives inside it.
+                        .padding(.bottom, 12)
                     }
                     .frame(maxHeight: .infinity, alignment: .top)
                     .padding(.top, 14)
@@ -480,11 +484,11 @@ private struct HUDExpandedContent: View {
                     if hasDetailActions(for: task) {
                         actionBar(for: task)
                             .padding(.top, 12)
+                            .padding(.bottom, 12)
                     }
                 }
                 .padding(.horizontal, 18)
                 .padding(.top, 14)
-                .padding(.bottom, 12)
             } else {
                 VStack(spacing: 12) {
                     Image(systemName: "sparkles")
