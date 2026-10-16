@@ -675,14 +675,14 @@ enum TaskStoreAcceptance {
         if let task = store.tasks.first(where: { $0.id == permissionOnly }) {
             check("permission check without a live request never counts as a user confirmation",
                   !store.needsUserAttention(task) && store.waitingCount == 0 && store.presentation == .compact &&
-                  store.mediumStatusText == "权限检查中")
+                  store.mediumStatusText == "在 App 里处理")
             check("permission check details do not tell the user to find a nonexistent prompt",
-                  store.currentStepText(for: task).contains("不接管审批") &&
-                  store.statusSummary(for: .codex).contains("权限检查中"))
+                  store.currentStepText(for: task).contains("正在确认权限") &&
+                  store.statusSummary(for: .codex).contains("在 App 里处理"))
         }
         let permissionReload = TaskStore(now: { date })
         check("restarting cannot turn a bare permission check into a user prompt",
-              permissionReload.waitingCount == 0 && permissionReload.mediumStatusText == "权限检查中")
+              permissionReload.waitingCount == 0 && permissionReload.mediumStatusText == "在 App 里处理")
         date.addTimeInterval(13.692)
         try emit(AgentEvent(type: "upsert", id: permissionOnly, agent: "Codex", status: .running,
                             requiresApproval: false, createdAt: date, sourceEvent: "PostToolUse"))
@@ -708,7 +708,7 @@ enum TaskStoreAcceptance {
             check("release store: observer-only PermissionRequest never creates a review request",
                   store.approvalRequest(for: task) == nil && store.reviewingApproval == nil &&
                   !store.needsUserAttention(task) && store.waitingCount == 0 &&
-                  store.mediumStatusText == "权限检查中")
+                  store.mediumStatusText == "在 App 里处理")
         }
         check("release store: approval support is limited to Claude Code",
               ApprovalRelay.supports(.claude) && !ApprovalRelay.supports(.codex) && !ApprovalRelay.supports(.workBuddy))

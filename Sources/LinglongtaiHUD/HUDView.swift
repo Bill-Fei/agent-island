@@ -236,7 +236,7 @@ private struct HUDActivityContent: View {
                     .background(HUDColorTokens.attention.opacity(0.18), in: Capsule())
                     .help("查看本次请求并直接批准，无需打开应用")
             } else if let task = store.activeTask, store.approvalFeedback(for: task) != nil {
-                detailButton(title: "等待回执", tint: HUDColorTokens.attention)
+                detailButton(title: "等 App 确认", tint: HUDColorTokens.attention)
             } else {
                 detailButton(title: store.mediumStatusText, tint: .white.opacity(0.8))
             }
@@ -467,7 +467,7 @@ private struct HUDExpandedContent: View {
                     }
                     HStack(spacing: 8) {
                         TaskStateIndicator(state: state, visible: store.presentation == .heavy,
-                                           label: store.displayedStatus(for: task))
+                                           label: store.plainStatus(for: task))
                         if state == .failed {
                             Button {
                                 store.resyncStatus(for: task)
@@ -636,7 +636,7 @@ private struct HUDExpandedContent: View {
     private func detailFooterText(for task: AgentTask) -> String? {
         store.approvalFeedback(for: task)
             ?? store.approvalSurfaceText(for: task)
-            ?? (store.needsUserAttention(task) && store.approvalRequest(for: task) == nil ? "需在原应用确认" : nil)
+            ?? (store.needsUserAttention(task) && store.approvalRequest(for: task) == nil ? "在 App 里处理" : nil)
     }
 
     private func actionBar(for task: AgentTask) -> some View {
