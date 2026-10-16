@@ -580,21 +580,6 @@ private struct HUDExpandedContent: View {
                     .font(HUDTypography.bodyEmphasis)
                     .foregroundStyle(.white.opacity(0.9))
                     .fixedSize(horizontal: false, vertical: true)
-                // What the turn did rides along as a quiet second line;
-                // most turns have one or two kinds, so a section of its own
-                // would mostly be empty space.
-                if let summary = task.toolStepSummary {
-                    let failed = task.failedToolStepCount
-                    Text(state.group == .ended ? summary : "已完成：" + summary)
-                        .font(HUDTypography.caption)
-                        .foregroundStyle(.white.opacity(0.5))
-                        .fixedSize(horizontal: false, vertical: true)
-                    if failed > 0 {
-                        Text("\(failed) 次出错")
-                            .font(HUDTypography.caption)
-                            .foregroundStyle(.white.opacity(0.5))
-                    }
-                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             if opens {
@@ -625,14 +610,17 @@ private struct HUDExpandedContent: View {
             Text("部分步骤没有编号，次数可能偏多")
                 .font(HUDTypography.caption).foregroundStyle(.secondary)
         }
-        if task.returnedToolSteps.count >= 3 {
+        // The card stays one sentence; how much work happened lives behind
+        // a single quiet link, opened only when someone wants it.
+        if !task.returnedToolSteps.isEmpty {
             let expanded = stepList.expandedTaskID == task.id
+            let failed = task.failedToolStepCount
             VStack(alignment: .leading, spacing: 8) {
                 Button {
                     stepList.expandedTaskID = expanded ? nil : task.id
                 } label: {
                     HStack(spacing: 4) {
-                        Text(expanded ? "收起步骤" : "查看全部 \(task.returnedToolSteps.count) 个步骤")
+                        Text("\(task.returnedToolSteps.count) 个步骤" + (failed > 0 ? " · \(failed) 次出错" : ""))
                         Image(systemName: expanded ? "chevron.up" : "chevron.down")
                             .font(.system(size: 9, weight: .semibold))
                     }
