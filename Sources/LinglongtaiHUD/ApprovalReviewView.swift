@@ -207,9 +207,9 @@ private struct ApprovalHoldButton: View {
                 min(1, max(0, context.date.timeIntervalSince($0) / TaskStore.approvalHoldDuration))
             } ?? 0
             ZStack(alignment: .leading) {
-                Capsule().fill(Color(red: 0.52, green: 0.33, blue: 0.16))
+                Capsule().fill(Color(red: 0.62, green: 0.36, blue: 0.10))
                 GeometryReader { proxy in
-                    Capsule().fill(Color(red: 0.82, green: 0.5, blue: 0.22))
+                    Capsule().fill(Color(red: 1.0, green: 0.62, blue: 0.16))
                         .frame(width: proxy.size.width * progress)
                 }
                 HStack(spacing: 5) {
@@ -239,7 +239,7 @@ struct ApprovalCountdownRing: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 0.5)) { context in
             let remaining = max(0, expiresAt.timeIntervalSince(context.date))
-            let tint = remaining <= 10 ? HUDColorTokens.danger : HUDColorTokens.attention
+            let tint = remaining <= 10 ? Color(red: 1.0, green: 0.42, blue: 0.38) : Color(red: 1.0, green: 0.74, blue: 0.28)
             ZStack {
                 Circle().stroke(Color.white.opacity(0.14), lineWidth: 2.5)
                 Circle().trim(from: 0, to: min(1, remaining / Self.total))
