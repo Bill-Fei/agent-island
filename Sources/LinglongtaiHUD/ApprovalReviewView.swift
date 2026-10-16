@@ -161,8 +161,8 @@ struct ApprovalReviewView: View {
     // MARK: Decision — two equal pills, like answering a call
 
     static let buttonHeight: CGFloat = 32
-    /// Solid but not neon: a deep green that still reads as "go" on black.
-    static let allowFill = Color(red: 0.16, green: 0.6, blue: 0.36)
+    /// Clean system-style green (no grey in it) that reads as "go" on black.
+    static let allowFill = Color(red: 0.20, green: 0.72, blue: 0.40)
 
     private var decisionButtons: some View {
         HStack(spacing: 10) {
