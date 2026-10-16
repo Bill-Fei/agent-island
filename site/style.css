@@ -265,7 +265,7 @@ ul, ol { padding: 0; list-style: none; }
   background: linear-gradient(currentColor, currentColor) 3.6px 1.4px / 1.3px 3.4px no-repeat;
 }
 
-.p-detail { left: 293px; top: 172px; width: 327px; height: 112px; }
+.p-detail { left: 293px; top: 172px; width: 327px; height: 32px; }
 .p-detail img { position: absolute; left: 1px; top: 1px; width: 30px; height: 30px; }
 .p-detail > b { position: absolute; left: 42px; top: 9px; font-size: 14px; font-weight: 700; color: #eef0ec; }
 .p-open {
@@ -273,27 +273,38 @@ ul, ol { padding: 0; list-style: none; }
   background: rgba(122, 168, 255, .16); color: #a6c3ff;
   font: 700 11.5px/30px var(--font); text-align: center;
 }
-.p-desc { position: absolute; left: 0; top: 50px; font-size: 13px; line-height: 20px; font-weight: 500; color: #eef0ec; }
-.p-thread {
-  position: absolute; left: 0; right: 0; top: 98px;
-  display: flex; justify-content: space-between; font-size: 10px; color: #8a9391;
+/* Fixed identity: title leads, status is a tinted pill beside the time. */
+.p-heading { left: 293px; top: 216px; font-size: 15px; font-weight: 700; color: #fff; }
+.p-status { left: 293px; top: 240px; display: flex; align-items: center; gap: 9px; }
+.p-status em {
+  display: flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px 0 8px; border-radius: 11px;
+  font-style: normal; font-size: 10.5px; font-weight: 600; color: var(--attn);
+  background: color-mix(in srgb, var(--attn) 15%, transparent);
 }
-.p-step {
-  left: 300px; width: 320px; height: 20px;
-  display: flex; align-items: center; justify-content: space-between;
-  padding-left: 22px; font-size: 11.5px; color: #e6e8e4;
+.p-status em::before {
+  content: ""; width: 8px; height: 8px; border-radius: 50%;
+  border: 1.3px solid currentColor;
+  background: linear-gradient(currentColor, currentColor) 3.1px 1.2px / 1.3px 3px no-repeat;
 }
-.p-step::before {
-  content: ""; position: absolute; left: 0; top: 1px; width: 9px; height: 9px;
-  border-left: 1.4px solid #c9cecb; border-bottom: 1.4px solid #c9cecb; border-bottom-left-radius: 4px;
+.p-status time { font-size: 10.5px; font-weight: 500; color: #8a9391; }
+.p-hair { left: 293px; top: 274px; width: 327px; height: 1px; background: rgba(255, 255, 255, .08); }
+/* Body: one tinted outcome card, then the step tally as number tiles. */
+.p-outcome {
+  left: 293px; top: 286px; width: 327px; height: 42px; box-sizing: border-box; padding: 0 12px;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; border-radius: 12px;
+  font-size: 11.5px; font-weight: 600; color: #eef0ec;
+  background: color-mix(in srgb, var(--attn) 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--attn) 18%, transparent);
 }
-.p-step time { font-size: 11px; font-weight: 500; color: #9aa3a0; }
-.p-step.is-attn { color: var(--attn); font-weight: 600; }
-.p-step.is-attn::before { border-color: var(--attn); }
-.p-step.is-attn > span::after {
-  content: ""; display: inline-block; width: 5px; height: 5px; margin-left: 8px; vertical-align: 2px;
-  border-radius: 50%; background: var(--attn);
+.p-outcome b { flex: none; font-size: 10.5px; font-weight: 700; color: #a6c3ff; }
+.p-outcome b::after { content: " ↗"; }
+.p-tiles-head { left: 293px; top: 342px; font-size: 10px; font-weight: 600; color: #8a9391; }
+.p-tiles { left: 293px; top: 358px; width: 327px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.p-tiles span {
+  display: flex; flex-direction: column; gap: 5px; padding: 9px 10px; border-radius: 10px;
+  font-size: 10px; color: rgba(255, 255, 255, .5); background: rgba(255, 255, 255, .05);
 }
+.p-tiles b { font-size: 18px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
 .p-foot { right: 20px; top: 423px; font-size: 9.5px; color: #68716e; }
 
 /* Static copies of the island used as pictures in the states section */
