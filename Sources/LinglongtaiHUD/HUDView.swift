@@ -218,7 +218,7 @@ private struct HUDActivityContent: View {
                     HStack(spacing: 5) {
                         Circle().fill(HUDColorTokens.attention).frame(width: 6, height: 6)
                             .modifier(AgentActivityEffect(executing: true, visible: animationActive))
-                        Text(store.pendingApprovalTasks.count > 1 ? "\(store.pendingApprovalTasks.count) 个待批" : "待批")
+                        Text(store.pendingApprovalTasks.count > 1 ? "\(store.pendingApprovalTasks.count) 项等你批准" : "等你批准")
                     }
                     .foregroundStyle(HUDColorTokens.attention)
                     .padding(.horizontal, 9).padding(.vertical, 3)
@@ -476,7 +476,7 @@ private struct HUDExpandedContent: View {
                         .textSelection(.enabled)
                     HStack(spacing: 8) {
                         TaskStateIndicator(state: state, visible: store.presentation == .heavy,
-                                           label: state == .completed ? "已完成" : state == .failed ? "出错了" : store.plainStatus(for: task))
+                                           label: store.plainStatus(for: task))
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
                             .background(state.tint.opacity(0.14), in: Capsule())

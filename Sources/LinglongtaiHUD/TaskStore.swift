@@ -739,15 +739,22 @@ final class TaskStore: ObservableObject {
     }
 
     /// The wording a person reads. displayedStatus stays the internal key that
-    /// visual-state mapping and checks rely on; only waiting phases collapse
-    /// into three plain states: 等你批准 / 在 App 里处理 / 正在执行.
+    /// visual-state mapping and checks rely on. Every surface (list, notch,
+    /// detail pill) says the same word for the same state:
+    /// 等你批准 / 在 App 里处理 / 正在执行 / 已完成 / 出错了 / 已停止.
     func plainStatus(for task: AgentTask) -> String {
-        let status = displayedStatus(for: task)
+        Self.plainWord(for: displayedStatus(for: task))
+    }
+
+    static func plainWord(for status: String) -> String {
         switch status {
         case "权限检查中", "确认通知观察中", "等待权限结果": return "在 App 里处理"
         case "等待回执": return "已发送，等 App 确认"
-        case "等待确认": return approvalRequest(for: task) != nil ? "等你批准" : "在 App 里处理"
-        case "执行工具", "处理中": return "正在执行"
+        case "等待确认": return "等你批准"
+        case "执行工具", "处理中", "运行中": return "正在执行"
+        case "本轮已结束", "已完成": return "已完成"
+        case "本轮响应失败", "失败": return "出错了"
+        case "本轮已中断": return "已停止"
         default: return status
         }
     }
@@ -786,13 +793,14 @@ final class TaskStore: ObservableObject {
 
     var mediumStatusText: String {
         if calibrationPreview != nil { return "中态预览" }
-        if waitingCount > 0 { return "\(waitingCount)项待确认" }
+        if waitingCount > 0 { return waitingCount == 1 ? "等你批准" : "\(waitingCount) 项等你批准" }
         if let task = highlightedFeedbackTask,
            [.completed, .failed, .cancelled].contains(task.status) {
-            return currentActivityTasks.isEmpty ? task.statusLabel : "1项结束 · \(currentActivityTasks.count)项进行中"
+            let word = Self.plainWord(for: task.statusLabel)
+            return currentActivityTasks.isEmpty ? word : "\(word) · \(currentActivityTasks.count) 项正在执行"
         }
         if currentActivityTasks.count > 1 {
-            return "\(currentActivityTasks.count)项进行中"
+            return "\(currentActivityTasks.count) 项正在执行"
         }
         guard let task = activeTask else { return "等待事件" }
         return plainStatus(for: task)

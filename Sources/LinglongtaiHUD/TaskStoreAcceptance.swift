@@ -388,7 +388,7 @@ enum TaskStoreAcceptance {
                             createdAt: date, sourceEvent: "Stop"))
         store.consumeEvents()
         check("ambient evidence: true completion retains ten-second feedback without an execution glyph", store.presentation == .medium &&
-              store.activeTask?.id == active && !store.activeTaskIsExecuting && store.compactCountText.isEmpty && store.mediumStatusText == "本轮已结束")
+              store.activeTask?.id == active && !store.activeTaskIsExecuting && store.compactCountText.isEmpty && store.mediumStatusText == "已完成")
         date.addTimeInterval(10)
         store.refreshPresentation()
         check("ambient evidence: completion feedback expires despite unresolved history", store.presentation == .collapsed &&
@@ -422,7 +422,7 @@ enum TaskStoreAcceptance {
         check("current count: unknown results drop out, the two started tasks still count",
               store.ongoingTasks.count == 5 && Set(store.currentActivityTasks.map(\.id)) == [active, permission] && store.compactCountText == "2")
         check("current count: unknown results do not inflate the icon stack or status",
-              Set(store.islandIconTasks.map(\.id)) == [active, permission] && store.islandIconTasks.first?.id == active && store.mediumStatusText == "2项进行中")
+              Set(store.islandIconTasks.map(\.id)) == [active, permission] && store.islandIconTasks.first?.id == active && store.mediumStatusText == "2 项正在执行")
         store.select(store.tasks.first { $0.id == permission }!)
         check("current count: a selected running permission check leads without becoming an approval",
               store.selectedTask?.id == permission && store.activeTask?.id == permission && store.waitingCount == 0 && store.compactCountText == "2")
@@ -455,7 +455,7 @@ enum TaskStoreAcceptance {
         store.select(store.tasks.first { $0.id == second }!)
         check("current count: two actual tasks from the same provider retain two icons and count",
               store.compactCountText == "2" && store.islandIconTasks.count == 2 && store.islandIconTasks.first?.id == second &&
-              store.mediumStatusText == "2项进行中")
+              store.mediumStatusText == "2 项正在执行")
         store.clearAllTasks()
     }
 
@@ -694,7 +694,7 @@ enum TaskStoreAcceptance {
                             requiresApproval: true, createdAt: date, sourceEvent: "Notification"))
         store.consumeEvents()
         check("an explicit provider prompt notification still attracts user attention",
-              store.waitingCount == 1 && store.presentation == .medium && store.mediumStatusText == "1项待确认")
+              store.waitingCount == 1 && store.presentation == .medium && store.mediumStatusText == "等你批准")
         store.clearAllTasks()
 
         // Codex asks in its own card on PermissionRequest and sends no hook once
@@ -841,7 +841,7 @@ enum TaskStoreAcceptance {
         jump(to: 3_624)
         try send(longTask, name: "Stop", status: .completed)
         check("a real long-task ending displays its terminal state", store.presentation == .medium &&
-              store.liveTasks.isEmpty && store.activeTask?.id == longTask && store.mediumStatusText == "本轮已结束")
+              store.liveTasks.isEmpty && store.activeTask?.id == longTask && store.mediumStatusText == "已完成")
         jump(to: 3_633.9)
         check("terminal feedback remains medium at 9.9 seconds", store.presentation == .medium)
         jump(to: 3_634)
@@ -861,7 +861,7 @@ enum TaskStoreAcceptance {
         try send(firstConcurrent, name: "Stop", status: .completed)
         check("one terminal event highlights completion while another task remains active",
               store.presentation == .medium && store.liveTasks.map(\.id) == [remainingConcurrent] &&
-              store.activeTask?.id == firstConcurrent && store.mediumStatusText == "1项结束 · 1项进行中")
+              store.activeTask?.id == firstConcurrent && store.mediumStatusText == "已完成 · 1 项正在执行")
         jump(to: 6_021.9)
         check("mixed terminal feedback remains medium at 9.9 seconds", store.presentation == .medium)
         jump(to: 6_022)

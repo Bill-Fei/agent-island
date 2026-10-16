@@ -66,8 +66,8 @@ enum TaskVisualState: Hashable {
         case .awaitingReceipt: return "等 App 确认"
         case .unknown: return "结果未知"
         case .untracked: return "不再跟踪"
-        case .completed: return "本轮结束"
-        case .failed: return "响应失败"
+        case .completed: return "已完成"
+        case .failed: return "出错了"
         case .cancelled: return "已停止"
         }
     }
