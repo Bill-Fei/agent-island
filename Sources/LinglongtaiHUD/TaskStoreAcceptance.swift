@@ -401,7 +401,7 @@ enum TaskStoreAcceptance {
         let store = TaskStore(now: { date })
         store.clearAllTasks()
         let active = UUID(), permission = UUID(), silent = UUID(), ambiguous = UUID(), chat = UUID()
-        for (id, agent) in [(active, "Codex"), (permission, "Codex"), (silent, "豆包"),
+        for (id, agent) in [(active, "Codex"), (permission, "Claude"), (silent, "豆包"),
                             (ambiguous, "Claude"), (chat, "Claude")] {
             try emit(AgentEvent(type: "upsert", id: id, agent: agent, status: .running,
                                 createdAt: date, sourceEvent: "UserPromptSubmit"))
@@ -664,12 +664,12 @@ enum TaskStoreAcceptance {
         // Reproduce the observed 23:41:09 permission check followed by a tool
         // return 13.692s later: a hook callback alone is not a visible prompt.
         let permissionOnly = UUID()
-        try emit(AgentEvent(type: "upsert", id: permissionOnly, agent: "Codex", status: .running,
+        try emit(AgentEvent(type: "upsert", id: permissionOnly, agent: "Claude", status: .running,
                             requiresApproval: false, createdAt: date, sourceEvent: "PreToolUse"))
         store.consumeEvents()
         date.addTimeInterval(11)
         store.refreshPresentation()
-        try emit(AgentEvent(type: "upsert", id: permissionOnly, agent: "Codex", status: .waiting,
+        try emit(AgentEvent(type: "upsert", id: permissionOnly, agent: "Claude", status: .waiting,
                             requiresApproval: true, createdAt: date, sourceEvent: "PermissionRequest"))
         store.consumeEvents()
         if let task = store.tasks.first(where: { $0.id == permissionOnly }) {
@@ -678,13 +678,13 @@ enum TaskStoreAcceptance {
                   store.mediumStatusText == "在 App 里处理")
             check("permission check details do not tell the user to find a nonexistent prompt",
                   store.currentStepText(for: task).contains("正在确认权限") &&
-                  store.statusSummary(for: .codex).contains("在 App 里处理"))
+                  store.statusSummary(for: .claude).contains("在 App 里处理"))
         }
         let permissionReload = TaskStore(now: { date })
         check("restarting cannot turn a bare permission check into a user prompt",
               permissionReload.waitingCount == 0 && permissionReload.mediumStatusText == "在 App 里处理")
         date.addTimeInterval(13.692)
-        try emit(AgentEvent(type: "upsert", id: permissionOnly, agent: "Codex", status: .running,
+        try emit(AgentEvent(type: "upsert", id: permissionOnly, agent: "Claude", status: .running,
                             requiresApproval: false, createdAt: date, sourceEvent: "PostToolUse"))
         store.consumeEvents()
         check("real tool return clears permission checking without another attention pulse",
@@ -695,6 +695,51 @@ enum TaskStoreAcceptance {
         store.consumeEvents()
         check("an explicit provider prompt notification still attracts user attention",
               store.waitingCount == 1 && store.presentation == .medium && store.mediumStatusText == "1项待确认")
+        store.clearAllTasks()
+
+        // Codex asks in its own card on PermissionRequest and sends no hook once
+        // the user answers there; its rollout shows the turn moving on.
+        date = Date()
+        let codexRaw = UUID().uuidString.lowercased()
+        let codexSession = CodexRollout.sessionDigest(rawSessionID: codexRaw)
+        let codexTask = UUID()
+        try emit(AgentEvent(type: "upsert", id: codexTask, agent: "Codex", status: .waiting, requiresApproval: true,
+                            createdAt: date, sourceEvent: "PermissionRequest", sessionID: codexSession))
+        store.consumeEvents()
+        check("Codex approval waits briefly before prompting",
+              store.waitingCount == 0 && store.presentation == .compact)
+        date.addTimeInterval(3)
+        store.refreshPresentation()
+        if let task = store.tasks.first(where: { $0.id == codexTask }) {
+            check("Codex approval prompts on the island and points to Codex",
+                  store.needsUserAttention(task) && store.waitingCount == 1 && store.presentation == .medium &&
+                  store.approvalSurfaceText(for: task) == "在 Codex 里批准" && store.approvalRequest(for: task) == nil)
+        }
+        let stamp = ISO8601DateFormatter()
+        stamp.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let parts = Calendar(identifier: .gregorian).dateComponents([.year, .month, .day], from: date)
+        let folder = LinglongtaiPaths.applicationSupport.appendingPathComponent("fixture-codex-sessions")
+            .appendingPathComponent(String(format: "%04d/%02d/%02d", parts.year!, parts.month!, parts.day!))
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let rollout = folder.appendingPathComponent("rollout-2026-10-16T08-00-00-\(codexRaw).jsonl")
+        func rolloutLine(_ offset: TimeInterval, _ type: String, _ payload: String?) -> String {
+            let body = payload.map { #","payload":{"type":"\#($0)","name":"exec","input":"PRIVATE_FIXTURE"}"# } ?? ""
+            return #"{"timestamp":"\#(stamp.string(from: date.addingTimeInterval(offset - 3)))","type":"\#(type)"\#(body)}"# + "\n"
+        }
+        try (rolloutLine(0.3, "token_usage_record", nil) + rolloutLine(1.5, "event_msg", "item_completed")).write(to: rollout, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: rollout.path)
+        store.resolveCodexApprovalsAnsweredInApp()
+        check("Codex bookkeeping while its card is shown does not count as an answer",
+              store.tasks.first(where: { $0.id == codexTask })?.status == .waiting && store.waitingCount == 1)
+        date.addTimeInterval(9)
+        try (rolloutLine(0.3, "token_usage_record", nil) + rolloutLine(8, "response_item", "custom_tool_call_output")).write(to: rollout, atomically: true, encoding: .utf8)
+        // The fixture clock is not the file system's; stamp the write like a live one.
+        try FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: rollout.path)
+        store.resolveCodexApprovalsAnsweredInApp()
+        check("an approval answered in Codex resumes the running state and its motion",
+              store.tasks.first(where: { $0.id == codexTask })?.status == .running && store.waitingCount == 0 &&
+              store.activeTask?.id == codexTask && store.activeTaskIsExecuting)
+        try? FileManager.default.removeItem(at: rollout)
         store.clearAllTasks()
 
         // Island-side approval fixtures were intentionally removed. A
@@ -777,7 +822,7 @@ enum TaskStoreAcceptance {
         check("ordinary tools cannot extend the prompt deadline past ten seconds", store.presentation == .compact)
 
         jump(to: 1_822)
-        try send(longTask, name: "PermissionRequest", status: .waiting)
+        try send(longTask, provider: .claude, name: "PermissionRequest", status: .waiting)
         check("a bare permission check does not claim that the user must confirm",
               store.presentation == .compact && store.waitingCount == 0 && store.activeTask?.requiresApproval == true)
         jump(to: 1_831.9)
