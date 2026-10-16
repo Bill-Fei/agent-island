@@ -572,16 +572,16 @@ private struct HUDExpandedContent: View {
             }
         }()
         let opens = task.profile.kind != .custom && [.completed, .failed, .attention, .checkingPermission].contains(state)
-        let tint = state == .completed ? HUDColorTokens.success : state.tint
+        // A plain gray block: the status pill above already carries the color.
         let card = HStack(alignment: .center, spacing: 10) {
             if state.animates {
                 CompactActivityGlyph(height: 20, active: store.presentation == .heavy)
                     .frame(width: 13, height: 13)
-                    .foregroundStyle(tint)
+                    .foregroundStyle(.white.opacity(0.55))
             } else {
                 Image(systemName: state.symbol)
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(tint)
+                    .foregroundStyle(.white.opacity(0.55))
             }
             VStack(alignment: .leading, spacing: 3) {
                 Text(text)
@@ -600,7 +600,7 @@ private struct HUDExpandedContent: View {
                     if failed > 0 {
                         Text("\(failed) 次出错")
                             .font(HUDTypography.caption)
-                            .foregroundStyle(HUDColorTokens.attention)
+                            .foregroundStyle(.white.opacity(0.5))
                     }
                 }
             }
@@ -611,13 +611,12 @@ private struct HUDExpandedContent: View {
                     Image(systemName: "arrow.up.forward").font(.system(size: 9, weight: .bold))
                 }
                 .font(HUDTypography.captionEmphasis)
-                .foregroundStyle(HUDColorTokens.info)
+                .foregroundStyle(.white.opacity(0.55))
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 11)
-        .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(tint.opacity(0.18)))
+        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         if opens {
             Button { presence.open(task.profile.kind) } label: { card.contentShape(Rectangle()) }
                 .buttonStyle(.plain)
