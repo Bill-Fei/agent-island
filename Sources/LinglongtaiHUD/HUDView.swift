@@ -506,7 +506,14 @@ private struct HUDExpandedContent: View {
                         .padding(.top, 14)
                     ScrollView {
                         VStack(alignment: .leading, spacing: 10) {
-                            outcomeCard(for: task, state: state)
+                            // Ended turns need no card: the pill and 打开应用 say it all.
+                            // Live or unknown turns keep one plain line of what is happening.
+                            if state.group != .ended || state == .unknown || state == .untracked {
+                                Text(state.unknownExplanation ?? store.currentStepText(for: task))
+                                    .font(HUDTypography.body)
+                                    .foregroundStyle(.white.opacity(0.72))
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                             stepDetails(for: task)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -558,52 +565,6 @@ private struct HUDExpandedContent: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// One tinted card that says where things stand and where to go next.
-    /// The island never reads replies, so finished work points back to the app.
-    @ViewBuilder private func outcomeCard(for task: AgentTask, state: TaskVisualState) -> some View {
-        let app = task.profile.kind == .custom ? "原应用" : task.agent
-        let text: String = {
-            switch state {
-            case .completed: return "回复和改动在 \(app) 里"
-            case .failed: return "出错了 · 去 \(app) 看原因"
-            case .cancelled: return task.sourceEvent == "SessionEnd" ? "会话已关闭" : "这一轮被中断了"
-            case .unknown, .untracked: return state.unknownExplanation ?? store.currentStepText(for: task)
-            default: return store.currentStepText(for: task)
-            }
-        }()
-        let opens = task.profile.kind != .custom && [.completed, .failed, .attention, .checkingPermission].contains(state)
-        // A plain gray block: the status pill above already carries the color.
-        // No icon either: the pill already shows the state.
-        let card = HStack(alignment: .center, spacing: 10) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(text)
-                    .font(HUDTypography.bodyEmphasis)
-                    .foregroundStyle(.white.opacity(0.9))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            if opens {
-                HStack(spacing: 3) {
-                    Text("查看")
-                    Image(systemName: "arrow.up.forward").font(.system(size: 9, weight: .bold))
-                }
-                .font(HUDTypography.captionEmphasis)
-                .foregroundStyle(.white.opacity(0.55))
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 11)
-        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        if opens {
-            Button { presence.open(task.profile.kind) } label: { card.contentShape(Rectangle()) }
-                .buttonStyle(.plain)
-                .disabled(presence.opening.contains(task.profile.kind))
-                .help("打开 \(app)")
-        } else {
-            card
-        }
-    }
-
     /// Only long turns get a per-step list; the card's second line covers the rest.
     @ViewBuilder private func stepDetails(for task: AgentTask) -> some View {
         if task.hasUnidentifiedToolSteps {
@@ -647,7 +608,6 @@ private struct HUDExpandedContent: View {
                     .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
             }
-            .padding(.leading, 4)
         }
     }
 
