@@ -732,7 +732,15 @@ enum TaskStoreAcceptance {
         check("Codex bookkeeping while its card is shown does not count as an answer",
               store.tasks.first(where: { $0.id == codexTask })?.status == .waiting && store.waitingCount == 1)
         date.addTimeInterval(9)
-        try (rolloutLine(0.3, "token_usage_record", nil) + rolloutLine(8, "response_item", "custom_tool_call_output")).write(to: rollout, atomically: true, encoding: .utf8)
+        // A blocked approval: Codex keeps polling the blocked cell.
+        try (rolloutLine(0.3, "token_usage_record", nil) + rolloutLine(5, "response_item", "function_call") +
+             rolloutLine(6, "response_item", "function_call_output") + rolloutLine(7, "response_item", "custom_tool_call_output")).write(to: rollout, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: rollout.path)
+        store.resolveCodexApprovalsAnsweredInApp()
+        check("Codex polling a cell blocked on approval is not an answer",
+              store.tasks.first(where: { $0.id == codexTask })?.status == .waiting && store.waitingCount == 1)
+        date.addTimeInterval(3)
+        try (rolloutLine(0.3, "token_usage_record", nil) + rolloutLine(10, "response_item", "custom_tool_call")).write(to: rollout, atomically: true, encoding: .utf8)
         // The fixture clock is not the file system's; stamp the write like a live one.
         try FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: rollout.path)
         store.resolveCodexApprovalsAnsweredInApp()
@@ -740,6 +748,29 @@ enum TaskStoreAcceptance {
               store.tasks.first(where: { $0.id == codexTask })?.status == .running && store.waitingCount == 0 &&
               store.activeTask?.id == codexTask && store.activeTaskIsExecuting)
         try? FileManager.default.removeItem(at: rollout)
+        store.clearAllTasks()
+
+        date = Date()
+        let loggedTask = UUID()
+        let loggedRaw = UUID().uuidString.lowercased()
+        try emit(AgentEvent(type: "upsert", id: loggedTask, agent: "Codex", status: .waiting, requiresApproval: true,
+                            createdAt: date, sourceEvent: "PermissionRequest", sessionID: CodexRollout.sessionDigest(rawSessionID: loggedRaw)))
+        store.consumeEvents()
+        date.addTimeInterval(4)
+        let logParts = Calendar(identifier: .gregorian).dateComponents([.year, .month, .day], from: date)
+        let logFolder = LinglongtaiPaths.applicationSupport.appendingPathComponent("fixture-codex-logs")
+            .appendingPathComponent(String(format: "%04d/%02d/%02d", logParts.year!, logParts.month!, logParts.day!))
+        try FileManager.default.createDirectory(at: logFolder, withIntermediateDirectories: true)
+        let logStamp = ISO8601DateFormatter()
+        logStamp.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let appLog = logFolder.appendingPathComponent("codex-desktop-fixture.log")
+        try (logStamp.string(from: date.addingTimeInterval(-3)) + " info [electron-message-handler] [desktop-notifications] received approval conversationId=\(loggedRaw) kind=commandExecution rendererWindowFocused=false requestId=7\n" +
+             logStamp.string(from: date) + " info [electron-message-handler] Sending server response id=7 method=item/commandExecution/requestApproval rendererWindowFocused=true response={\"decision\":\"accept\"}\n")
+            .write(to: appLog, atomically: true, encoding: .utf8)
+        store.resolveCodexApprovalsAnsweredInApp()
+        check("an approval answered in the Codex app is picked up from Codex's own log at once",
+              store.tasks.first(where: { $0.id == loggedTask })?.status == .running && store.waitingCount == 0)
+        try? FileManager.default.removeItem(at: appLog)
         store.clearAllTasks()
 
         // Island-side approval fixtures were intentionally removed. A
@@ -755,8 +786,8 @@ enum TaskStoreAcceptance {
                   !store.needsUserAttention(task) && store.waitingCount == 0 &&
                   store.mediumStatusText == "在 App 里处理")
         }
-        check("release store: approval support is limited to Claude Code",
-              ApprovalRelay.supports(.claude) && !ApprovalRelay.supports(.codex) && !ApprovalRelay.supports(.workBuddy))
+        check("release store: approval support is limited to Claude Code and Codex",
+              ApprovalRelay.supports(.claude) && ApprovalRelay.supports(.codex) && !ApprovalRelay.supports(.workBuddy))
         store.clearAllTasks()
     }
 

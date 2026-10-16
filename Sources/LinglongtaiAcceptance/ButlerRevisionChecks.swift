@@ -42,8 +42,9 @@ func runButlerRevisionChecks(check: (String, Bool) -> Void) {
         try! JSONSerialization.data(withJSONObject: ["hook_event_name": "PermissionRequest", "tool_name": "Bash", "cwd": "/tmp/approval-fixture", "tool_input": args])
     }
     let safe = payload(["command": "printf hello"])
-    check("only Claude Code supports single-use approval requests",
-          ApprovalRelay.supports(.claude) && !ApprovalRelay.supports(.codex) && !ApprovalRelay.supports(.workBuddy) &&
+    check("only Claude Code and Codex support single-use approval requests",
+          ApprovalRelay.supports(.claude) && ApprovalRelay.supports(.codex) && !ApprovalRelay.supports(.workBuddy) &&
+          ApprovalRelay.lifetime(for: .codex) == 20 && ApprovalRelay.lifetime(for: .claude) == 45 &&
           ApprovalRelay.makeRequest(payload: safe, event: mapped, now: date)?.protocolVersion == 2)
     check("credential-like permission input never reaches an island cache", ApprovalRelay.makeRequest(payload: payload(["token": "private"]), event: mapped) == nil)
     check("oversized permission input never reaches an island cache", ApprovalRelay.makeRequest(payload: payload(["command": String(repeating: "x", count: 9000)]), event: mapped) == nil)

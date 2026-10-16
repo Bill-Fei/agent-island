@@ -97,14 +97,15 @@ with tempfile.TemporaryDirectory(prefix="island-approval-") as temporary:
         for flag in [False, True]:
             root = base / (provider + ("-legacy-flag" if flag else ""))
             proc = start(root, payload(provider=provider), provider=provider, relay=flag, hud=True)
-            if provider == "claude" and flag:
+            if provider in ("claude", "codex") and flag:
                 request = approve_pending(root)
             out = finish(proc)
-            if provider == "claude" and flag:
+            if provider in ("claude", "codex") and flag:
                 result = json.loads(out.decode())
-                check("Claude returns only one-shot allow, never updated permissions", result == {"hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision": {"behavior": "allow"}}})
+                check(provider + " returns only one-shot allow, never updated permissions", result == {"hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision": {"behavior": "allow"}}})
                 event = json.loads((root / "events.jsonl").read_text().splitlines()[-1])
-                check("request is bound to exact routed task and protocol", event.get("approvalRequestID") == request["id"] and event["id"] == request["taskID"] and request["provider"] == "claude" and request["protocolVersion"] == 2)
+                check(provider + " request is bound to exact routed task and protocol", event.get("approvalRequestID") == request["id"] and event["id"] == request["taskID"] and request["provider"] == provider and request["protocolVersion"] == 2)
+                check(provider + " relay lifetime leaves its own card time to appear", request["expiresAt"] - request["createdAt"] <= (20.5 if provider == "codex" else 45.5))
                 check("tool arguments never enter event journal", "harmless-fixture" not in (root / "events.jsonl").read_text())
             else:
                 check(provider + " PermissionRequest emits no approval decision", out == b"")

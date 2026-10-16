@@ -1,7 +1,7 @@
 import Foundation
 import Darwin
 
-/// Tells when a Codex approval has been answered in the Codex app itself.
+/// Backup signal for an approval answered in the Codex app (CodexAppLog is primary).
 /// Codex sends no hook when the user approves in its own card; the turn just
 /// carries on. Its local rollout (`~/.codex/sessions/YYYY/MM/DD/rollout-…-<id>.jsonl`)
 /// shows that: a new tool call or tool result after the request. Only each
@@ -51,9 +51,9 @@ public struct CodexRollout {
         return files[session]
     }
 
-    private static let progressTypes: Set<String> = [
-        "function_call", "custom_tool_call", "function_call_output", "custom_tool_call_output",
-    ]
+    /// A new script only. While an approval blocks, Codex keeps polling the
+    /// blocked cell (`function_call` "wait" and its outputs), so those prove nothing.
+    private static let progressTypes: Set<String> = ["custom_tool_call"]
 
     /// Reads at most the last 256 KB; only `timestamp` / `type` / `payload.type`.
     static func progressed(in url: URL, since: Date) -> Bool {

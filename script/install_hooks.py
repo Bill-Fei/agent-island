@@ -19,6 +19,11 @@ PROVIDERS = {
 }
 
 
+# Hook timeouts above each relay's own deadline (ApprovalRelay.lifetime). Codex
+# shows its own card only after the hook returns, so its relay is short.
+RELAY_TIMEOUTS = {"claude": 50, "codex": 30}
+
+
 def owned_command(value, provider, support):
     """Recognize exact island argv only; never remove another hook by substring."""
     if not isinstance(value, str):
@@ -64,7 +69,7 @@ def main():
     parser.add_argument("--binary", required=True, type=Path)
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--uninstall", action="store_true")
-    parser.add_argument("--approval-relay", action="store_true", help="Opt in to Claude Code single-use approval only; other providers remain observers")
+    parser.add_argument("--approval-relay", action="store_true", help="Opt in to single-use island approval (Claude Code, Codex); other providers remain observers")
     parser.add_argument("--providers", nargs="+", choices=list(PROVIDERS), default=list(PROVIDERS))
     args = parser.parse_args()
     task_home = Path.home()
@@ -94,7 +99,7 @@ def main():
         if not isinstance(hooks, dict):
             raise ValueError(f"Expected hooks object: {config}")
         command = shlex.quote(str(installed_binary)) + " hook --provider " + provider
-        keeps_relay = args.approval_relay or (provider == "claude" and any(
+        keeps_relay = args.approval_relay or (provider in RELAY_TIMEOUTS and any(
             owned_command(h.get("command"), provider, support) and h.get("command", "").endswith(" --approval-relay")
             for g in hooks.get("PermissionRequest", []) for h in g.get("hooks", [])
         ))
@@ -113,8 +118,8 @@ def main():
         if not args.uninstall:
             for event in events:
                 group = {"hooks": [{"type": "command", "command": command, "timeout": 2}]}
-                if keeps_relay and provider == "claude" and event == "PermissionRequest":
-                    group["hooks"][0].update(command=command + " --approval-relay", timeout=50)
+                if keeps_relay and provider in RELAY_TIMEOUTS and event == "PermissionRequest":
+                    group["hooks"][0].update(command=command + " --approval-relay", timeout=RELAY_TIMEOUTS[provider])
                 if event == "Notification":
                     group["matcher"] = "permission_prompt|elicitation_dialog|agent_needs_input"
                 hooks.setdefault(event, []).append(group)
