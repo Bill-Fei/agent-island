@@ -36,7 +36,7 @@
 <script>
   // Same release links as the Chinese page. dmgUrl is injected by the publish scripts.
   window.SITE = {
-    version: '0.3.5',
+    version: '0.3.6',
     dmgUrl: '',     // injected by publish_site.sh: ../download/<version>.dmg
     mirrorUrl: '',  // optional domestic mirror of the same file
     sourceUrl: 'https://github.com/Bill-Fei/agent-island',
@@ -304,7 +304,7 @@
     <div class="wrap">
       <img class="download-icon" src="../media/app-icon.png" width="128" height="128" alt="">
       <h2 id="download-h">Download Agent Island</h2>
-      <p class="download-meta">Alpha <span data-version>0.3.5</span> for Macs with Apple silicon, macOS 13 or later. The app's interface is in Chinese for now.</p>
+      <p class="download-meta">Alpha <span data-version>0.3.6</span> for Macs with Apple silicon, macOS 13 or later.</p>
       <div class="download-actions">
         <a class="btn btn-primary btn-lg" id="dmgLink" href="#download" data-download>Download the Alpha</a>
         <a class="btn btn-glass btn-lg" id="mirrorLink" href="#download" hidden>Mirror in China</a>
@@ -314,7 +314,7 @@
       <ol class="steps">
         <li><b>Drag it into Applications</b>Open the downloaded .dmg and drag Agent Island into your Applications folder.</li>
         <li><b>Open it the first time</b>If macOS says it can't be opened, go to System Settings › Privacy &amp; Security and click "Open Anyway".</li>
-        <li><b>Connect your agents</b>Click the island icon in the menu bar, choose "接入与验证…" (Connect &amp; Verify), and tick only the agents you use.</li>
+        <li><b>Connect your agents</b>Click the island icon in the menu bar, choose "Connect &amp; Verify…", and tick only the agents you use.</li>
         <li><b>Run one task</b>Start a real task in the agent's own app, then come back and check that the island lights up.</li>
       </ol>
       <p class="download-note">Why step two: the Alpha isn't notarized by Apple yet, so macOS asks once on first launch.<span id="sourceNote" hidden> Prefer to build it yourself? <a id="sourceLink" href="#">View the source on GitHub</a>.</span></p>
