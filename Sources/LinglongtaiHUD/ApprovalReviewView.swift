@@ -18,18 +18,18 @@ struct ApprovalReviewView: View {
     private var needsHold: Bool { store.approvalNeedsHold(request) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             header
             commandBox
             if isPending { decisionButtons } else {
                 Text("请求已过期或已处理，请回原应用核实")
                     .font(.system(size: 11)).foregroundStyle(.white.opacity(0.5))
-                    .frame(maxWidth: .infinity, minHeight: 32)
+                    .frame(maxWidth: .infinity, minHeight: Self.buttonHeight)
             }
         }
         .padding(.horizontal, 14)
         .padding(.top, 6)
-        .padding(.bottom, 12)
+        .padding(.bottom, 16)
         .frame(width: Self.contentWidth,
                height: IslandMetrics.approvalContentHeight(expanded: expanded), alignment: .top)
         .environment(\.colorScheme, .dark)
@@ -147,20 +147,20 @@ struct ApprovalReviewView: View {
 
     // MARK: Decision — two equal pills, like answering a call
 
-    private static let denyColor = Color(red: 0.89, green: 0.22, blue: 0.21)
-    private static let allowColor = Color(red: 0.19, green: 0.75, blue: 0.35)
+    static let buttonHeight: CGFloat = 26
 
     private var decisionButtons: some View {
         HStack(spacing: 10) {
             Button { store.respondToApproval(request, decision: .deny) } label: {
-                pill(icon: "xmark", title: "拒绝", key: "⌘⌫", color: Self.denyColor)
+                pill(icon: "xmark", title: "拒绝", key: "⌘⌫", tint: .white.opacity(0.78), fill: .white.opacity(0.1))
             }
             .buttonStyle(.plain)
             if needsHold {
                 ApprovalHoldButton(store: store)
             } else {
                 Button { store.respondToApproval(request, decision: .allow) } label: {
-                    pill(icon: "checkmark", title: "允许", key: "⌘↩", color: Self.allowColor)
+                    pill(icon: "checkmark", title: "允许", key: "⌘↩", tint: HUDColorTokens.success,
+                         fill: HUDColorTokens.success.opacity(0.2))
                 }
                 .buttonStyle(.plain)
                 .help("只允许这一次，不授予长期权限")
@@ -168,15 +168,16 @@ struct ApprovalReviewView: View {
         }
     }
 
-    private func pill(icon: String, title: String, key: String, color: Color) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon).font(.system(size: 11, weight: .bold))
-            Text(title).font(.system(size: 13, weight: .semibold))
-            Text(key).font(.system(size: 10, design: .rounded)).opacity(0.65)
+    /// Muted like the island's other actions: tinted text on a faint fill.
+    private func pill(icon: String, title: String, key: String, tint: Color, fill: Color) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon).font(.system(size: 10, weight: .bold))
+            Text(title).font(.system(size: 12, weight: .semibold))
+            Text(key).font(.system(size: 10, design: .rounded)).opacity(0.55)
         }
-        .foregroundStyle(.white)
-        .frame(maxWidth: .infinity, minHeight: 32)
-        .background(color, in: Capsule())
+        .foregroundStyle(tint)
+        .frame(maxWidth: .infinity, minHeight: Self.buttonHeight, maxHeight: Self.buttonHeight)
+        .background(fill, in: Capsule())
         .contentShape(Capsule())
     }
 }
@@ -191,19 +192,19 @@ private struct ApprovalHoldButton: View {
                 min(1, max(0, context.date.timeIntervalSince($0) / TaskStore.approvalHoldDuration))
             } ?? 0
             ZStack(alignment: .leading) {
-                Capsule().fill(HUDColorTokens.attention.opacity(0.32))
+                Capsule().fill(HUDColorTokens.attention.opacity(0.16))
                 GeometryReader { proxy in
-                    Capsule().fill(HUDColorTokens.attention)
+                    Capsule().fill(HUDColorTokens.attention.opacity(0.38))
                         .frame(width: proxy.size.width * progress)
                 }
-                HStack(spacing: 6) {
-                    Image(systemName: "hand.tap.fill").font(.system(size: 11, weight: .bold))
-                    Text(progress > 0 ? "继续按住…" : "长按允许").font(.system(size: 13, weight: .semibold))
+                HStack(spacing: 5) {
+                    Image(systemName: "hand.tap.fill").font(.system(size: 10, weight: .bold))
+                    Text(progress > 0 ? "继续按住…" : "长按允许").font(.system(size: 12, weight: .semibold))
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(HUDColorTokens.attention)
                 .frame(maxWidth: .infinity)
             }
-            .frame(maxWidth: .infinity, minHeight: 32, maxHeight: 32)
+            .frame(maxWidth: .infinity, minHeight: ApprovalReviewView.buttonHeight, maxHeight: ApprovalReviewView.buttonHeight)
             .clipShape(Capsule())
         }
         .contentShape(Capsule())
@@ -223,7 +224,7 @@ struct ApprovalCountdownRing: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 0.5)) { context in
             let remaining = max(0, expiresAt.timeIntervalSince(context.date))
-            let tint = remaining <= 10 ? Color(red: 0.95, green: 0.3, blue: 0.28) : HUDColorTokens.attention
+            let tint = remaining <= 10 ? HUDColorTokens.danger : HUDColorTokens.attention
             ZStack {
                 Circle().stroke(Color.white.opacity(0.14), lineWidth: 2.5)
                 Circle().trim(from: 0, to: min(1, remaining / Self.total))
