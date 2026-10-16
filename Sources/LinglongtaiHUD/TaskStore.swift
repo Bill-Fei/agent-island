@@ -97,6 +97,7 @@ final class TaskStore: ObservableObject {
     func approvalSurfaceText(for task: AgentTask) -> String? {
         guard task.status == .waiting else { return nil }
         if approvalRequest(for: task) != nil { return "可以在岛上批准" }
+        if Self.isCodexPrompt(task) { return "在 Codex 里批准" }
         if task.profile.kind == .claude, ["PermissionRequest", "Notification"].contains(task.sourceEvent ?? "") { return "在 App 里处理" }
         return nil
     }
@@ -106,6 +107,9 @@ final class TaskStore: ObservableObject {
         if let feedback = approvalFeedback(for: task) { return feedback }
         if approvalRequest(for: task) != nil { return "等你批准 · 看清要做什么再点" }
         if displayedStatus(for: task) == "结果未知" { return "未收到结束信号，无法确认结果" }
+        if Self.isCodexPrompt(task) {
+            return needsUserAttention(task) ? "Codex 等你批准 · 请在 Codex 里处理" : "Codex 正在确认权限"
+        }
         if task.status == .waiting && task.sourceEvent == "PermissionRequest" {
             // Never send the user hunting for a prompt that may not exist.
             return "\(task.agent) 正在确认权限；需要你批准时会在 App 里问你"
@@ -241,6 +245,31 @@ final class TaskStore: ObservableObject {
         return prompt
     }
 
+    /// Codex's PermissionRequest is a real prompt in its own card; it never has an island relay.
+    static func isCodexPrompt(_ task: AgentTask) -> Bool {
+        task.profile.kind == .codex && task.status == .waiting && task.sourceEvent == "PermissionRequest" && task.approvalRequestID == nil
+    }
+
+    /// An approval answered in the Codex app sends no hook; once its rollout
+    /// shows the turn moving on, the task is running again (and animates).
+    func resolveCodexApprovalsAnsweredInApp() {
+        guard now().timeIntervalSince(lastCodexRolloutPoll) >= 2 || now() < lastCodexRolloutPoll else { return }
+        lastCodexRolloutPoll = now()
+        var changed = false
+        for index in tasks.indices where Self.isCodexPrompt(tasks[index]) && isFresh(tasks[index]) {
+            guard codexRollout.progressed(session: tasks[index].sessionID, since: tasks[index].updatedAt, now: now()) else { continue }
+            tasks[index].status = .running
+            tasks[index].requiresApproval = false
+            tasks[index].sourceEvent = "CodexApprovalAnswered"
+            tasks[index].detail = "已在 Codex 里处理审批，继续执行"
+            changed = true
+        }
+        guard changed else { return }
+        invalidateTaskCache()
+        refreshPresentation()
+        saveTasksInBackground()
+    }
+
     func pollHostPrompts() {
         guard promptLog.poll(now: now()) else { return }
         invalidateTaskCache()
@@ -298,6 +327,12 @@ final class TaskStore: ObservableObject {
     private var approvalRequestStarts: [UUID: Date] = [:]
     /// Desktop's own card lifecycle, followed from its log (see ClaudePromptLog).
     private var promptLog = ClaudePromptLog(urls: [])
+    /// Codex answers approvals in its own card without any hook; its rollout shows it.
+    private var codexRollout = CodexRollout(root: LinglongtaiPaths.applicationSupport.appendingPathComponent("fixture-codex-sessions"))
+    private var lastCodexRolloutPoll = Date.distantPast
+    /// Codex shows its own card for a PermissionRequest; a brief settle keeps a
+    /// check it resolves on its own from popping the island.
+    private static let codexPromptSettleDelay: TimeInterval = 3
     /// The first card matched to a request stays its only card.
     private var hostBindings: [UUID: String] = [:]
     private var tracedHostActionable: Set<UUID> = []
@@ -399,6 +434,7 @@ final class TaskStore: ObservableObject {
             ? [LinglongtaiPaths.applicationSupport.appendingPathComponent("fixture-claude-main.log")]
             : ClaudePromptLog.defaultURLs)
         _ = promptLog.poll(now: now())
+        if !isIsolatedRun { codexRollout = CodexRollout() }
         loadTasks()
         selectedTaskID = sortedTasks.first?.id
         consumeEvents()
@@ -408,6 +444,7 @@ final class TaskStore: ObservableObject {
             Task { @MainActor [weak self] in
                 self?.pollEvents()
                 self?.pollHostPrompts()
+                self?.resolveCodexApprovalsAnsweredInApp()
                 self?.consumeDoubaoTrajectories()
                 self?.refreshPresentation()
             }
@@ -599,6 +636,7 @@ final class TaskStore: ObservableObject {
                 task.updatedAt.addingTimeInterval(-5),
                 task.updatedAt,
                 (claudeNotificationStarts[task.id] ?? task.updatedAt).addingTimeInterval(Self.notificationSettleDelay),
+                task.updatedAt.addingTimeInterval(Self.codexPromptSettleDelay),
                 approvalRequestStarts.values.map { $0.addingTimeInterval(Self.approvalSettleDelay) }.min() ?? .distantFuture,
                 task.updatedAt.addingTimeInterval(120),
                 task.updatedAt.addingTimeInterval(DoubaoTrajectory.staleAfter),
@@ -622,6 +660,9 @@ final class TaskStore: ObservableObject {
     /// Keep the raw lifecycle state intact; this is a presentation distinction.
     func needsUserAttention(_ task: AgentTask) -> Bool {
         guard task.status == .waiting, task.sourceEvent != "AmbiguousTurn", isFresh(task) else { return false }
+        if Self.isCodexPrompt(task) {
+            return now().timeIntervalSince(task.updatedAt) >= Self.codexPromptSettleDelay
+        }
         if task.approvalRequestID != nil || task.sourceEvent == "PermissionRequest" {
             guard let request = approvalRequest(for: task) else { return false }
             // The card is already on screen; its log line needs no further settling.
@@ -1515,7 +1556,7 @@ final class TaskStore: ObservableObject {
         // Short-lived native notices often disappear before a user can open
         // Claude. Mature a continuous wait once; duplicate notices do not
         // restart this clock or repeatedly reopen the island.
-        for task in tasks where task.profile.kind == .claude && task.sourceEvent == "Notification" {
+        for task in tasks where (task.profile.kind == .claude && task.sourceEvent == "Notification") || Self.isCodexPrompt(task) {
             let start = claudeNotificationStarts[task.id] ?? task.updatedAt
             guard needsUserAttention(task), task.approvalRequestID == nil,
                   surfacedClaudeNotifications[task.id] != start else { continue }
