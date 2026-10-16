@@ -1,65 +1,89 @@
 import AppKit
 import ApplicationServices
+import Darwin
 import LinglongtaiShared
 
-/// Presses "Allow once" / "Deny" on Claude Desktop's own permission card.
-/// Desktop ignores hook decisions, so this is the only way an island choice
-/// can take effect there. It presses only inside the web view routed to the
-/// exact session, only when that view holds exactly one card whose own text
-/// shows the reviewed request, only after re-checking Desktop's log that this
-/// card is still the session's only open one, and success is judged afterwards
-/// from Desktop's own log, never assumed.
-@MainActor
-enum ClaudeHostApproval {
+/// Presses "Allow once" / "Deny" on Claude Desktop's own permission card after
+/// the island's decision. Desktop ignores hook decisions, so this is the only
+/// way an island choice can take effect there.
+///
+/// It runs as a detached child of the PermissionRequest hook, so macOS
+/// attributes it to Claude Desktop and it uses Desktop's own accessibility
+/// permission (an ad-hoc island loses its grant on every rebuild, and its
+/// presses were silently ignored). It presses only inside the web view routed
+/// to the exact session, only when that view holds exactly one card whose own
+/// text shows the reviewed command, and only after re-checking Desktop's log
+/// that the reviewed card is still that session's only open card.
+enum ClaudeCardPresser {
     private static let bundleID = "com.anthropic.claudefordesktop"
 
-    static func deliver(session: String, promptID: String, decision: ApprovalRelay.Decision,
-                        stillOpen: @escaping () -> Bool, context: String,
-                        completion: @escaping (TaskStore.HostPressOutcome) -> Void) {
-        let prompt = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-        guard AXIsProcessTrustedWithOptions(prompt) else {
-            completion(.failed(code: "untrusted", reason: "需要在系统设置里允许灵动岛使用辅助功能"))
-            return
-        }
-        guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == bundleID }) else {
-            completion(.failed(code: "not-running", reason: "Claude 未运行"))
-            return
-        }
-        guard let snippet = reviewedSnippet(context) else {
-            completion(.failed(code: "no-snippet", reason: "这次请求无法与 App 中的卡片逐字核对"))
-            return
-        }
-        let pid = app.processIdentifier
-        let previous = NSWorkspace.shared.frontmostApplication
-        Task { @MainActor in
-            // A session already on screen (main window or split pane) is pressed in place.
-            var result = press(pid: pid, session: session, decision: decision, snippet: snippet, stillOpen: stillOpen)
-            var navigated = false
-            if result == .sessionNotVisible, let url = URL(string: "claude://claude.ai/epitaxy/\(session)") {
-                navigated = NSWorkspace.shared.open(url)
-                let deadline = Date().addingTimeInterval(3)
-                while navigated, [.sessionNotVisible, .noCard].contains(result), Date() < deadline {
-                    try? await Task.sleep(nanoseconds: 150_000_000)
-                    result = press(pid: pid, session: session, decision: decision, snippet: snippet, stillOpen: stillOpen)
-                }
+    /// `linglongtaictl host-press --request <id>`: wait for the island's
+    /// decision on this request, press once, report a fixed result code, exit.
+    static func run(requestID: UUID, isolated: Bool) {
+        while let request = ApprovalRelay.hostRequest(requestID) {
+            if let reply = ApprovalRelay.hostReply(requestID) {
+                let code = isolated ? "isolated" : press(request: request, decision: reply.decision, promptID: reply.promptID)
+                ApprovalRelay.writeHostResult(requestID, code)
+                ApprovalTrace.record(requestID, "presser-" + code)
+                return
             }
-            if navigated, let previous, previous.processIdentifier != pid,
-               previous.bundleIdentifier != Bundle.main.bundleIdentifier {
-                previous.activate()
-            }
-            switch result {
-            case .pressed: completion(.pressed)
-            case .sessionNotVisible: completion(.failed(code: "session-not-visible", reason: "没能打开对应的对话"))
-            case .ambiguous: completion(.failed(code: "ambiguous", reason: "该对话里有多张确认卡"))
-            case .noCard: completion(.failed(code: "no-card", reason: "没找到 App 中的确认卡"))
-            case .textMismatch: completion(.failed(code: "text-mismatch", reason: "App 中的卡片与岛上审阅的内容不一致"))
-            case .cardChanged: completion(.failed(code: "card-changed", reason: "App 中的确认卡已经变化"))
-            case .pressFailed: completion(.failed(code: "press-failed", reason: "按钮没有响应"))
-            }
+            usleep(150_000)
         }
+        // Superseded by a newer check, answered in Desktop, or expired.
     }
 
-    enum ScanResult: Equatable { case pressed, sessionNotVisible, noCard, ambiguous, textMismatch, cardChanged, pressFailed }
+    /// Detach from the hook: own session, no inherited stdio (Desktop waits
+    /// for the hook's stdout to close), same executable.
+    static func spawn(requestID: UUID, passthrough: [String]) {
+        var size = UInt32(PATH_MAX)
+        var buffer = [CChar](repeating: 0, count: Int(size))
+        guard _NSGetExecutablePath(&buffer, &size) == 0 else { return }
+        let path = String(cString: buffer)
+        let arguments = [path, "host-press", "--request", requestID.uuidString] + passthrough
+        var actions: posix_spawn_file_actions_t?
+        posix_spawn_file_actions_init(&actions)
+        defer { posix_spawn_file_actions_destroy(&actions) }
+        for descriptor in [STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO] {
+            posix_spawn_file_actions_addopen(&actions, descriptor, "/dev/null", descriptor == STDIN_FILENO ? O_RDONLY : O_WRONLY, 0)
+        }
+        var attributes: posix_spawnattr_t?
+        posix_spawnattr_init(&attributes)
+        defer { posix_spawnattr_destroy(&attributes) }
+        posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETSID))
+        var argv = arguments.map { strdup($0) } + [nil]
+        defer { argv.forEach { free($0) } }
+        var pid: pid_t = 0
+        _ = posix_spawn(&pid, path, &actions, &attributes, &argv, environ)
+    }
+
+    private static func press(request: ApprovalRelay.Request, decision: ApprovalRelay.Decision, promptID: String) -> String {
+        guard let session = request.hostSessionID else { return "not-host" }
+        guard AXIsProcessTrusted() else { return "untrusted" }
+        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first else { return "not-running" }
+        guard let snippet = reviewedSnippet(request.context) else { return "no-snippet" }
+        let stillOpen = {
+            var log = ClaudePromptLog()
+            _ = log.poll()
+            let open = log.openPrompts(in: session)
+            return open.count == 1 && open.first?.id == promptID
+        }
+        guard stillOpen() else { return "card-changed" }
+        let pid = app.processIdentifier
+        var result = pressCard(pid: pid, session: session, decision: decision, snippet: snippet, stillOpen: stillOpen)
+        if result == "session-not-visible", let url = URL(string: "claude://claude.ai/epitaxy/\(session)") {
+            // The card is pressable only while its session is on screen.
+            let previous = NSWorkspace.shared.frontmostApplication
+            if NSWorkspace.shared.open(url) {
+                let deadline = Date().addingTimeInterval(3)
+                while ["session-not-visible", "no-card"].contains(result), Date() < deadline {
+                    usleep(150_000)
+                    result = pressCard(pid: pid, session: session, decision: decision, snippet: snippet, stillOpen: stillOpen)
+                }
+                if let previous, previous.processIdentifier != pid { previous.activate() }
+            }
+        }
+        return result
+    }
 
     /// The longest string argument's first line: what the card itself displays.
     static func reviewedSnippet(_ context: String) -> String? {
@@ -76,18 +100,15 @@ enum ClaudeHostApproval {
         text.filter { !$0.isWhitespace }
     }
 
-    /// Runs entirely on the main actor, so the log re-check and the press are
-    /// one uninterrupted step. Bounded AX timeouts keep it short.
-    private static func press(pid: pid_t, session: String, decision: ApprovalRelay.Decision,
-                              snippet: String, stillOpen: () -> Bool) -> ScanResult {
+    private static func pressCard(pid: pid_t, session: String, decision: ApprovalRelay.Decision,
+                                  snippet: String, stillOpen: () -> Bool) -> String {
         let application = AXUIElementCreateApplication(pid)
         // Electron builds its accessibility tree only for assistive clients that ask.
         AXUIElementSetAttributeValue(application, "AXManualAccessibility" as CFString, kCFBooleanTrue)
-        AXUIElementSetMessagingTimeout(application, 0.2)
-        guard let windows = copy(application, kAXWindowsAttribute) as? [AXUIElement] else { return .sessionNotVisible }
+        guard let windows = copy(application, kAXWindowsAttribute) as? [AXUIElement] else { return "session-not-visible" }
         var areas: [AXUIElement] = []
         for window in windows { collect(from: window, into: &areas) { isSessionArea($0, session: session) } }
-        guard !areas.isEmpty else { return .sessionNotVisible }
+        guard !areas.isEmpty else { return "session-not-visible" }
         var allow: [AXUIElement] = [], deny: [AXUIElement] = []
         for area in areas {
             var buttons: [AXUIElement] = []
@@ -99,12 +120,12 @@ enum ClaudeHostApproval {
             }
         }
         // A real card shows both choices; anything else is not ours to press.
-        guard !allow.isEmpty, !deny.isEmpty else { return .noCard }
-        guard allow.count == 1, deny.count == 1 else { return .ambiguous }
-        guard cardText(allow[0], deny[0], contains: snippet) else { return .textMismatch }
-        guard stillOpen() else { return .cardChanged }
+        guard !allow.isEmpty, !deny.isEmpty else { return "no-card" }
+        guard allow.count == 1, deny.count == 1 else { return "ambiguous" }
+        guard cardText(allow[0], deny[0], contains: snippet) else { return "text-mismatch" }
+        guard stillOpen() else { return "card-changed" }
         let target = decision == .allow ? allow[0] : deny[0]
-        return AXUIElementPerformAction(target, kAXPressAction as CFString) == .success ? .pressed : .pressFailed
+        return AXUIElementPerformAction(target, kAXPressAction as CFString) == .success ? "pressed" : "press-failed"
     }
 
     /// The card is the nearest container of both buttons; its own text must

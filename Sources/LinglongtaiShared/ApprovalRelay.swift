@@ -11,8 +11,10 @@ public enum ApprovalRelay {
     /// The terminal CLI applies the hook's decision. SDK hosts such as Claude
     /// Desktop (`claude-desktop*`) run this hook for every permission check,
     /// including tools they then auto-approve, and decide only in their own
-    /// card. There the island answers by pressing that card (see
-    /// ClaudePromptLog), never through the hook, and the hook does not wait.
+    /// card. There the hook returns at once and leaves a detached presser
+    /// (`linglongtaictl host-press`) that, after the island's decision for one
+    /// exact card (see ClaudePromptLog), presses that card. The presser runs
+    /// under the host's own accessibility permission, so the island needs none.
     public static func hostShowsOwnPrompt(environment: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
         guard let entrypoint = environment["CLAUDE_CODE_ENTRYPOINT"], !entrypoint.isEmpty else { return false }
         return entrypoint != "cli"
@@ -48,11 +50,17 @@ public enum ApprovalRelay {
         var lifetime: TimeInterval { deliversThroughHost ? ApprovalRelay.hostPromptLifetime : 45 }
     }
     public enum Decision: String, Codable { case allow, deny }
-    private struct Reply: Codable { var id: UUID; var decision: Decision }
+    private struct Reply: Codable {
+        var id: UUID
+        var decision: Decision
+        /// Desktop card the island bound and the user reviewed; host requests only.
+        var promptID: String?
+    }
     private struct Heartbeat: Codable { var processID: Int32; var updatedAt: Date; var canPresent: Bool }
     private static var directory: URL { LinglongtaiPaths.applicationSupport.appendingPathComponent("pending-approvals") }
     private static func requestURL(_ id: UUID) -> URL { directory.appendingPathComponent(id.uuidString + ".json") }
     private static func replyURL(_ id: UUID) -> URL { directory.appendingPathComponent(id.uuidString + ".reply") }
+    private static func resultURL(_ id: UUID) -> URL { directory.appendingPathComponent(id.uuidString + ".result") }
 
     public static func makeRequest(payload: Data, event: AgentEvent, now: Date = Date()) -> Request? {
         guard let taskID = event.id, event.type == "upsert", event.status == .waiting,
@@ -173,6 +181,39 @@ public enum ApprovalRelay {
         return written
     }
 
+    /// The island's decision for one bound Desktop card.
+    public static func respondThroughHost(_ request: Request, decision: Decision, promptID: String) -> Bool {
+        guard request.deliversThroughHost, pending(request.id, taskID: request.taskID) == request,
+              promptID.count == 36, UUID(uuidString: promptID) != nil,
+              let data = try? JSONEncoder().encode(Reply(id: request.id, decision: decision, promptID: promptID)) else { return false }
+        let written = writeExclusive(data, to: replyURL(request.id))
+        ApprovalTrace.record(request.id, written ? "decision-written" : "decision-write-failed")
+        return written
+    }
+
+    /// The still-published host request, regardless of a reply; for the presser.
+    public static func hostRequest(_ id: UUID, now: Date = Date()) -> Request? {
+        guard let request = readRequest(id), request.deliversThroughHost, request.expiresAt > now else { return nil }
+        return request
+    }
+
+    public static func hostReply(_ id: UUID) -> (decision: Decision, promptID: String)? {
+        guard let data = readPrivate(replyURL(id)), let reply = try? JSONDecoder().decode(Reply.self, from: data),
+              reply.id == id, let prompt = reply.promptID else { return nil }
+        return (reply.decision, prompt)
+    }
+
+    /// Presser outcome: "pressed" or a fixed failure code; never free text.
+    public static func writeHostResult(_ id: UUID, _ code: String) {
+        guard code.range(of: "^[a-z-]{1,32}$", options: .regularExpression) != nil,
+              let data = code.data(using: .utf8) else { return }
+        _ = writeExclusive(data, to: resultURL(id))
+    }
+
+    public static func hostResult(_ id: UUID) -> String? {
+        readPrivate(resultURL(id)).flatMap { String(data: $0, encoding: .utf8) }
+    }
+
     public static func wait(for request: Request) -> Decision? {
         guard supports(request.provider), request.protocolVersion == 2 else { return nil }
         defer { cleanup(request.id) }
@@ -199,6 +240,7 @@ public enum ApprovalRelay {
         guard directoryIsPrivate() else { return }
         try? FileManager.default.removeItem(at: requestURL(id))
         try? FileManager.default.removeItem(at: replyURL(id))
+        try? FileManager.default.removeItem(at: resultURL(id))
     }
 
     private static func readRequest(_ id: UUID) -> Request? {

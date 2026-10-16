@@ -156,6 +156,18 @@ with tempfile.TemporaryDirectory(prefix="island-approval-") as temporary:
         finish(proc)
         newer = list((root / "pending-approvals").glob("*.json"))
         check(label + " newer check supersedes the session's earlier request", len(newer) == 1 and newer[0] != files[0])
+    root = base / "desktop-presser"
+    proc = start(root, payload(provider="claude"), entrypoint="claude-desktop-3p", host_session=host_session)
+    finish(proc)
+    path, request = pending(root)
+    fd = os.open(path.with_suffix(".reply"), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w") as output:
+        json.dump({"id": request["id"], "decision": "allow", "promptID": "7b10c756-a17d-436d-ba4e-a9233f56a313"}, output)
+    result = path.with_suffix(".result")
+    deadline = time.monotonic() + 3
+    while not result.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    check("detached presser picks up the island's decision after the hook has exited", result.exists() and result.read_text() == "isolated")
     root = base / "desktop-host"
     proc = start(root, payload(provider="claude", arguments={"token": "private-fixture"}), entrypoint="claude-desktop-3p", host_session=host_session)
     finish(proc)

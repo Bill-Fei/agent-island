@@ -148,7 +148,9 @@ final class TaskStore: ObservableObject {
     }
 
     func pollHostPrompts() {
-        guard promptLog.poll(now: now()) else { return }
+        let changed = promptLog.poll(now: now())
+        resolveHostDeliveries()
+        guard changed else { return }
         invalidateTaskCache()
         for task in tasks {
             guard let id = task.approvalRequestID, !tracedHostActionable.contains(id),
@@ -159,67 +161,78 @@ final class TaskStore: ObservableObject {
         refreshPresentation()
     }
 
+    private struct HostDelivery {
+        var request: ApprovalRelay.Request
+        var promptID: String
+        var decision: ApprovalRelay.Decision
+        var deadline: Date
+    }
+
+    /// Hands the decision for the bound card to that request's presser.
     private func respondThroughHost(_ request: ApprovalRelay.Request, decision: ApprovalRelay.Decision) {
         _ = promptLog.poll(now: now())
         guard let task = tasks.first(where: { $0.id == request.taskID }),
-              approvalRequest(for: task) == request, let prompt = hostPrompt(for: request),
-              let deliver = hostApprovalDelivery else {
+              approvalRequest(for: task) == request, let prompt = hostPrompt(for: request) else {
             failHostDelivery(request, code: "card-gone", reason: "App 中的确认卡已不在")
             return
         }
-        hostDeliveries[request.id] = decision
+        guard ApprovalRelay.respondThroughHost(request, decision: decision, promptID: prompt.id) else {
+            failHostDelivery(request, code: "reply-failed", reason: "决定没能交给 App")
+            return
+        }
+        // Navigation to an off-screen session can take a few seconds.
+        hostDeliveries[request.id] = HostDelivery(request: request, promptID: prompt.id, decision: decision,
+                                                  deadline: now().addingTimeInterval(8))
         submittedApprovals[request.id] = now()
         failedApprovals.remove(request.taskID)
         notice = decision == .allow ? "正在 App 中允许本次请求…" : "正在 App 中拒绝本次请求…"
-        ApprovalTrace.record(request.id, decision == .allow ? "host-press-allow" : "host-press-deny")
         closeApproval()
-        deliver(prompt.session, prompt.id, decision, { [weak self] in
-            // Re-checked on the main thread immediately before the press.
-            guard let self else { return false }
-            _ = self.promptLog.poll(now: self.now())
-            let open = self.promptLog.openPrompts(in: prompt.session)
-            return open.count == 1 && open.first?.id == prompt.id
-        }, request.context) { [weak self] outcome in
-            guard let self else { return }
-            switch outcome {
-            case .pressed:
-                self.confirmHostDelivery(request, prompt: prompt, decision: decision, deadline: Date().addingTimeInterval(3))
-            case .failed(let code, let reason):
-                self.failHostDelivery(request, code: code, reason: reason)
+        resolveHostDeliveries()
+    }
+
+    /// Success only when Desktop itself logs the answer for that exact card.
+    private func resolveHostDeliveries() {
+        for (id, delivery) in hostDeliveries {
+            let request = delivery.request
+            if let resolution = promptLog.resolved[delivery.promptID] {
+                let matches = delivery.decision == .allow
+                    ? ["once", "always"].contains(resolution.decision) : resolution.decision == "deny"
+                ApprovalTrace.record(id, matches ? "host-confirmed" : "host-mismatch")
+                ApprovalRelay.cleanup(id)
+                hostDeliveries.removeValue(forKey: id)
+                if matches {
+                    notice = delivery.decision == .allow ? "已在 App 中允许本次请求" : "已在 App 中拒绝本次请求"
+                } else {
+                    notice = "App 记录的结果与岛上的选择不一致，请回 App 核实"
+                    failedApprovals.insert(request.taskID)
+                }
+                invalidateTaskCache()
+                refreshPresentation()
+            } else if let code = ApprovalRelay.hostResult(id), code != "pressed", code != "isolated" {
+                failHostDelivery(request, code: code, reason: Self.pressFailureReason(code))
+            } else if now() >= delivery.deadline {
+                failHostDelivery(request, code: "unconfirmed", reason: "App 没有确认收到")
             }
         }
     }
 
-    /// Success only when Desktop itself logs the answer for this exact card.
-    private func confirmHostDelivery(_ request: ApprovalRelay.Request, prompt: ClaudePromptLog.Prompt,
-                                     decision: ApprovalRelay.Decision, deadline: Date) {
-        _ = promptLog.poll(now: now())
-        if let resolution = promptLog.resolved[prompt.id] {
-            let matches = decision == .allow ? ["once", "always"].contains(resolution.decision) : resolution.decision == "deny"
-            ApprovalTrace.record(request.id, matches ? "host-confirmed" : "host-mismatch")
-            ApprovalRelay.cleanup(request.id)
-            hostDeliveries.removeValue(forKey: request.id)
-            if matches {
-                notice = decision == .allow ? "已在 App 中允许本次请求" : "已在 App 中拒绝本次请求"
-            } else {
-                notice = "App 记录的结果与岛上的选择不一致，请回 App 核实"
-                failedApprovals.insert(request.taskID)
-            }
-            invalidateTaskCache()
-            refreshPresentation()
-            return
-        }
-        guard Date() < deadline else {
-            failHostDelivery(request, code: "unconfirmed", reason: "App 没有确认收到")
-            return
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-            self?.confirmHostDelivery(request, prompt: prompt, decision: decision, deadline: deadline)
+    private static func pressFailureReason(_ code: String) -> String {
+        switch code {
+        case "untrusted": return "Claude 没有辅助功能权限"
+        case "not-running": return "Claude 未运行"
+        case "session-not-visible": return "没能打开对应的对话"
+        case "ambiguous": return "该对话里有多张确认卡"
+        case "no-card": return "没找到 App 中的确认卡"
+        case "text-mismatch": return "App 中的卡片与岛上审阅的内容不一致"
+        case "card-changed": return "App 中的确认卡已经变化"
+        case "no-snippet": return "这次请求无法与 App 中的卡片逐字核对"
+        default: return "按钮没有响应"
         }
     }
 
     private func failHostDelivery(_ request: ApprovalRelay.Request, code: String, reason: String) {
         ApprovalTrace.record(request.id, "host-press-failed:" + code)
+        ApprovalRelay.cleanup(request.id)
         hostDeliveries.removeValue(forKey: request.id)
         submittedApprovals.removeValue(forKey: request.id)
         notice = "未能在 App 中确认（\(reason)），请回 App 处理"
@@ -277,21 +290,11 @@ final class TaskStore: ObservableObject {
     private var approvalRequestStarts: [UUID: Date] = [:]
     /// Desktop's own card lifecycle, followed from its log (see ClaudePromptLog).
     private var promptLog = ClaudePromptLog(urls: [])
-    private var hostDeliveries: [UUID: ApprovalRelay.Decision] = [:]
+    private var hostDeliveries: [UUID: HostDelivery] = [:]
     /// The first card matched to a request stays its only card.
     private var hostBindings: [UUID: String] = [:]
     private var tracedHostActionable: Set<UUID> = []
 
-    enum HostPressOutcome: Equatable {
-        case pressed
-        /// code is a fixed metadata token for the trace; reason is user-facing.
-        case failed(code: String, reason: String)
-    }
-    /// Presses Allow/Deny on the Desktop card of (session, prompt ID). Injected by
-    /// the HUD so the store stays free of AppKit and accessibility I/O.
-    var hostApprovalDelivery: ((_ session: String, _ promptID: String, _ decision: ApprovalRelay.Decision,
-                                _ stillOpen: @escaping () -> Bool, _ context: String,
-                                _ completion: @escaping (HostPressOutcome) -> Void) -> Void)?
     private var surfacedApprovalRequests: Set<UUID> = []
     private static let notificationSettleDelay: TimeInterval = 2
     private static let approvalSettleDelay: TimeInterval = 1.2
