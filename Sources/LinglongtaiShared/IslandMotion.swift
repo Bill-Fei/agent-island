@@ -38,7 +38,7 @@ public struct IslandMetrics: Equatable, Sendable {
     public var approvalExpanded = false
 
     public static let approvalWidth = 420.0
-    public static func approvalContentHeight(expanded: Bool) -> Double { expanded ? 312 : 158 }
+    public static func approvalContentHeight(expanded: Bool) -> Double { expanded ? 316 : 162 }
 
     public init(notchWidth: Double = 184, notchHeight: Double = 32, hasPhysicalNotch: Bool = true,
                 safeTop: Double? = nil, activityWidth: Double = 228,

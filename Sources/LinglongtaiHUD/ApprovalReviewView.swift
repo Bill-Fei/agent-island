@@ -160,12 +160,14 @@ struct ApprovalReviewView: View {
 
     // MARK: Decision — two equal pills, like answering a call
 
-    static let buttonHeight: CGFloat = 26
+    static let buttonHeight: CGFloat = 30
+    static let buttonWidth: CGFloat = 120
 
     private var decisionButtons: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
+            Spacer(minLength: 0)
             Button { store.respondToApproval(request, decision: .deny) } label: {
-                pill(icon: "xmark", title: "拒绝", key: "⌘⌫", tint: .white.opacity(0.78), fill: .white.opacity(0.1))
+                pill(icon: "xmark", title: "拒绝", key: "⌘⌫", tint: .white.opacity(0.88), fill: .white.opacity(0.17))
             }
             .buttonStyle(.plain)
             if needsHold {
@@ -173,11 +175,12 @@ struct ApprovalReviewView: View {
             } else {
                 Button { store.respondToApproval(request, decision: .allow) } label: {
                     pill(icon: "checkmark", title: "允许", key: "⌘↩", tint: HUDColorTokens.success,
-                         fill: HUDColorTokens.success.opacity(0.2))
+                         fill: HUDColorTokens.success.opacity(0.32))
                 }
                 .buttonStyle(.plain)
                 .help("只允许这一次，不授予长期权限")
             }
+            Spacer(minLength: 0)
         }
     }
 
@@ -189,7 +192,7 @@ struct ApprovalReviewView: View {
             Text(key).font(.system(size: 10, design: .rounded)).opacity(0.55)
         }
         .foregroundStyle(tint)
-        .frame(maxWidth: .infinity, minHeight: Self.buttonHeight, maxHeight: Self.buttonHeight)
+        .frame(width: Self.buttonWidth, height: Self.buttonHeight)
         .background(fill, in: Capsule())
         .contentShape(Capsule())
     }
@@ -205,9 +208,9 @@ private struct ApprovalHoldButton: View {
                 min(1, max(0, context.date.timeIntervalSince($0) / TaskStore.approvalHoldDuration))
             } ?? 0
             ZStack(alignment: .leading) {
-                Capsule().fill(HUDColorTokens.attention.opacity(0.16))
+                Capsule().fill(HUDColorTokens.attention.opacity(0.26))
                 GeometryReader { proxy in
-                    Capsule().fill(HUDColorTokens.attention.opacity(0.38))
+                    Capsule().fill(HUDColorTokens.attention.opacity(0.5))
                         .frame(width: proxy.size.width * progress)
                 }
                 HStack(spacing: 5) {
@@ -217,7 +220,7 @@ private struct ApprovalHoldButton: View {
                 .foregroundStyle(HUDColorTokens.attention)
                 .frame(maxWidth: .infinity)
             }
-            .frame(maxWidth: .infinity, minHeight: ApprovalReviewView.buttonHeight, maxHeight: ApprovalReviewView.buttonHeight)
+            .frame(width: ApprovalReviewView.buttonWidth, height: ApprovalReviewView.buttonHeight)
             .clipShape(Capsule())
         }
         .contentShape(Capsule())
