@@ -689,14 +689,9 @@ private struct HUDExpandedContent: View {
     }
 
     private func hasDetailActions(for task: AgentTask) -> Bool {
+        // No footer caption: the status pill and the outcome card already say
+        // where to act, and the steps get the space down to the pane's edge.
         store.approvalRequest(for: task) != nil || store.displayedStatus(for: task) == "结果未知"
-            || detailFooterText(for: task) != nil
-    }
-
-    private func detailFooterText(for task: AgentTask) -> String? {
-        store.approvalFeedback(for: task)
-            ?? store.approvalSurfaceText(for: task)
-            ?? (store.needsUserAttention(task) && store.approvalRequest(for: task) == nil ? "在 App 里处理" : nil)
     }
 
     private func actionBar(for task: AgentTask) -> some View {
@@ -706,23 +701,13 @@ private struct HUDExpandedContent: View {
                     store.reviewApproval(for: task)
                 }
             }
-            HStack(alignment: .bottom, spacing: 8) {
-                if store.displayedStatus(for: task) == "结果未知" {
-                    Button("从岛上移除") { store.dismissTask(task) }
-                        .font(HUDTypography.caption)
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                        .fixedSize()
-                        .help("只移除本地显示，不会停止 Agent；后续真实事件仍可再次出现。")
-                }
-                Spacer(minLength: 8)
-                if let footerText = detailFooterText(for: task) {
-                    Text(footerText)
-                        .font(HUDTypography.caption)
-                        .foregroundStyle(.white.opacity(0.32))
-                        .multilineTextAlignment(.trailing)
-                        .lineLimit(2)
-                }
+            if store.displayedStatus(for: task) == "结果未知" {
+                Button("从岛上移除") { store.dismissTask(task) }
+                    .font(HUDTypography.caption)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .fixedSize()
+                    .help("只移除本地显示，不会停止 Agent；后续真实事件仍可再次出现。")
             }
         }
     }
