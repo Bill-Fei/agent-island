@@ -31,6 +31,8 @@ final class TaskStore: ObservableObject {
     @Published private(set) var demoPreviewActive = false
     @Published private(set) var connections: [String: Date] = [:]
     @Published private(set) var reviewingApproval: ApprovalRelay.Request?
+    /// Full parameters shown in the review card; collapsed for every new review.
+    @Published var approvalReviewExpanded = false
     @Published private(set) var submittedApprovals: [UUID: Date] = [:]
     @Published private(set) var failedApprovals: Set<UUID> = []
     @Published private(set) var claudeChatDiagnostic = "Claude Chat：等待窗口检查"
@@ -98,6 +100,7 @@ final class TaskStore: ObservableObject {
     }
 
     func reviewApproval(for task: AgentTask) {
+        approvalReviewExpanded = false
         reviewingApproval = approvalRequest(for: task)
         refreshPresentation()
     }
