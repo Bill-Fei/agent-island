@@ -144,30 +144,24 @@ with tempfile.TemporaryDirectory(prefix="island-approval-") as temporary:
     host_session = "local_0f0e0d0c-0b0a-4908-8706-050403020100"
     for label, entrypoint in [("desktop-host", "claude-desktop-3p"), ("vscode-host", "claude-vscode"), ("sdk-host", "sdk-ts")]:
         root = base / label
-        began = time.monotonic()
         proc = start(root, payload(provider="claude"), entrypoint=entrypoint, host_session=host_session)
-        out = finish(proc)
-        check(label + " hook returns at once and never answers for the host", out == b"" and time.monotonic() - began < 3)
-        files = list((root / "pending-approvals").glob("*.json"))
-        request = json.loads(files[0].read_text()) if len(files) == 1 else {}
-        check(label + " request is bound to the host session and raw tool", request.get("hostSessionID") == host_session and request.get("toolName") == "Bash" and request.get("protocolVersion") == 2)
-        check(label + " request outlives the hook process for the card's lifetime", 590 < request.get("expiresAt", 0) - request.get("createdAt", 0) <= 600)
-        proc = start(root, payload(provider="claude"), entrypoint=entrypoint, host_session=host_session)
-        finish(proc)
-        newer = list((root / "pending-approvals").glob("*.json"))
-        check(label + " newer check supersedes the session's earlier request", len(newer) == 1 and newer[0] != files[0])
-    root = base / "desktop-presser"
+        path, request = pending(root)
+        check(label + " request is bound to the host session, raw tool and hook session", request.get("hostSessionID") == host_session and request.get("toolName") == "Bash" and request.get("sessionKey") == "session")
+        check(label + " request keeps the 45-second relay lifetime", request["expiresAt"] - request["createdAt"] <= 45.5)
+        approve_pending(root, "deny")
+        check(label + " island decision is returned through the hook", json.loads(finish(proc))["hookSpecificOutput"]["decision"]["behavior"] == "deny")
+    root = base / "desktop-sibling"
     proc = start(root, payload(provider="claude"), entrypoint="claude-desktop-3p", host_session=host_session)
-    finish(proc)
     path, request = pending(root)
-    fd = os.open(path.with_suffix(".reply"), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, "w") as output:
-        json.dump({"id": request["id"], "decision": "allow", "promptID": "7b10c756-a17d-436d-ba4e-a9233f56a313"}, output)
-    result = path.with_suffix(".result")
-    deadline = time.monotonic() + 3
-    while not result.exists() and time.monotonic() < deadline:
-        time.sleep(0.05)
-    check("detached presser picks up the island's decision after the hook has exited", result.exists() and result.read_text() == "isolated")
+    marker = root / "decided" / "session"
+    marker.parent.mkdir(mode=0o700, exist_ok=True)
+    marker.touch()
+    check("a decision made on Feishu releases the island hook at once", finish(proc, timeout=3) == b"" and not path.exists())
+    proc = start(root, payload(provider="claude"), entrypoint="claude-desktop-3p", host_session=host_session)
+    approve_pending(root)
+    out = finish(proc)
+    check("an island decision on a Desktop card is returned through the hook", json.loads(out)["hookSpecificOutput"]["decision"]["behavior"] == "allow")
+    check("an island decision tells the Feishu hook to stop holding", marker.stat().st_mtime > time.time() - 5)
     root = base / "desktop-host"
     proc = start(root, payload(provider="claude", arguments={"token": "private-fixture"}), entrypoint="claude-desktop-3p", host_session=host_session)
     finish(proc)

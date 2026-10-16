@@ -35,9 +35,6 @@ struct LinglongtaiCtl {
         case "emit": emit(arguments)
         case "list": list()
         case "hook": receiveHook(arguments)
-        case "host-press":
-            guard let id = uuidOption("--request", arguments) else { return }
-            ClaudeCardPresser.run(requestID: id, isolated: arguments.contains("--data-dir"))
         default: printUsage()
         }
     }
@@ -270,16 +267,7 @@ struct LinglongtaiCtl {
             ApprovalRelay.cleanup(request.id)
             approval = nil
         }
-        // The host decides in its own card; the hook returns at once and a
-        // detached presser waits for the island's decision on that card.
-        if let request = approval, request.deliversThroughHost {
-            var passthrough: [String] = []
-            if let index = args.firstIndex(of: "--data-dir"), args.indices.contains(index + 1) {
-                passthrough = ["--data-dir", args[index + 1]]
-            }
-            ClaudeCardPresser.spawn(requestID: request.id, passthrough: passthrough)
-            return
-        }
+
         // Wait outside the journal lock. No decision falls back to the provider.
         if let request = approval, let decision = ApprovalRelay.wait(for: request) {
             let result: [String: Any] = ["hookSpecificOutput": [
@@ -289,6 +277,8 @@ struct LinglongtaiCtl {
                let json = String(data: data, encoding: .utf8) {
                 print(json)
                 let flushed = fflush(stdout) == 0
+                // Tell sibling PermissionRequest hooks (Feishu) to stop holding.
+                SiblingDecision.mark(request.sessionKey)
                 ApprovalTrace.record(request.id, flushed ? "decision-output" : "decision-output-failed")
             }
         }

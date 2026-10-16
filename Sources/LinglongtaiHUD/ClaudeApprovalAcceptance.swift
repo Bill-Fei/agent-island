@@ -25,7 +25,7 @@ func runClaudeApprovalStoreChecks(check: (String, Bool) -> Void, emit: (AgentEve
         request.hostSessionID = desktopHost ? hostSession : nil
         request.toolName = desktopHost ? "Bash" : nil
         request.createdAt = desktopHost ? date : nil
-        request.expiresAt = date.addingTimeInterval(desktopHost ? 600 : 45)
+        request.expiresAt = date.addingTimeInterval(45)
         guard ApprovalRelay.publish(request) else { return nil }
         event.approvalRequestID = request.id
         try emit(event)
@@ -71,7 +71,6 @@ func runClaudeApprovalStoreChecks(check: (String, Bool) -> Void, emit: (AgentEve
     }
     store.pollHostPrompts()
     check("Desktop permission check without a card never pops the island", store.approvalRequest(for: desktopTask) == nil && !store.needsUserAttention(desktopTask) && store.waitingCount == 0)
-    check("Desktop request cannot be answered through the hook", !ApprovalRelay.respond(to: desktop, decision: .allow))
     let cardID = UUID().uuidString.lowercased()
     hostLine("Emitted tool permission request \(cardID) for Bash in session \(hostSession)")
     store.pollHostPrompts()
@@ -83,13 +82,10 @@ func runClaudeApprovalStoreChecks(check: (String, Bool) -> Void, emit: (AgentEve
     hostLine("Permission request \(otherCard) for Bash aborted")
     store.pollHostPrompts()
     check("an aborted card no longer counts; the request keeps its first card", store.approvalRequest(for: desktopTask) == desktop && store.hostPrompt(for: desktop)?.id == cardID)
-    store.respondToApproval(desktop, decision: .allow)
-    let handed = ApprovalRelay.hostReply(desktop.id)
-    check("island hands the presser exactly that card and decision", handed?.decision == .allow && handed?.promptID == cardID)
-    check("a handed-off decision is waiting, not shown as done", store.notice.hasPrefix("正在 App 中允许") && store.approvalRequest(for: desktopTask) == nil)
     hostLine("Received permission response for \(cardID): once (tool: Bash)")
     store.pollHostPrompts()
-    check("Desktop's own log confirms the press", store.notice == "已在 App 中允许本次请求" && !store.failedApprovals.contains(desktop.taskID) && ApprovalRelay.hostRequest(desktop.id) == nil)
+    check("a card answered in the app withdraws the island button at once", store.approvalRequest(for: desktopTask) == nil)
+    ApprovalRelay.cleanup(desktop.id)
     guard let stale = try publish(desktopHost: true), let staleTask = store.tasks.first(where: { $0.id == stale.taskID }) else {
         check("Claude Desktop stale fixture publishes", false); return
     }
@@ -108,9 +104,7 @@ func runClaudeApprovalStoreChecks(check: (String, Bool) -> Void, emit: (AgentEve
     hostLine("Emitted tool permission request \(UUID().uuidString.lowercased()) for Bash in session \(hostSession)")
     store.pollHostPrompts()
     store.respondToApproval(unanswered, decision: .allow)
-    ApprovalRelay.writeHostResult(unanswered.id, "text-mismatch")
-    store.pollHostPrompts()
-    check("a presser refusal is reported, never shown as approved", store.failedApprovals.contains(unansweredTask.id) && store.notice.contains("不一致"))
+    check("island decision on a Desktop card reaches the hook", store.submittedApprovals[unanswered.id] != nil && !store.failedApprovals.contains(unansweredTask.id) && ApprovalRelay.wait(for: unanswered) == .allow)
     store.clearAllTasks()
 
     let claudeNotification = UUID()
