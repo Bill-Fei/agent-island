@@ -1,7 +1,8 @@
 import Foundation
 
 public enum IslandPresentation: String, Equatable, Sendable {
-    case collapsed, compact, medium, heavy
+    /// `approval` is a call-style card grown from the notch for one decision.
+    case collapsed, compact, medium, approval, heavy
 }
 
 /// One owner for hover intent. Repeated pointer samples never restart a deadline.

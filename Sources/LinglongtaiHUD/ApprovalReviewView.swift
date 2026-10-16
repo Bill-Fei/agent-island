@@ -1,59 +1,66 @@
+import AppKit
 import LinglongtaiShared
 import SwiftUI
 
-/// Compact one-step review: who asks, what will run, then decide. The full
-/// parameters stay one click away, so the card never hides what is approved.
+/// Call-style approval card grown from the notch: who asks, what will run,
+/// time left, then Deny / Allow as two equal pills. Risky requests turn Allow
+/// orange and require a press-and-hold. Full parameters stay one tap away.
 struct ApprovalReviewView: View {
     let request: ApprovalRelay.Request
     @ObservedObject var store: TaskStore
     @ObservedObject private var conversationTitles = ConversationTitleStore.shared
-    private var expanded: Bool { store.approvalReviewExpanded }
 
-    private var isPending: Bool {
-        store.tasks.first(where: { $0.id == request.taskID }).flatMap { store.approvalRequest(for: $0) } == request
-    }
+    static let contentWidth = IslandMetrics.approvalWidth - 2 * 18
+
+    private var expanded: Bool { store.approvalReviewExpanded }
+    private var task: AgentTask? { store.tasks.first(where: { $0.id == request.taskID }) }
+    private var isPending: Bool { task.flatMap { store.approvalRequest(for: $0) } == request }
+    private var needsHold: Bool { store.approvalNeedsHold(request) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                AgentIcon(kind: request.provider, size: 20)
-                Text(headline).font(.system(size: 13, weight: .semibold)).lineLimit(1).truncationMode(.tail)
-                Spacer(minLength: 4)
-                Button { store.closeApproval() } label: {
-                    Image(systemName: "xmark").font(.system(size: 10, weight: .bold)).foregroundStyle(.secondary)
-                        .frame(width: 20, height: 20).contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("Esc · 不做决定")
-            }
-            Text(request.tool).font(.system(size: 12)).foregroundStyle(.secondary)
-            if !riskLabels.isEmpty {
-                Label("含高风险操作：\(riskLabels.joined(separator: "、"))", systemImage: "exclamationmark.triangle.fill")
-                    .font(.system(size: 11, weight: .medium)).foregroundStyle(.red)
-            }
+            header
             commandBox
-            if isPending {
-                HStack(spacing: 8) {
-                    Spacer()
-                    Button { store.respondToApproval(request, decision: .deny) } label: { keyLabel("拒绝", "⌘⌫") }
-                        .controlSize(.large)
-                    Button { store.respondToApproval(request, decision: .allow) } label: { keyLabel("允许", "⌘↩") }
-                        .buttonStyle(.borderedProminent).controlSize(.large)
-                        .tint(riskLabels.isEmpty ? .accentColor : .red)
-                        .help("只允许这一次，不授予长期权限")
-                }
-            } else {
-                Text("请求已过期或已处理，请回原应用核实。").font(.system(size: 11)).foregroundStyle(.secondary)
+            if isPending { decisionButtons } else {
+                Text("请求已过期或已处理，请回原应用核实")
+                    .font(.system(size: 11)).foregroundStyle(.white.opacity(0.5))
+                    .frame(maxWidth: .infinity, minHeight: 32)
             }
         }
-        .padding(14)
-        .frame(width: 340)
+        .padding(.horizontal, 14)
+        .padding(.top, 6)
+        .padding(.bottom, 12)
+        .frame(width: Self.contentWidth,
+               height: IslandMetrics.approvalContentHeight(expanded: expanded), alignment: .top)
+        .environment(\.colorScheme, .dark)
     }
 
-    private var headline: String {
-        let title = store.tasks.first(where: { $0.id == request.taskID }).map { conversationTitles.title(for: $0) }
-        return [request.provider.displayName, title].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+    // MARK: Header — avatar, conversation, action, queue and time left
+
+    private var header: some View {
+        HStack(spacing: 10) {
+            AgentIcon(kind: request.provider, size: 30)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
+                    .lineLimit(1).truncationMode(.tail)
+                Text(request.tool).font(.system(size: 11)).foregroundStyle(.white.opacity(0.55)).lineLimit(1)
+            }
+            Spacer(minLength: 6)
+            let queue = store.pendingApprovalTasks.count
+            if queue > 1 {
+                Text("1/\(queue)").font(.system(size: 11, weight: .medium, design: .rounded))
+                    .monospacedDigit().foregroundStyle(.white.opacity(0.55))
+            }
+            if isPending { ApprovalCountdownRing(expiresAt: request.expiresAt) }
+        }
     }
+
+    private var title: String {
+        let conversation = task.map { conversationTitles.title(for: $0) } ?? ""
+        return conversation.isEmpty ? "\(request.provider.displayName) 请求批准" : conversation
+    }
+
+    // MARK: Command
 
     private var fields: [ApprovalShortcut.Field]? { ApprovalShortcut.fields(fromContext: request.context) }
 
@@ -66,46 +73,46 @@ struct ApprovalReviewView: View {
         fields?.first(where: { $0.key == "working_directory" }).map { ($0.value as NSString).abbreviatingWithTildeInPath }
     }
 
-    /// Other short arguments are shown only in the expanded view.
-    private var hasMore: Bool {
-        guard let fields, let primary else { return true }
-        return fields.count > 2 || fields.contains { $0.key != "working_directory" && $0.key != primary.key }
-            || primary.value.split(separator: "\n", omittingEmptySubsequences: false).count > 3 || primary.value.count > 140
-    }
-
     private var riskLabels: [String] {
         if let fields { return ApprovalRisk.labels(in: fields) }
         return ApprovalRisk.matches(in: request.context).map(\.label).reduce(into: []) { if !$0.contains($1) { $0.append($1) } }
     }
 
+    private var hasMore: Bool {
+        guard let fields, let primary else { return true }
+        return fields.contains { $0.key != "working_directory" && $0.key != primary.key }
+            || primary.value.contains("\n") || primary.value.count > 90
+    }
+
     private var commandBox: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 5) {
             if expanded {
-                ScrollView { allParameters }.frame(maxHeight: 220)
-            } else if let primary {
-                Text(highlighted(primary.value))
-                    .font(.system(size: 12, design: .monospaced))
-                    .lineLimit(3).truncationMode(.tail)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                ScrollView(showsIndicators: false) { allParameters }
             } else {
-                Text(highlighted(request.context)).font(.system(size: 12, design: .monospaced))
-                    .lineLimit(3).frame(maxWidth: .infinity, alignment: .leading)
+                Text(highlighted(primary?.value ?? request.context))
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.82))
+                    .lineLimit(2).truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             HStack(spacing: 6) {
-                if let directory, !expanded {
-                    Text(directory).lineLimit(1).truncationMode(.middle)
+                if !riskLabels.isEmpty {
+                    Label("高风险：\(riskLabels.joined(separator: "、"))", systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(HUDColorTokens.attention).lineLimit(1)
+                } else if let directory, !expanded {
+                    Text(directory).foregroundStyle(.white.opacity(0.4)).lineLimit(1).truncationMode(.middle)
                 }
                 Spacer(minLength: 0)
                 if hasMore {
                     Button(expanded ? "收起" : "展开全文") { store.approvalReviewExpanded.toggle() }
-                        .buttonStyle(.plain).foregroundStyle(Color.accentColor)
+                        .buttonStyle(.plain).foregroundStyle(HUDColorTokens.info)
                 }
             }
-            .font(.system(size: 11)).foregroundStyle(.secondary)
+            .font(.system(size: 10.5))
         }
-        .padding(10)
-        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+        .padding(.horizontal, 10).padding(.vertical, 8)
+        .frame(maxWidth: .infinity, maxHeight: expanded ? .infinity : nil, alignment: .topLeading)
+        .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     @ViewBuilder private var allParameters: some View {
@@ -113,15 +120,16 @@ struct ApprovalReviewView: View {
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(fields) { field in
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(field.key).font(.system(size: 10)).foregroundStyle(.secondary)
+                        Text(field.key).font(.system(size: 10)).foregroundStyle(.white.opacity(0.45))
                         Text(field.key == "working_directory" ? AttributedString(field.value) : highlighted(field.value))
-                            .font(.system(size: 12, design: .monospaced))
+                            .font(.system(size: 12, design: .monospaced)).foregroundStyle(.white.opacity(0.85))
                             .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
             }.frame(maxWidth: .infinity, alignment: .leading)
         } else {
             Text(highlighted(request.context)).font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.85))
                 .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -131,16 +139,102 @@ struct ApprovalReviewView: View {
         for match in ApprovalRisk.matches(in: text) {
             guard let lower = AttributedString.Index(match.range.lowerBound, within: result),
                   let upper = AttributedString.Index(match.range.upperBound, within: result) else { continue }
-            result[lower..<upper].foregroundColor = .red
+            result[lower..<upper].foregroundColor = HUDColorTokens.attention
             result[lower..<upper].inlinePresentationIntent = .stronglyEmphasized
         }
         return result
     }
 
-    private func keyLabel(_ title: String, _ key: String) -> some View {
-        HStack(spacing: 5) {
-            Text(title)
-            Text(key).font(.system(size: 10, design: .rounded)).opacity(0.6)
+    // MARK: Decision — two equal pills, like answering a call
+
+    private static let denyColor = Color(red: 0.89, green: 0.22, blue: 0.21)
+    private static let allowColor = Color(red: 0.19, green: 0.75, blue: 0.35)
+
+    private var decisionButtons: some View {
+        HStack(spacing: 10) {
+            Button { store.respondToApproval(request, decision: .deny) } label: {
+                pill(icon: "xmark", title: "拒绝", key: "⌘⌫", color: Self.denyColor)
+            }
+            .buttonStyle(.plain)
+            if needsHold {
+                ApprovalHoldButton(store: store)
+            } else {
+                Button { store.respondToApproval(request, decision: .allow) } label: {
+                    pill(icon: "checkmark", title: "允许", key: "⌘↩", color: Self.allowColor)
+                }
+                .buttonStyle(.plain)
+                .help("只允许这一次，不授予长期权限")
+            }
+        }
+    }
+
+    private func pill(icon: String, title: String, key: String, color: Color) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon).font(.system(size: 11, weight: .bold))
+            Text(title).font(.system(size: 13, weight: .semibold))
+            Text(key).font(.system(size: 10, design: .rounded)).opacity(0.65)
+        }
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity, minHeight: 32)
+        .background(color, in: Capsule())
+        .contentShape(Capsule())
+    }
+}
+
+/// Orange Allow for risky requests: fills left to right while held; lets go = no decision.
+private struct ApprovalHoldButton: View {
+    @ObservedObject var store: TaskStore
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 60, paused: store.approvalHoldStartedAt == nil)) { context in
+            let progress = store.approvalHoldStartedAt.map {
+                min(1, max(0, context.date.timeIntervalSince($0) / TaskStore.approvalHoldDuration))
+            } ?? 0
+            ZStack(alignment: .leading) {
+                Capsule().fill(HUDColorTokens.attention.opacity(0.32))
+                GeometryReader { proxy in
+                    Capsule().fill(HUDColorTokens.attention)
+                        .frame(width: proxy.size.width * progress)
+                }
+                HStack(spacing: 6) {
+                    Image(systemName: "hand.tap.fill").font(.system(size: 11, weight: .bold))
+                    Text(progress > 0 ? "继续按住…" : "长按允许").font(.system(size: 13, weight: .semibold))
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+            }
+            .frame(maxWidth: .infinity, minHeight: 32, maxHeight: 32)
+            .clipShape(Capsule())
+        }
+        .contentShape(Capsule())
+        .gesture(DragGesture(minimumDistance: 0)
+            .onChanged { _ in if store.approvalHoldStartedAt == nil { store.beginApprovalHold() } }
+            .onEnded { _ in store.cancelApprovalHold() })
+        .help("高风险操作：按住 0.6 秒才会允许，松开即取消")
+        .accessibilityLabel("长按允许高风险操作")
+    }
+}
+
+/// Seconds left before the request falls back to the app; red for the last ten.
+struct ApprovalCountdownRing: View {
+    let expiresAt: Date
+    static let total: TimeInterval = 45
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 0.5)) { context in
+            let remaining = max(0, expiresAt.timeIntervalSince(context.date))
+            let tint = remaining <= 10 ? Color(red: 0.95, green: 0.3, blue: 0.28) : HUDColorTokens.attention
+            ZStack {
+                Circle().stroke(Color.white.opacity(0.14), lineWidth: 2.5)
+                Circle().trim(from: 0, to: min(1, remaining / Self.total))
+                    .stroke(tint, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                Text("\(Int(remaining.rounded(.up)))")
+                    .font(.system(size: 9, weight: .semibold, design: .rounded)).monospacedDigit()
+                    .foregroundStyle(tint)
+            }
+            .frame(width: 24, height: 24)
+            .help("还剩 \(Int(remaining.rounded(.up))) 秒，超时后回 App 处理")
         }
     }
 }

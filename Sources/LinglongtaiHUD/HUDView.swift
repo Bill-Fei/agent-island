@@ -1,3 +1,4 @@
+import AppKit
 import LinglongtaiShared
 import SwiftUI
 
@@ -34,6 +35,14 @@ struct HUDRootView: View {
                     .opacity(frame.heavyOpacity)
                     .allowsHitTesting(store.presentation == .heavy && frame.heavyOpacity >= 0.95)
                     .accessibilityHidden(store.presentation != .heavy)
+                if let request = store.displayedApproval {
+                    ApprovalReviewView(request: request, store: store)
+                        .scaleEffect(frame.approvalScale, anchor: .top)
+                        .padding(.top, surface.layout.safeTop + 4)
+                        .opacity(frame.approvalOpacity)
+                        .allowsHitTesting(store.presentation == .approval && frame.approvalOpacity >= 0.95)
+                        .accessibilityHidden(store.presentation != .approval)
+                }
             }
             .frame(width: frame.width, height: frame.height, alignment: .top)
             .clipShape(shape)
@@ -195,18 +204,30 @@ private struct HUDActivityContent: View {
             activityWing(for: .medium, alignment: .trailing) { mediumStatus }
         }
         .help("连续悬停 0.2 秒或点击查看详情")
-        .popover(item: Binding(get: { store.reviewingApproval }, set: { if $0 == nil { store.closeApproval() } }), arrowEdge: .top) { request in
-            ApprovalReviewView(request: request, store: store)
-        }
     }
 
     private var mediumStatus: some View {
         Group {
             // A failed decision has no live relay request, so approvalTask is
             // nil by then; the feedback must follow the highlighted task.
-            if let task = store.activeTask, store.failedApprovals.contains(task.id) {
-                detailButton(title: "未提交决定", tint: HUDColorTokens.attention)
-                    .help("请在原应用核实；没有自动批准")
+            if let outcome = store.approvalOutcome {
+                outcomeLabel(outcome)
+            } else if store.reviewingApproval != nil, store.approvalMinimized {
+                // Ignored card tucked into the notch; hover or click brings it back.
+                Button { store.revealApproval() } label: {
+                    HStack(spacing: 5) {
+                        Circle().fill(HUDColorTokens.attention).frame(width: 6, height: 6)
+                            .modifier(AgentActivityEffect(executing: true, visible: animationActive))
+                        Text(store.pendingApprovalTasks.count > 1 ? "\(store.pendingApprovalTasks.count) 个待批" : "待批")
+                    }
+                    .foregroundStyle(HUDColorTokens.attention)
+                    .padding(.horizontal, 9).padding(.vertical, 3)
+                    .background(HUDColorTokens.attention.opacity(0.18), in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .help("有请求等你批准，移到岛上即可展开")
+            } else if let task = store.activeTask, store.failedApprovals.contains(task.id) {
+                failedButton(task: task, text: "回 App 处理")
             } else if let task = store.approvalTask, store.approvalRequest(for: task) != nil,
                       store.calibrationPreview == nil {
                 Button("批准…") { store.reviewApproval(for: task) }
@@ -221,6 +242,41 @@ private struct HUDActivityContent: View {
             }
         }
         .font(.system(size: 12, weight: .medium, design: .rounded))
+    }
+
+    @ViewBuilder private func outcomeLabel(_ outcome: TaskStore.ApprovalOutcome) -> some View {
+        switch outcome.kind {
+        case .allowed:
+            Label(outcome.text, systemImage: "checkmark.circle.fill")
+                .foregroundStyle(Color(red: 0.3, green: 0.85, blue: 0.45))
+                .frame(maxWidth: .infinity, minHeight: surface.layout.notchHeight, alignment: .trailing)
+        case .denied:
+            Label(outcome.text, systemImage: "xmark.circle.fill")
+                .foregroundStyle(.white.opacity(0.7))
+                .frame(maxWidth: .infinity, minHeight: surface.layout.notchHeight, alignment: .trailing)
+        case .failed:
+            if let task = store.tasks.first(where: { $0.id == outcome.taskID }) {
+                failedButton(task: task, text: outcome.text)
+            }
+        }
+    }
+
+    /// Failure says what happened and goes straight to where it can be handled.
+    private func failedButton(task: AgentTask, text: String) -> some View {
+        Button {
+            if let url = store.openFailedApproval(task) { NSWorkspace.shared.open(url) }
+            else { AgentPresence.shared.open(task.profile.kind) }
+        } label: {
+            HStack(spacing: 4) {
+                Text(text)
+                Image(systemName: "arrow.up.forward").font(.system(size: 9, weight: .bold))
+            }
+            .foregroundStyle(HUDColorTokens.attention)
+            .frame(maxWidth: .infinity, minHeight: surface.layout.notchHeight, alignment: .trailing)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("没有自动批准；点这里打开对应的对话处理")
     }
 
     private func detailButton(title: String, tint: Color) -> some View {

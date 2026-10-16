@@ -33,6 +33,29 @@ final class TaskStore: ObservableObject {
     @Published private(set) var reviewingApproval: ApprovalRelay.Request?
     /// Full parameters shown in the review card; collapsed for every new review.
     @Published var approvalReviewExpanded = false
+    /// The card shrank back to the notch after being ignored; hover brings it back.
+    @Published private(set) var approvalMinimized = false
+    /// Last card content, kept so the card does not go blank while it closes.
+    @Published private(set) var displayedApproval: ApprovalRelay.Request?
+    /// Start of a press-and-hold on a risky Allow; nil when not holding.
+    @Published private(set) var approvalHoldStartedAt: Date?
+    /// Short result shown in the notch right after a decision.
+    @Published private(set) var approvalOutcome: ApprovalOutcome?
+    private var approvalCardShownAt = Date.distantPast
+    private var approvalPointerInside = false
+    private var approvalPointerLeftAt = Date.distantPast
+    /// Where a failed request lives, so the notch can jump straight there.
+    private var failedApprovalSessions: [UUID: String] = [:]
+    static let approvalMinimizeDelay: TimeInterval = 8
+    static let approvalHoldDuration: TimeInterval = 0.6
+
+    struct ApprovalOutcome: Equatable {
+        enum Kind: Equatable { case allowed, denied, failed }
+        var kind: Kind
+        var text: String
+        var taskID: UUID
+        var until: Date
+    }
     @Published private(set) var submittedApprovals: [UUID: Date] = [:]
     @Published private(set) var failedApprovals: Set<UUID> = []
     @Published private(set) var claudeChatDiagnostic = "Claude Chat：等待窗口检查"
@@ -101,31 +124,105 @@ final class TaskStore: ObservableObject {
 
     func reviewApproval(for task: AgentTask) {
         approvalReviewExpanded = false
+        approvalMinimized = false
+        approvalHoldStartedAt = nil
+        approvalCardShownAt = now()
         reviewingApproval = approvalRequest(for: task)
+        if let request = reviewingApproval { displayedApproval = request }
         refreshPresentation()
     }
 
     func closeApproval() {
         reviewingApproval = nil
+        approvalMinimized = false
+        approvalHoldStartedAt = nil
+        approvalReviewExpanded = false
         resetInteraction()
+    }
+
+    /// Bring a minimized card back (hover or the notch's 待批 control).
+    func revealApproval() {
+        guard reviewingApproval != nil, approvalMinimized else { return }
+        approvalMinimized = false
+        approvalCardShownAt = now()
+        refreshPresentation()
+    }
+
+    /// Requests a person could act on right now, oldest first.
+    var pendingApprovalTasks: [AgentTask] {
+        currentActivityTasks.filter { needsUserAttention($0) && approvalRequest(for: $0) != nil }
+            .sorted { $0.updatedAt < $1.updatedAt }
+    }
+
+    /// Risky commands need a press-and-hold; a click or ⌘↩ never allows them.
+    func approvalNeedsHold(_ request: ApprovalRelay.Request) -> Bool {
+        if let fields = ApprovalShortcut.fields(fromContext: request.context) { return !ApprovalRisk.labels(in: fields).isEmpty }
+        return !ApprovalRisk.matches(in: request.context).isEmpty
+    }
+
+    func beginApprovalHold() {
+        guard reviewingApproval != nil, approvalHoldStartedAt == nil else { return }
+        let started = now()
+        approvalHoldStartedAt = started
+        // Completes on its own once held long enough; releasing earlier cancels.
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.approvalHoldDuration) { [weak self] in
+            guard let self, self.approvalHoldStartedAt == started else { return }
+            self.finishApprovalHold()
+        }
+    }
+
+    func cancelApprovalHold() { approvalHoldStartedAt = nil }
+
+    /// Completed hold: allow only if it really lasted the full duration.
+    func finishApprovalHold() {
+        guard let request = reviewingApproval, let started = approvalHoldStartedAt,
+              now().timeIntervalSince(started) >= Self.approvalHoldDuration - 0.05 else {
+            approvalHoldStartedAt = nil
+            return
+        }
+        approvalHoldStartedAt = nil
+        respondToApproval(request, decision: .allow)
+    }
+
+    /// The failed notch control: open the exact conversation when known.
+    func openFailedApproval(_ task: AgentTask) -> URL? {
+        guard let session = failedApprovalSessions[task.id] else { return nil }
+        return URL(string: "claude://claude.ai/epitaxy/\(session)")
+    }
+
+    private func showApprovalOutcome(_ kind: ApprovalOutcome.Kind, _ text: String, task: UUID, seconds: TimeInterval) {
+        approvalOutcome = ApprovalOutcome(kind: kind, text: text, taskID: task, until: now().addingTimeInterval(seconds))
+        mediumUntil = max(mediumUntil, now().addingTimeInterval(seconds))
+        highlightedTaskID = task
+    }
+
+    /// After one decision, the next waiting request takes the same card.
+    private func continueWithNextApproval(after request: ApprovalRelay.Request) {
+        guard let next = pendingApprovalTasks.first(where: { $0.approvalRequestID != request.id }) else { return }
+        select(next)
+        reviewApproval(for: next)
     }
 
     func respondToApproval(_ request: ApprovalRelay.Request, decision: ApprovalRelay.Decision) {
         guard let task = tasks.first(where: { $0.id == request.taskID }),
               approvalRequest(for: task) == request,
               ApprovalRelay.respond(to: request, decision: decision) else {
+            let expired = now() >= request.expiresAt
             notice = "批准请求已过期或被处理，请在原应用核实"
             failedApprovals.insert(request.taskID)
-            mediumUntil = now().addingTimeInterval(10)
-            eventPulseUntil = mediumUntil
-            highlightedTaskID = request.taskID
+            if let session = request.hostSessionID { failedApprovalSessions[request.taskID] = session }
             closeApproval()
+            showApprovalOutcome(.failed, expired ? "已超时 · 回 App 处理" : "已在别处处理", task: request.taskID, seconds: 10)
+            eventPulseUntil = mediumUntil
             return
         }
         notice = "已提交本次决定，等待 Agent 的真实回调"
         submittedApprovals[request.id] = now()
         failedApprovals.remove(request.taskID)
         closeApproval()
+        showApprovalOutcome(decision == .allow ? .allowed : .denied, decision == .allow ? "已允许" : "已拒绝",
+                            task: request.taskID, seconds: 1.6)
+        continueWithNextApproval(after: request)
     }
     /// One exact open card in the request's own session and tool, shown within
     /// seconds of the request (the hook returns at once, so Desktop shows its
@@ -716,7 +813,14 @@ final class TaskStore: ObservableObject {
 
     func samplePointer(inside: Bool, at time: TimeInterval) {
         guard !contextMenuIsOpen else { return }
-        guard reviewingApproval == nil else { return }
+        if reviewingApproval != nil {
+            if inside != approvalPointerInside {
+                approvalPointerInside = inside
+                if !inside { approvalPointerLeftAt = now() }
+            }
+            if inside && approvalMinimized { revealApproval() }
+            return
+        }
         let previous = interaction
         interaction.samplePointer(inside: inside, at: time)
         if interaction != previous { refreshPresentation() }
@@ -1435,21 +1539,35 @@ final class TaskStore: ObservableObject {
         if let request = reviewingApproval,
            tasks.first(where: { $0.id == request.taskID }).flatMap({ approvalRequest(for: $0) }) != request {
             reviewingApproval = nil
+            approvalMinimized = false
+            approvalHoldStartedAt = nil
+            approvalReviewExpanded = false
             interaction = IslandInteraction()
             if let current = tasks.first(where: { $0.id == request.taskID }),
                current.status == .waiting, current.approvalRequestID == request.id,
                now() >= request.expiresAt {
                 notice = "批准请求已过期或被处理，请在原应用核实"
                 failedApprovals.insert(request.taskID)
-                mediumUntil = now().addingTimeInterval(10)
+                if let session = request.hostSessionID { failedApprovalSessions[request.taskID] = session }
+                showApprovalOutcome(.failed, "已超时 · 回 App 处理", task: request.taskID, seconds: 10)
                 eventPulseUntil = mediumUntil
-                highlightedTaskID = request.taskID
+            } else if !pendingApprovalTasks.isEmpty {
+                // Answered in the app or on Feishu: move straight to the next one.
+                continueWithNextApproval(after: request)
+                if reviewingApproval != nil { return }
             }
         }
         if reviewingApproval != nil {
-            if presentation != .medium { presentation = .medium }
+            // Ignored for a while (and not being held or read): tuck back into the notch.
+            if !approvalMinimized, !approvalPointerInside, approvalHoldStartedAt == nil,
+               now().timeIntervalSince(max(approvalCardShownAt, approvalPointerLeftAt)) >= Self.approvalMinimizeDelay {
+                approvalMinimized = true
+            }
+            let target: Presentation = approvalMinimized ? .medium : .approval
+            if presentation != target { presentation = target }
             return
         }
+        if let outcome = approvalOutcome, now() >= outcome.until { approvalOutcome = nil }
         if now() >= calibrationUntil, calibrationPreview != nil { calibrationPreview = nil }
         if let calibrationPreview {
             if presentation != calibrationPreview { presentation = calibrationPreview }
