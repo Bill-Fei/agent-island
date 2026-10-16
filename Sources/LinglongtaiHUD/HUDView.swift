@@ -1,3 +1,4 @@
+import AppKit
 import LinglongtaiShared
 import SwiftUI
 
@@ -34,6 +35,14 @@ struct HUDRootView: View {
                     .opacity(frame.heavyOpacity)
                     .allowsHitTesting(store.presentation == .heavy && frame.heavyOpacity >= 0.95)
                     .accessibilityHidden(store.presentation != .heavy)
+                if let request = store.displayedApproval {
+                    ApprovalReviewView(request: request, store: store)
+                        .scaleEffect(frame.approvalScale, anchor: .top)
+                        .padding(.top, surface.layout.safeTop)
+                        .opacity(frame.approvalOpacity)
+                        .allowsHitTesting(store.presentation == .approval && frame.approvalOpacity >= 0.95)
+                        .accessibilityHidden(store.presentation != .approval)
+                }
             }
             .frame(width: frame.width, height: frame.height, alignment: .top)
             .clipShape(shape)
@@ -195,18 +204,30 @@ private struct HUDActivityContent: View {
             activityWing(for: .medium, alignment: .trailing) { mediumStatus }
         }
         .help("连续悬停 0.2 秒或点击查看详情")
-        .popover(item: Binding(get: { store.reviewingApproval }, set: { if $0 == nil { store.closeApproval() } }), arrowEdge: .top) { request in
-            ApprovalReviewView(request: request, store: store)
-        }
     }
 
     private var mediumStatus: some View {
         Group {
             // A failed decision has no live relay request, so approvalTask is
             // nil by then; the feedback must follow the highlighted task.
-            if let task = store.activeTask, store.failedApprovals.contains(task.id) {
-                detailButton(title: "未提交决定", tint: HUDColorTokens.attention)
-                    .help("请在原应用核实；没有自动批准")
+            if let outcome = store.approvalOutcome {
+                outcomeLabel(outcome)
+            } else if store.reviewingApproval != nil, store.approvalMinimized {
+                // Ignored card tucked into the notch; hover or click brings it back.
+                Button { store.revealApproval() } label: {
+                    HStack(spacing: 5) {
+                        Circle().fill(HUDColorTokens.attention).frame(width: 6, height: 6)
+                            .modifier(AgentActivityEffect(executing: true, visible: animationActive))
+                        Text(store.pendingApprovalTasks.count > 1 ? LF("%lld 项等你批准", store.pendingApprovalTasks.count) : L("等你批准"))
+                    }
+                    .foregroundStyle(HUDColorTokens.attention)
+                    .padding(.horizontal, 9).padding(.vertical, 3)
+                    .background(HUDColorTokens.attention.opacity(0.18), in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .help("有请求等你批准，移到岛上即可展开")
+            } else if let task = store.activeTask, store.failedApprovals.contains(task.id) {
+                failedButton(task: task, text: "回 App 处理")
             } else if let task = store.approvalTask, store.approvalRequest(for: task) != nil,
                       store.calibrationPreview == nil {
                 Button("批准…") { store.reviewApproval(for: task) }
@@ -215,12 +236,47 @@ private struct HUDActivityContent: View {
                     .background(HUDColorTokens.attention.opacity(0.18), in: Capsule())
                     .help("查看本次请求并直接批准，无需打开应用")
             } else if let task = store.activeTask, store.approvalFeedback(for: task) != nil {
-                detailButton(title: "等待回执", tint: HUDColorTokens.attention)
+                detailButton(title: "等 App 确认", tint: HUDColorTokens.attention)
             } else {
                 detailButton(title: store.mediumStatusText, tint: .white.opacity(0.8))
             }
         }
         .font(.system(size: 12, weight: .medium, design: .rounded))
+    }
+
+    @ViewBuilder private func outcomeLabel(_ outcome: TaskStore.ApprovalOutcome) -> some View {
+        switch outcome.kind {
+        case .allowed:
+            Label(L(outcome.text), systemImage: "checkmark.circle.fill")
+                .foregroundStyle(Color(red: 0.3, green: 0.85, blue: 0.45))
+                .frame(maxWidth: .infinity, minHeight: surface.layout.notchHeight, alignment: .trailing)
+        case .denied:
+            Label(L(outcome.text), systemImage: "xmark.circle.fill")
+                .foregroundStyle(.white.opacity(0.7))
+                .frame(maxWidth: .infinity, minHeight: surface.layout.notchHeight, alignment: .trailing)
+        case .failed:
+            if let task = store.tasks.first(where: { $0.id == outcome.taskID }) {
+                failedButton(task: task, text: outcome.text)
+            }
+        }
+    }
+
+    /// Failure says what happened and goes straight to where it can be handled.
+    private func failedButton(task: AgentTask, text: String) -> some View {
+        Button {
+            if let url = store.openFailedApproval(task) { NSWorkspace.shared.open(url) }
+            else { AgentPresence.shared.open(task.profile.kind) }
+        } label: {
+            HStack(spacing: 4) {
+                Text(L(text))
+                Image(systemName: "arrow.up.forward").font(.system(size: 9, weight: .bold))
+            }
+            .foregroundStyle(HUDColorTokens.attention)
+            .frame(maxWidth: .infinity, minHeight: surface.layout.notchHeight, alignment: .trailing)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("没有自动批准；点这里打开对应的对话处理")
     }
 
     private func detailButton(title: String, tint: Color) -> some View {
@@ -242,6 +298,7 @@ private struct HUDExpandedContent: View {
     @ObservedObject var store: TaskStore
     @ObservedObject private var presence = AgentPresence.shared
     @ObservedObject private var conversationTitles = ConversationTitleStore.shared
+    @ObservedObject private var stepList = StepListDisclosure.shared
 
     var body: some View {
         let sections = TaskVisualSection.grouped(store.sortedTasks.map { task in
@@ -408,9 +465,24 @@ private struct HUDExpandedContent: View {
                         Text(L(error)).font(HUDTypography.caption)
                             .foregroundStyle(HUDColorTokens.attention).padding(.top, 8)
                     }
+                    // Fixed identity: which conversation, and its state at a glance.
+                    Text(L(conversationTitles.title(for: task)))
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 14)
+                        .textSelection(.enabled)
                     HStack(spacing: 8) {
                         TaskStateIndicator(state: state, visible: store.presentation == .heavy,
-                                           label: store.displayedStatus(for: task))
+                                           label: store.plainStatus(for: task))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(state.tint.opacity(0.14), in: Capsule())
+                        Text(task.updatedAt, style: .time).monospacedDigit()
+                            .font(HUDTypography.caption).foregroundStyle(.secondary)
+                        Spacer(minLength: 0)
                         if state == .failed {
                             Button {
                                 store.resyncStatus(for: task)
@@ -426,65 +498,40 @@ private struct HUDExpandedContent: View {
                             .accessibilityLabel("重新同步状态，不会重新执行任务")
                         }
                     }
-                    .padding(.top, 12)
-                    Text(L(conversationTitles.title(for: task)))
-                        .font(HUDTypography.body)
-                        .foregroundStyle(.white.opacity(0.72))
-                        .lineLimit(3)
-                        .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 8)
+
+                    // A hairline marks where the fixed part ends; the fade at the
+                    // bottom says there is more below.
+                    Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1)
+                        .padding(.top, 14)
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 16) {
+                            outcomeCard(for: task, state: state)
+                            stepSummary(for: task, state: state)
+                        }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.top, 14)
-                        .textSelection(.enabled)
-                    HStack {
-                        Text("会话线索 · \(String(task.id.uuidString.prefix(6)))")
-                        Text(task.updatedAt, style: .time).monospacedDigit()
-                        Spacer()
-                        Button("复制会话线索") {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(conversationTitles.title(for: task) + "\n" + task.agent + " · " + String(task.id.uuidString.prefix(6)), forType: .string)
-                        }.buttonStyle(.plain)
-                    }.font(HUDTypography.caption).foregroundStyle(.secondary).padding(.top, 6)
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text(L(state == .unknown || state == .untracked ? "状态说明" : state.group == .ended ? "最后状态" : "当前步骤"))
-                                .font(HUDTypography.captionEmphasis).foregroundStyle(.secondary)
-                            Text(L(state.unknownExplanation ?? store.currentStepText(for: task)))
-                                .font(HUDTypography.bodyEmphasis)
-                                .foregroundStyle(.white.opacity(0.9))
-                                .fixedSize(horizontal: false, vertical: true)
-                            Text("已执行步骤").font(HUDTypography.captionEmphasis).foregroundStyle(.secondary)
-                            if task.returnedToolSteps.isEmpty {
-                                Text("尚未收到工具完成事件").font(HUDTypography.body).foregroundStyle(.secondary)
-                            } else {
-                                Text(task.hasUnidentifiedToolSteps ? LF("收到 %lld 条工具返回记录 · 未提供唯一步骤标识", task.returnedToolSteps.count) : LF("%lld 个工具步骤已返回", task.returnedToolSteps.count))
-                                    .font(HUDTypography.caption).foregroundStyle(.secondary)
-                                ForEach(Array(task.returnedToolSteps.prefix(30))) { step in
-                                    HStack(alignment: .top) {
-                                        Image(systemName: step.state == .failed ? "exclamationmark.circle" : "arrow.turn.down.right")
-                                        Text(L(step.label) + L(step.state == .failed ? " · 返回错误" : " · 已返回"))
-                                            .fixedSize(horizontal: false, vertical: true)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                        Spacer()
-                                        Text(step.updatedAt, style: .time).foregroundStyle(.secondary)
-                                    }.font(HUDTypography.body)
-                                }
-                                if task.returnedToolSteps.count > 30 {
-                                    Text("显示最近 30 条，计数包含全部返回记录").font(HUDTypography.caption).foregroundStyle(.secondary)
-                                }
-                            }
-                        }.frame(maxWidth: .infinity, alignment: .leading)
+                        // Same as the task list: the scroll runs to the pane's
+                        // bottom edge and the breathing room lives inside it.
+                        .padding(.bottom, 24)
                     }
                     .frame(maxHeight: .infinity, alignment: .top)
-                    .padding(.top, 14)
+                    .mask(
+                        VStack(spacing: 0) {
+                            Color.black
+                            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                                .frame(height: 20)
+                        }
+                    )
 
                     if hasDetailActions(for: task) {
                         actionBar(for: task)
                             .padding(.top, 12)
+                            .padding(.bottom, 12)
                     }
                 }
                 .padding(.horizontal, 18)
                 .padding(.top, 14)
-                .padding(.bottom, 12)
             } else {
                 VStack(spacing: 12) {
                     Image(systemName: "sparkles")
@@ -511,15 +558,140 @@ private struct HUDExpandedContent: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func hasDetailActions(for task: AgentTask) -> Bool {
-        store.approvalRequest(for: task) != nil || store.displayedStatus(for: task) == "结果未知"
-            || detailFooterText(for: task) != nil
+    /// One tinted card that says where things stand and where to go next.
+    /// The island never reads replies, so finished work points back to the app.
+    @ViewBuilder private func outcomeCard(for task: AgentTask, state: TaskVisualState) -> some View {
+        let app = L(task.profile.kind == .custom ? "原应用" : task.agent)
+        let text: String = {
+            switch state {
+            case .completed: return LF("回复和改动在 %@ 里", app)
+            case .failed: return LF("出错了 · 去 %@ 看原因", app)
+            case .cancelled: return task.sourceEvent == "SessionEnd" ? "会话已关闭" : "这一轮被中断了"
+            case .unknown, .untracked: return state.unknownExplanation ?? store.currentStepText(for: task)
+            default: return store.currentStepText(for: task)
+            }
+        }()
+        let opens = task.profile.kind != .custom && [.completed, .failed, .attention, .checkingPermission].contains(state)
+        let tint = state == .completed ? HUDColorTokens.success : state.tint
+        let card = HStack(alignment: .center, spacing: 10) {
+            if state.animates {
+                CompactActivityGlyph(height: 20, active: store.presentation == .heavy)
+                    .frame(width: 13, height: 13)
+                    .foregroundStyle(tint)
+            } else {
+                Image(systemName: state.symbol)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(tint)
+            }
+            Text(L(text))
+                .font(HUDTypography.bodyEmphasis)
+                .foregroundStyle(.white.opacity(0.9))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if opens {
+                HStack(spacing: 3) {
+                    Text("查看")
+                    Image(systemName: "arrow.up.forward").font(.system(size: 9, weight: .bold))
+                }
+                .font(HUDTypography.captionEmphasis)
+                .foregroundStyle(HUDColorTokens.info)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(tint.opacity(0.18)))
+        if opens {
+            Button { presence.open(task.profile.kind) } label: { card.contentShape(Rectangle()) }
+                .buttonStyle(.plain)
+                .disabled(presence.opening.contains(task.profile.kind))
+                .help("打开 \(app)")
+        } else {
+            card
+        }
     }
 
-    private func detailFooterText(for task: AgentTask) -> String? {
-        store.approvalFeedback(for: task)
-            ?? store.approvalSurfaceText(for: task)
-            ?? (store.needsUserAttention(task) && store.approvalRequest(for: task) == nil ? "需在原应用确认" : nil)
+    @ViewBuilder private func stepSummary(for task: AgentTask, state: TaskVisualState) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(L(state.group == .ended ? "做了什么" : "已完成的步骤"))
+                .font(HUDTypography.captionEmphasis).foregroundStyle(.secondary)
+            let counts = task.toolStepCounts
+            if counts.isEmpty {
+                Text(L(state.group == .ended ? "没有收到工具记录" : "还没有完成的步骤"))
+                    .font(HUDTypography.body).foregroundStyle(.secondary)
+            } else {
+                let failed = task.failedToolStepCount
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 64), spacing: 8)], alignment: .leading, spacing: 8) {
+                    ForEach(counts, id: \.verb) { item in
+                        countTile(value: item.count, label: item.verb, tint: .white)
+                    }
+                    if failed > 0 {
+                        countTile(value: failed, label: "出错", tint: HUDColorTokens.attention)
+                    }
+                }
+                if task.hasUnidentifiedToolSteps {
+                    Text("部分步骤没有编号，次数可能偏多")
+                        .font(HUDTypography.caption).foregroundStyle(.secondary)
+                }
+                // Tiles already tell short turns; the list is only worth it for longer ones.
+                if task.returnedToolSteps.count >= 3 {
+                    let expanded = stepList.expandedTaskID == task.id
+                    Button {
+                        stepList.expandedTaskID = expanded ? nil : task.id
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(L(expanded ? "收起明细" : "查看明细"))
+                            Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 9, weight: .semibold))
+                        }
+                        .font(HUDTypography.caption)
+                        .foregroundStyle(HUDColorTokens.info)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 2)
+                    if expanded {
+                        VStack(alignment: .leading, spacing: 7) {
+                            ForEach(Array(task.returnedToolSteps.prefix(30))) { step in
+                                HStack(alignment: .top) {
+                                    Text(L(step.label) + (step.state == .failed ? L(" · 出错") : ""))
+                                        .foregroundStyle(step.state == .failed ? HUDColorTokens.attention : .white.opacity(0.72))
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                    Text(step.updatedAt, style: .time).monospacedDigit().foregroundStyle(.secondary)
+                                }.font(HUDTypography.caption)
+                            }
+                            if task.returnedToolSteps.count > 30 {
+                                Text("只列出最近 30 条，上面的次数包含全部").font(HUDTypography.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(10)
+                        .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                }
+            }
+        }
+    }
+
+    private func countTile(value: Int, label: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("\(value)")
+                .font(.system(size: 18, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(tint)
+            Text(L(label))
+                .font(HUDTypography.caption)
+                .foregroundStyle(tint == .white ? .white.opacity(0.5) : tint.opacity(0.8))
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(tint.opacity(tint == .white ? 0.05 : 0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func hasDetailActions(for task: AgentTask) -> Bool {
+        // No footer caption: the status pill and the outcome card already say
+        // where to act, and the steps get the space down to the pane's edge.
+        store.approvalRequest(for: task) != nil || store.displayedStatus(for: task) == "结果未知"
     }
 
     private func actionBar(for task: AgentTask) -> some View {
@@ -529,28 +701,24 @@ private struct HUDExpandedContent: View {
                     store.reviewApproval(for: task)
                 }
             }
-            HStack(alignment: .bottom, spacing: 8) {
-                if store.displayedStatus(for: task) == "结果未知" {
-                    Button("从岛上移除") { store.dismissTask(task) }
-                        .font(HUDTypography.caption)
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                        .fixedSize()
-                        .help("只移除本地显示，不会停止 Agent；后续真实事件仍可再次出现。")
-                }
-                Spacer(minLength: 8)
-                if let footerText = detailFooterText(for: task) {
-                    Text(L(footerText))
-                        .font(HUDTypography.caption)
-                        .foregroundStyle(.white.opacity(0.32))
-                        .multilineTextAlignment(.trailing)
-                        .lineLimit(2)
-                }
+            if store.displayedStatus(for: task) == "结果未知" {
+                Button("从岛上移除") { store.dismissTask(task) }
+                    .font(HUDTypography.caption)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .fixedSize()
+                    .help("只移除本地显示，不会停止 Agent；后续真实事件仍可再次出现。")
             }
         }
     }
 }
 
+
+/// Which task's step list is open. Keyed by task so switching tasks closes it.
+private final class StepListDisclosure: ObservableObject {
+    static let shared = StepListDisclosure()
+    @Published var expandedTaskID: UUID?
+}
 
 private struct LiveOrb: View {
     var size: CGFloat = 24
@@ -631,13 +799,14 @@ private struct TaskRow: View {
 
     private var isEnded: Bool { state.group == .ended }
     private var isEmphasized: Bool { state.group == .active }
-    // Translated once here; inline in the body they push the type checker past its limit.
+    // Precomputed so the row body stays cheap for the type checker.
     private var agentName: String { L(task.agent) }
     private var displayTitle: String { L(title) }
     private var stateText: String { L(state.label) }
-    private var spokenSummary: String {
+    private var accessibilityText: String {
         LF("%@，%@，%@", agentName, displayTitle, stateText) + (isSelected ? L("，已选中") : "")
     }
+    private var helpText: String { displayTitle + " · " + stateText }
 
     var body: some View {
         Button(action: onSelect) {
@@ -692,9 +861,9 @@ private struct TaskRow: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(spokenSummary)
+        .accessibilityLabel(accessibilityText)
         .accessibilityAddTraits(.isButton)
-        .help(displayTitle + " · " + stateText)
+        .help(helpText)
     }
 }
 

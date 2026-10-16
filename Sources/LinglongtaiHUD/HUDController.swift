@@ -143,6 +143,10 @@ final class HUDController: NSObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.positionOnNotchedScreen() }
             .store(in: &cancellables)
+        store.$approvalReviewExpanded.removeDuplicates().dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.positionOnNotchedScreen() }
+            .store(in: &cancellables)
     }
 
     private func configureContextMenu() {
@@ -179,9 +183,12 @@ final class HUDController: NSObject {
             guard let self, self.panel.isVisible, !self.hiding else { return }
             self.store.reviewPendingApproval()
         }
+        // Re-arm on every reveal, including a card brought back from the
+        // minimized notch, so a keystroke never decides an unseen request.
         store.$reviewingApproval.map { $0?.id }.removeDuplicates()
-            .sink { [weak self] id in
-                guard let self, id != nil else { return }
+            .combineLatest(store.$approvalMinimized.removeDuplicates())
+            .sink { [weak self] id, minimized in
+                guard let self, id != nil, !minimized else { return }
                 self.approvalOpenedAt = ProcessInfo.processInfo.systemUptime
                 self.panel.makeKey()
             }
@@ -229,7 +236,8 @@ final class HUDController: NSObject {
             heightAdjustment: store.notchOffset,
             widthAdjustment: store.notchWidthAdjustment,
             activityWidth: store.activityWidth,
-            mediumWingWidth: store.mediumWingWidth
+            mediumWingWidth: store.mediumWingWidth,
+            approvalExpanded: store.approvalReviewExpanded
         )
         let left = screen.auxiliaryTopLeftArea ?? .zero
         let right = screen.auxiliaryTopRightArea ?? .zero

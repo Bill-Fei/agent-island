@@ -31,6 +31,31 @@ final class TaskStore: ObservableObject {
     @Published private(set) var demoPreviewActive = false
     @Published private(set) var connections: [String: Date] = [:]
     @Published private(set) var reviewingApproval: ApprovalRelay.Request?
+    /// Full parameters shown in the review card; collapsed for every new review.
+    @Published var approvalReviewExpanded = false
+    /// The card shrank back to the notch after being ignored; hover brings it back.
+    @Published private(set) var approvalMinimized = false
+    /// Last card content, kept so the card does not go blank while it closes.
+    @Published private(set) var displayedApproval: ApprovalRelay.Request?
+    /// Start of a press-and-hold on a risky Allow; nil when not holding.
+    @Published private(set) var approvalHoldStartedAt: Date?
+    /// Short result shown in the notch right after a decision.
+    @Published private(set) var approvalOutcome: ApprovalOutcome?
+    private var approvalCardShownAt = Date.distantPast
+    private var approvalPointerInside = false
+    private var approvalPointerLeftAt = Date.distantPast
+    /// Where a failed request lives, so the notch can jump straight there.
+    private var failedApprovalSessions: [UUID: String] = [:]
+    static let approvalMinimizeDelay: TimeInterval = 8
+    static let approvalHoldDuration: TimeInterval = 0.6
+
+    struct ApprovalOutcome: Equatable {
+        enum Kind: Equatable { case allowed, denied, failed }
+        var kind: Kind
+        var text: String
+        var taskID: UUID
+        var until: Date
+    }
     @Published private(set) var submittedApprovals: [UUID: Date] = [:]
     @Published private(set) var failedApprovals: Set<UUID> = []
     @Published private(set) var claudeChatDiagnostic = "Claude Chat：等待窗口检查"
@@ -47,6 +72,9 @@ final class TaskStore: ObservableObject {
               let id = current.approvalRequestID else { return nil }
         guard let request = ApprovalRelay.pending(id, taskID: task.id, now: now()),
               request.provider == task.profile.kind else { return nil }
+        // Desktop checks permissions it then auto-approves; only its own card,
+        // recorded in its log, proves there is a decision waiting for the user.
+        if request.hostSessionID != nil, hostPrompt(for: request) == nil { return nil }
         return request
     }
 
@@ -59,33 +87,35 @@ final class TaskStore: ObservableObject {
     }
 
     func approvalFeedback(for task: AgentTask) -> String? {
-        if failedApprovals.contains(task.id) { return "未提交决定 · 请在原应用核实" }
+        if failedApprovals.contains(task.id) { return "没批成功 · 回 App 处理" }
         guard let id = task.approvalRequestID, let date = submittedApprovals[id], task.status == .waiting else { return nil }
-        return now().timeIntervalSince(date) < 30 ? "已提交决定 · 等待回执" : "尚未收到回执 · 请核实"
+        return now().timeIntervalSince(date) < 30 ? "已发送，等 App 确认" : "App 还没确认 · 回 App 看看"
     }
 
     /// Explain where the user must make a decision. A PermissionRequest is
     /// only a permission check until the relay publishes a live request.
     func approvalSurfaceText(for task: AgentTask) -> String? {
         guard task.status == .waiting else { return nil }
-        if approvalRequest(for: task) != nil { return "岛内单次审批" }
-        if task.profile.kind == .claude, task.sourceEvent == "PermissionRequest" { return "权限检查 · 无岛内操作" }
-        if task.profile.kind == .claude, task.sourceEvent == "Notification" { return "原应用通知 · 岛内仅观察" }
+        if approvalRequest(for: task) != nil { return "可以在岛上批准" }
+        if codexPromptInApp(task) { return "在 Codex 里批准" }
+        if task.profile.kind == .claude, ["PermissionRequest", "Notification"].contains(task.sourceEvent ?? "") { return "在 App 里处理" }
         return nil
     }
 
     func currentStepText(for task: AgentTask) -> String {
         if task.sourceEvent == "ClaudeChatUnknown" { return task.detail }
         if let feedback = approvalFeedback(for: task) { return feedback }
-        if approvalRequest(for: task) != nil { return "岛内单次审批 · 请核对本次工具操作" }
+        if approvalRequest(for: task) != nil { return "等你批准 · 看清要做什么再点" }
         if displayedStatus(for: task) == "结果未知" { return "未收到结束信号，无法确认结果" }
+        if codexPromptInApp(task) {
+            return needsUserAttention(task) ? "Codex 等你批准 · 请在 Codex 里处理" : "Codex 正在确认权限"
+        }
         if task.status == .waiting && task.sourceEvent == "PermissionRequest" {
-            return task.profile.kind == .claude
-                ? "应用正在核对工具权限，尚未确认需要你操作；灵动岛不接管本次检查"
-                : "应用正在核对工具权限，灵动岛不接管审批"
+            // Never send the user hunting for a prompt that may not exist.
+            return "\(task.agent) 正在确认权限；需要你批准时会在 App 里问你"
         }
         if task.status == .waiting && task.sourceEvent == "Notification", task.profile.kind == .claude {
-            return "收到原应用确认通知 · 灵动岛仅观察，无法核实原窗口是否仍需操作"
+            return "\(task.agent) 可能在等你确认，请回 App 查看"
         }
         if task.sourceEvent == "PreToolUse",
            let step = task.toolSteps.filter({ $0.state == .running }).max(by: { $0.updatedAt < $1.updatedAt }) {
@@ -95,32 +125,177 @@ final class TaskStore: ObservableObject {
     }
 
     func reviewApproval(for task: AgentTask) {
+        approvalReviewExpanded = false
+        approvalMinimized = false
+        approvalHoldStartedAt = nil
+        approvalCardShownAt = now()
         reviewingApproval = approvalRequest(for: task)
+        if let request = reviewingApproval { displayedApproval = request }
         refreshPresentation()
     }
 
     func closeApproval() {
         reviewingApproval = nil
+        approvalMinimized = false
+        approvalHoldStartedAt = nil
+        approvalReviewExpanded = false
         resetInteraction()
+    }
+
+    /// Bring a minimized card back (hover or the notch's 待批 control).
+    func revealApproval() {
+        guard reviewingApproval != nil, approvalMinimized else { return }
+        approvalMinimized = false
+        approvalCardShownAt = now()
+        refreshPresentation()
+    }
+
+    /// Requests a person could act on right now, oldest first.
+    var pendingApprovalTasks: [AgentTask] {
+        currentActivityTasks.filter { needsUserAttention($0) && approvalRequest(for: $0) != nil }
+            .sorted { $0.updatedAt < $1.updatedAt }
+    }
+
+    /// Risky commands need a press-and-hold; a click or ⌘↩ never allows them.
+    func approvalNeedsHold(_ request: ApprovalRelay.Request) -> Bool {
+        if let fields = ApprovalShortcut.fields(fromContext: request.context) { return !ApprovalRisk.labels(in: fields).isEmpty }
+        return !ApprovalRisk.matches(in: request.context).isEmpty
+    }
+
+    func beginApprovalHold() {
+        guard reviewingApproval != nil, approvalHoldStartedAt == nil else { return }
+        let started = now()
+        approvalHoldStartedAt = started
+        // Completes on its own once held long enough; releasing earlier cancels.
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.approvalHoldDuration) { [weak self] in
+            guard let self, self.approvalHoldStartedAt == started else { return }
+            self.finishApprovalHold()
+        }
+    }
+
+    func cancelApprovalHold() { approvalHoldStartedAt = nil }
+
+    /// Completed hold: allow only if it really lasted the full duration.
+    func finishApprovalHold() {
+        guard let request = reviewingApproval, let started = approvalHoldStartedAt,
+              now().timeIntervalSince(started) >= Self.approvalHoldDuration - 0.05 else {
+            approvalHoldStartedAt = nil
+            return
+        }
+        approvalHoldStartedAt = nil
+        respondToApproval(request, decision: .allow)
+    }
+
+    /// The failed notch control: open the exact conversation when known.
+    func openFailedApproval(_ task: AgentTask) -> URL? {
+        guard let session = failedApprovalSessions[task.id] else { return nil }
+        return URL(string: "claude://claude.ai/epitaxy/\(session)")
+    }
+
+    private func showApprovalOutcome(_ kind: ApprovalOutcome.Kind, _ text: String, task: UUID, seconds: TimeInterval) {
+        approvalOutcome = ApprovalOutcome(kind: kind, text: text, taskID: task, until: now().addingTimeInterval(seconds))
+        mediumUntil = max(mediumUntil, now().addingTimeInterval(seconds))
+        highlightedTaskID = task
+    }
+
+    /// After one decision, the next waiting request takes the same card.
+    private func continueWithNextApproval(after request: ApprovalRelay.Request) {
+        guard let next = pendingApprovalTasks.first(where: { $0.approvalRequestID != request.id }) else { return }
+        select(next)
+        reviewApproval(for: next)
     }
 
     func respondToApproval(_ request: ApprovalRelay.Request, decision: ApprovalRelay.Decision) {
         guard let task = tasks.first(where: { $0.id == request.taskID }),
               approvalRequest(for: task) == request,
               ApprovalRelay.respond(to: request, decision: decision) else {
+            let expired = now() >= request.expiresAt
             notice = "批准请求已过期或被处理，请在原应用核实"
             failedApprovals.insert(request.taskID)
-            mediumUntil = now().addingTimeInterval(10)
-            eventPulseUntil = mediumUntil
-            highlightedTaskID = request.taskID
+            if let session = request.hostSessionID { failedApprovalSessions[request.taskID] = session }
             closeApproval()
+            showApprovalOutcome(.failed, expired ? "已超时 · 回 App 处理" : "已在别处处理", task: request.taskID, seconds: 10)
+            eventPulseUntil = mediumUntil
             return
         }
         notice = "已提交本次决定，等待 Agent 的真实回调"
         submittedApprovals[request.id] = now()
         failedApprovals.remove(request.taskID)
         closeApproval()
+        showApprovalOutcome(decision == .allow ? .allowed : .denied, decision == .allow ? "已允许" : "已拒绝",
+                            task: request.taskID, seconds: 1.6)
+        continueWithNextApproval(after: request)
     }
+    /// One exact open card in the request's own session and tool, shown within
+    /// seconds of the request (the hook returns at once, so Desktop shows its
+    /// card immediately). Two open cards in a session are ambiguous. Once
+    /// matched, the request is bound to that card ID and never to another.
+    func hostPrompt(for request: ApprovalRelay.Request) -> ClaudePromptLog.Prompt? {
+        guard let session = request.hostSessionID, let created = request.createdAt else { return nil }
+        let prompts = promptLog.openPrompts(in: session)
+        guard prompts.count == 1, let prompt = prompts.first, prompt.tool == request.toolName else { return nil }
+        if let bound = hostBindings[request.id] { return bound == prompt.id ? prompt : nil }
+        // Log stamps are whole seconds; the request time is not.
+        let delay = prompt.shownAt.timeIntervalSince(created)
+        guard delay >= -2, delay <= 5 else { return nil }
+        // A card already bound to another request is not this request's card.
+        guard !hostBindings.values.contains(prompt.id) else { return nil }
+        hostBindings[request.id] = prompt.id
+        if hostBindings.count > 64 { hostBindings = hostBindings.filter { $0.key == request.id } }
+        return prompt
+    }
+
+    /// Codex's PermissionRequest is a real prompt. Codex shows its own card only
+    /// once every hook has returned, so while an island request is live the
+    /// prompt is on the island; once it is gone (answered elsewhere, expired,
+    /// or never published) the card is in Codex.
+    func codexPromptInApp(_ task: AgentTask) -> Bool {
+        task.profile.kind == .codex && task.status == .waiting && task.sourceEvent == "PermissionRequest" &&
+            approvalRequest(for: task) == nil &&
+            // Decided on the island: Codex is applying it, not asking again.
+            task.approvalRequestID.map { submittedApprovals[$0] == nil } ?? true
+    }
+
+    /// An approval answered in the Codex app sends no hook; once its rollout
+    /// shows the turn moving on, the task is running again (and animates).
+    func resolveCodexApprovalsAnsweredInApp() {
+        guard now().timeIntervalSince(lastCodexRolloutPoll) >= 2 || now() < lastCodexRolloutPoll else { return }
+        lastCodexRolloutPoll = now()
+        codexAppLog.poll(now: now())
+        let prompts = tasks.indices.filter { codexPromptInApp(tasks[$0]) && isFresh(tasks[$0]) }
+        var changed = false
+        for index in prompts {
+            let task = tasks[index]
+            // Codex's own log names the card's session when it showed it; an
+            // unnamed answer can only be attributed when one prompt is open.
+            let answer = codexAppLog.answers.last {
+                $0.at >= task.updatedAt.addingTimeInterval(-1) && ($0.session == task.sessionID || ($0.session == nil && prompts.count == 1))
+            }
+            guard answer != nil || codexRollout.progressed(session: task.sessionID, since: task.updatedAt, now: now()) else { continue }
+            tasks[index].status = .running
+            tasks[index].requiresApproval = false
+            tasks[index].sourceEvent = "CodexApprovalAnswered"
+            tasks[index].detail = answer?.accepted == false ? "已在 Codex 里拒绝，继续本轮" : "已在 Codex 里批准，继续执行"
+            changed = true
+        }
+        guard changed else { return }
+        invalidateTaskCache()
+        refreshPresentation()
+        saveTasksInBackground()
+    }
+
+    func pollHostPrompts() {
+        guard promptLog.poll(now: now()) else { return }
+        invalidateTaskCache()
+        for task in tasks {
+            guard let id = task.approvalRequestID, !tracedHostActionable.contains(id),
+                  let request = approvalRequest(for: task), request.hostSessionID != nil else { continue }
+            tracedHostActionable.insert(id)
+            ApprovalTrace.record(id, "hud-actionable")
+        }
+        refreshPresentation()
+    }
+
     private var previewTasks: [AgentTask] = [] {
         didSet { invalidateTaskCache() }
     }
@@ -164,6 +339,19 @@ final class TaskStore: ObservableObject {
     private var claudeNotificationStarts: [UUID: Date] = [:]
     private var surfacedClaudeNotifications: [UUID: Date] = [:]
     private var approvalRequestStarts: [UUID: Date] = [:]
+    /// Desktop's own card lifecycle, followed from its log (see ClaudePromptLog).
+    private var promptLog = ClaudePromptLog(urls: [])
+    /// Codex answers approvals in its own card without any hook; its rollout shows it.
+    private var codexRollout = CodexRollout(root: LinglongtaiPaths.applicationSupport.appendingPathComponent("fixture-codex-sessions"))
+    private var lastCodexRolloutPoll = Date.distantPast
+    private var codexAppLog = CodexAppLog(root: LinglongtaiPaths.applicationSupport.appendingPathComponent("fixture-codex-logs"))
+    /// Codex shows its own card for a PermissionRequest; a brief settle keeps a
+    /// check it resolves on its own from popping the island.
+    private static let codexPromptSettleDelay: TimeInterval = 3
+    /// The first card matched to a request stays its only card.
+    private var hostBindings: [UUID: String] = [:]
+    private var tracedHostActionable: Set<UUID> = []
+
     private var surfacedApprovalRequests: Set<UUID> = []
     private static let notificationSettleDelay: TimeInterval = 2
     private static let approvalSettleDelay: TimeInterval = 1.2
@@ -256,6 +444,12 @@ final class TaskStore: ObservableObject {
         }
         LinglongtaiPaths.prepare()
         ApprovalRelay.cleanupExpired()
+        // Isolated runs follow a fixture inside their own data directory only.
+        promptLog = ClaudePromptLog(urls: isIsolatedRun
+            ? [LinglongtaiPaths.applicationSupport.appendingPathComponent("fixture-claude-main.log")]
+            : ClaudePromptLog.defaultURLs)
+        _ = promptLog.poll(now: now())
+        if !isIsolatedRun { codexRollout = CodexRollout(); codexAppLog = CodexAppLog() }
         loadTasks()
         selectedTaskID = sortedTasks.first?.id
         consumeEvents()
@@ -264,6 +458,8 @@ final class TaskStore: ObservableObject {
         let timer = Timer(timeInterval: 0.8, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.pollEvents()
+                self?.pollHostPrompts()
+                self?.resolveCodexApprovalsAnsweredInApp()
                 self?.consumeDoubaoTrajectories()
                 self?.refreshPresentation()
             }
@@ -455,6 +651,8 @@ final class TaskStore: ObservableObject {
                 task.updatedAt.addingTimeInterval(-5),
                 task.updatedAt,
                 (claudeNotificationStarts[task.id] ?? task.updatedAt).addingTimeInterval(Self.notificationSettleDelay),
+                task.updatedAt.addingTimeInterval(Self.codexPromptSettleDelay),
+                task.updatedAt.addingTimeInterval(ApprovalRelay.lifetime(for: .codex) + 0.1),
                 approvalRequestStarts.values.map { $0.addingTimeInterval(Self.approvalSettleDelay) }.min() ?? .distantFuture,
                 task.updatedAt.addingTimeInterval(120),
                 task.updatedAt.addingTimeInterval(DoubaoTrajectory.staleAfter),
@@ -478,8 +676,13 @@ final class TaskStore: ObservableObject {
     /// Keep the raw lifecycle state intact; this is a presentation distinction.
     func needsUserAttention(_ task: AgentTask) -> Bool {
         guard task.status == .waiting, task.sourceEvent != "AmbiguousTurn", isFresh(task) else { return false }
+        if codexPromptInApp(task) {
+            return now().timeIntervalSince(task.updatedAt) >= Self.codexPromptSettleDelay
+        }
         if task.approvalRequestID != nil || task.sourceEvent == "PermissionRequest" {
             guard let request = approvalRequest(for: task) else { return false }
+            // The card is already on screen; its log line needs no further settling.
+            if request.hostSessionID != nil { return true }
             let started = approvalRequestStarts[request.id] ?? task.updatedAt
             return now().timeIntervalSince(started) >= Self.approvalSettleDelay
         }
@@ -512,8 +715,6 @@ final class TaskStore: ObservableObject {
             .max { $0.updatedAt < $1.updatedAt }
     }
 
-    /// Display-only summary for Settings, so it is translated here rather than at render:
-    /// the age part is built from numbers and could not be looked up afterwards.
     func statusSummary(for kind: AgentKind) -> String {
         guard let task = liveTasks.first(where: { $0.profile.kind == kind }) else {
             if latestKnownLiveTask(for: kind) != nil { return L("当前无进行中的会话") }
@@ -526,9 +727,9 @@ final class TaskStore: ObservableObject {
         }
         if task.status == .running || task.status == .queued {
             let progress = task.progressKnown ? " · \(Int(task.progress * 100))%" : ""
-            return L(task.statusLabel) + progress + " · " + freshness
+            return L(plainStatus(for: task)) + progress + " · " + freshness
         }
-        return L(displayedStatus(for: task)) + " · " + freshness
+        return L(plainStatus(for: task)) + " · " + freshness
     }
 
     func connectionLabel(for kind: AgentKind) -> String {
@@ -551,6 +752,27 @@ final class TaskStore: ObservableObject {
             return task.approvalRequestID == nil ? "权限检查中" : "等待权限结果"
         }
         return task.statusLabel
+    }
+
+    /// The wording a person reads. displayedStatus stays the internal key that
+    /// visual-state mapping and checks rely on. Every surface (list, notch,
+    /// detail pill) says the same word for the same state:
+    /// 等你批准 / 在 App 里处理 / 正在执行 / 已完成 / 出错了 / 已停止.
+    func plainStatus(for task: AgentTask) -> String {
+        Self.plainWord(for: displayedStatus(for: task))
+    }
+
+    static func plainWord(for status: String) -> String {
+        switch status {
+        case "权限检查中", "确认通知观察中", "等待权限结果": return "在 App 里处理"
+        case "等待回执": return "已发送，等 App 确认"
+        case "等待确认": return "等你批准"
+        case "执行工具", "处理中", "运行中": return "正在执行"
+        case "本轮已结束", "已完成": return "已完成"
+        case "本轮响应失败", "失败": return "出错了"
+        case "本轮已中断": return "已停止"
+        default: return status
+        }
     }
 
     var activeTask: AgentTask? {
@@ -589,16 +811,17 @@ final class TaskStore: ObservableObject {
     /// wings, so it must be measured in the language it is shown in.
     var mediumStatusText: String {
         if calibrationPreview != nil { return L("中态预览") }
-        if waitingCount > 0 { return LF("%lld项待确认", waitingCount) }
+        if waitingCount > 0 { return waitingCount == 1 ? L("等你批准") : LF("%lld 项等你批准", waitingCount) }
         if let task = highlightedFeedbackTask,
            [.completed, .failed, .cancelled].contains(task.status) {
-            return currentActivityTasks.isEmpty ? L(task.statusLabel) : LF("1项结束 · %lld项进行中", currentActivityTasks.count)
+            let word = Self.plainWord(for: task.statusLabel)
+            return currentActivityTasks.isEmpty ? L(word) : L(word) + " · " + LF("%lld 项正在执行", currentActivityTasks.count)
         }
         if currentActivityTasks.count > 1 {
-            return LF("%lld项进行中", currentActivityTasks.count)
+            return LF("%lld 项正在执行", currentActivityTasks.count)
         }
         guard let task = activeTask else { return L("等待事件") }
-        return L(displayedStatus(for: task))
+        return L(plainStatus(for: task))
     }
 
     var compactCountText: String {
@@ -669,7 +892,14 @@ final class TaskStore: ObservableObject {
 
     func samplePointer(inside: Bool, at time: TimeInterval) {
         guard !contextMenuIsOpen else { return }
-        guard reviewingApproval == nil else { return }
+        if reviewingApproval != nil {
+            if inside != approvalPointerInside {
+                approvalPointerInside = inside
+                if !inside { approvalPointerLeftAt = now() }
+            }
+            if inside && approvalMinimized { revealApproval() }
+            return
+        }
         let previous = interaction
         interaction.samplePointer(inside: inside, at: time)
         if interaction != previous { refreshPresentation() }
@@ -1352,7 +1582,7 @@ final class TaskStore: ObservableObject {
         // Short-lived native notices often disappear before a user can open
         // Claude. Mature a continuous wait once; duplicate notices do not
         // restart this clock or repeatedly reopen the island.
-        for task in tasks where task.profile.kind == .claude && task.sourceEvent == "Notification" {
+        for task in tasks where (task.profile.kind == .claude && task.sourceEvent == "Notification") || codexPromptInApp(task) {
             let start = claudeNotificationStarts[task.id] ?? task.updatedAt
             guard needsUserAttention(task), task.approvalRequestID == nil,
                   surfacedClaudeNotifications[task.id] != start else { continue }
@@ -1388,21 +1618,35 @@ final class TaskStore: ObservableObject {
         if let request = reviewingApproval,
            tasks.first(where: { $0.id == request.taskID }).flatMap({ approvalRequest(for: $0) }) != request {
             reviewingApproval = nil
+            approvalMinimized = false
+            approvalHoldStartedAt = nil
+            approvalReviewExpanded = false
             interaction = IslandInteraction()
             if let current = tasks.first(where: { $0.id == request.taskID }),
                current.status == .waiting, current.approvalRequestID == request.id,
                now() >= request.expiresAt {
                 notice = "批准请求已过期或被处理，请在原应用核实"
                 failedApprovals.insert(request.taskID)
-                mediumUntil = now().addingTimeInterval(10)
+                if let session = request.hostSessionID { failedApprovalSessions[request.taskID] = session }
+                showApprovalOutcome(.failed, "已超时 · 回 App 处理", task: request.taskID, seconds: 10)
                 eventPulseUntil = mediumUntil
-                highlightedTaskID = request.taskID
+            } else if !pendingApprovalTasks.isEmpty {
+                // Answered in the app or on Feishu: move straight to the next one.
+                continueWithNextApproval(after: request)
+                if reviewingApproval != nil { return }
             }
         }
         if reviewingApproval != nil {
-            if presentation != .medium { presentation = .medium }
+            // Ignored for a while (and not being held or read): tuck back into the notch.
+            if !approvalMinimized, !approvalPointerInside, approvalHoldStartedAt == nil,
+               now().timeIntervalSince(max(approvalCardShownAt, approvalPointerLeftAt)) >= Self.approvalMinimizeDelay {
+                approvalMinimized = true
+            }
+            let target: Presentation = approvalMinimized ? .medium : .approval
+            if presentation != target { presentation = target }
             return
         }
+        if let outcome = approvalOutcome, now() >= outcome.until { approvalOutcome = nil }
         if now() >= calibrationUntil, calibrationPreview != nil { calibrationPreview = nil }
         if let calibrationPreview {
             if presentation != calibrationPreview { presentation = calibrationPreview }

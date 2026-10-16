@@ -276,6 +276,7 @@ private func contentOpacity(_ frame: IslandMotionFrame, for state: IslandPresent
     case .compact: return frame.compactOpacity
     case .medium: return frame.mediumOpacity
     case .heavy: return frame.heavyOpacity
+    case .approval: return frame.approvalOpacity
     }
 }
 
@@ -285,5 +286,6 @@ private func contentScale(_ frame: IslandMotionFrame, for state: IslandPresentat
     case .compact: return frame.compactScale
     case .medium: return frame.mediumScale
     case .heavy: return frame.heavyScale
+    case .approval: return frame.approvalScale
     }
 }

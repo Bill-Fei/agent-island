@@ -82,5 +82,37 @@
 			<string>%lld tool results</string>
 		</dict>
 	</dict>
+	<key>%lld 项等你批准</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>one</key>
+			<string>%lld needs you</string>
+			<key>other</key>
+			<string>%lld need you</string>
+		</dict>
+	</dict>
+	<key>%lld 项正在执行</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>one</key>
+			<string>%lld working</string>
+			<key>other</key>
+			<string>%lld working</string>
+		</dict>
+	</dict>
 </dict>
 </plist>

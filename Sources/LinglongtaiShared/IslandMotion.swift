@@ -10,9 +10,11 @@ public struct IslandMotionFrame: Equatable, Sendable {
     public var compactOpacity = 0.0
     public var mediumOpacity = 0.0
     public var heavyOpacity = 0.0
+    public var approvalOpacity = 0.0
     public var compactScale = 1.0
     public var mediumScale = 1.0
     public var heavyScale = 1.0
+    public var approvalScale = 1.0
     public var shellOpacity = 0.0
     public init() {}
 }
@@ -32,6 +34,11 @@ public struct IslandMetrics: Equatable, Sendable {
     /// of the fixed medium budget. `nil` keeps the historical fixed width, which
     /// is what the existing revision checks still assert.
     public var mediumWingWidth: Double?
+    /// The approval card grows taller while its full parameters are shown.
+    public var approvalExpanded = false
+
+    public static let approvalWidth = 380.0
+    public static func approvalContentHeight(expanded: Bool) -> Double { expanded ? 308 : 154 }
 
     public init(notchWidth: Double = 184, notchHeight: Double = 32, hasPhysicalNotch: Bool = true,
                 safeTop: Double? = nil, activityWidth: Double = 228,
@@ -73,6 +80,8 @@ public struct IslandMetrics: Equatable, Sendable {
         // Match the expanded content width to the 760 pt canvas while keeping
         // 12 pt clearance at both display edges.
         case .heavy: return CGSize(width: 736, height: safeTop + 416)
+        case .approval:
+            return CGSize(width: Self.approvalWidth, height: safeTop + Self.approvalContentHeight(expanded: approvalExpanded))
         }
     }
 }
@@ -89,9 +98,10 @@ public struct IslandMotion: Sendable {
     private var startingCompactOpacity = 0.0
     private var startingMediumOpacity = 0.0
     private var startingHeavyOpacity = 0.0
+    private var startingApprovalOpacity = 0.0
     private var isContracting = false
     private static let contentDuration = 0.18
-    private static let contentStates: [IslandPresentation] = [.compact, .medium, .heavy]
+    private static let contentStates: [IslandPresentation] = [.compact, .medium, .approval, .heavy]
 
     public init() {}
 
@@ -108,6 +118,7 @@ public struct IslandMotion: Sendable {
             startingCompactOpacity = 0
             startingMediumOpacity = 0
             startingHeavyOpacity = 0
+            startingApprovalOpacity = 0
             isContracting = false
             frame = IslandMotionFrame()
             frame.width = width.value
@@ -129,6 +140,7 @@ public struct IslandMotion: Sendable {
         startingCompactOpacity = frame.compactOpacity
         startingMediumOpacity = frame.mediumOpacity
         startingHeavyOpacity = frame.heavyOpacity
+        startingApprovalOpacity = frame.approvalOpacity
         transitionElapsed = 0
         applyGeometry(next)
     }
@@ -142,9 +154,11 @@ public struct IslandMotion: Sendable {
         case .collapsed: shoulder.retarget(0, monotonic: true)
         case .compact: shoulder.retarget(6, monotonic: monotonic)
         case .medium: shoulder.retarget(8, monotonic: monotonic)
+        case .approval: shoulder.retarget(18, monotonic: monotonic)
         case .heavy: shoulder.retarget(20, monotonic: monotonic)
         }
-        radius.retarget(state == .heavy ? 26 : min(9, size.height * 0.3), monotonic: monotonic)
+        let cardRadius: Double? = state == .heavy ? 26 : state == .approval ? 24 : nil
+        radius.retarget(cardRadius ?? min(9, size.height * 0.3), monotonic: monotonic)
     }
 
     public mutating func advance(by delta: TimeInterval, reduceMotion: Bool = false) {
@@ -172,6 +186,7 @@ public struct IslandMotion: Sendable {
         frame.compactScale = contentScale(for: .compact)
         frame.mediumScale = contentScale(for: .medium)
         frame.heavyScale = contentScale(for: .heavy)
+        frame.approvalScale = contentScale(for: .approval)
         // The physical notch itself is the final collapsed surface; calibration
         // never leaves a painted extension under the hardware while idle.
         if target == .collapsed && metrics.hasPhysicalNotch {
@@ -190,7 +205,8 @@ public struct IslandMotion: Sendable {
         case .collapsed: return 0
         case .compact: return 1
         case .medium: return 2
-        case .heavy: return 3
+        case .approval: return 3
+        case .heavy: return 4
         }
     }
 
@@ -200,6 +216,7 @@ public struct IslandMotion: Sendable {
         case .compact: return frame.compactOpacity
         case .medium: return frame.mediumOpacity
         case .heavy: return frame.heavyOpacity
+        case .approval: return frame.approvalOpacity
         }
     }
 
@@ -209,6 +226,7 @@ public struct IslandMotion: Sendable {
         case .compact: frame.compactOpacity = value
         case .medium: frame.mediumOpacity = value
         case .heavy: frame.heavyOpacity = value
+        case .approval: frame.approvalOpacity = value
         }
     }
 
@@ -218,6 +236,7 @@ public struct IslandMotion: Sendable {
         case .compact: return startingCompactOpacity
         case .medium: return startingMediumOpacity
         case .heavy: return startingHeavyOpacity
+        case .approval: return startingApprovalOpacity
         }
     }
 

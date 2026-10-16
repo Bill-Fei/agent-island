@@ -89,11 +89,12 @@ func runReleaseRevisionChecks(check: (String, Bool) -> Void) {
         (try? JSONSerialization.data(withJSONObject: ["hook_event_name": "PermissionRequest", "tool_name": tool, "cwd": "/tmp/release-fixture", "tool_input": input])) ?? Data()
     }
     let safe = payload(["command": "printf release-fixture"])
-    for provider in [AgentKind.codex, .workBuddy] {
-        permission.agent = provider.displayName
-        check("release: \(provider.rawValue) PermissionRequest stays observer-only",
-              ApprovalRelay.makeRequest(payload: safe, event: permission, now: origin) == nil)
-    }
+    permission.agent = AgentKind.workBuddy.displayName
+    check("release: work-buddy PermissionRequest stays observer-only",
+          ApprovalRelay.makeRequest(payload: safe, event: permission, now: origin) == nil)
+    permission.agent = AgentKind.codex.displayName
+    check("release: Codex request reaches relay validation with a short hand-over",
+          ApprovalRelay.makeRequest(payload: safe, event: permission, now: origin).map { $0.expiresAt.timeIntervalSince(origin) == 20 } == true)
     permission.agent = "Claude"
     check("release: complete Claude Code request reaches relay validation", ApprovalRelay.makeRequest(payload: safe, event: permission, now: origin) != nil)
     let missingCwd = try! JSONSerialization.data(withJSONObject: ["hook_event_name": "PermissionRequest", "tool_name": "Bash", "tool_input": ["command": "printf fixture"]])

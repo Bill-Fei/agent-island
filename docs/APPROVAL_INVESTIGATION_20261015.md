@@ -58,3 +58,42 @@
 - `script/check_store.sh` 补编 `ClaudeApprovalAcceptance.swift`（此前无法编译）。
 
 **检查**：relay 81 项、TaskStore 243 项、hook bridge、acceptance 558 项全部通过，均为隔离 fixture。终端 CLI 的真实批准往返、Desktop 不再误弹，目前都**未验证**，需在安装新包后用真实事件确认。
+
+## 2026-10-16 修订：Desktop 恢复岛内快速审批
+
+Bill 依赖岛内审批来跨多个对话处理请求，所以不再关闭 Desktop 的岛内审批。改为：SDK 宿主（entrypoint 不是 `cli`）发布的请求带 `waitsForProviderPrompt=true`，HUD 收到同一任务的 Notification（原应用真实弹卡约 6 秒后触发）后才显示按钮。自动放行的工具不会弹卡，也就不会误弹。Desktop 是否采纳 hook 的决定仍**未验证**，需要用 approval-trace 的 `decision-output` 时间与 PostToolUse 及原应用卡片状态对照确认。
+
+## 2026-10-16 01:00 真实验收结论与 B 方案（待实现）
+
+**已证实**：Desktop 不采纳 hook 决定。C91AD3B6：岛上批准 9.4s，`decision-output` 9.5s，PostToolUse 要到 59.2s（Bill 回 App 手点后）才出现。137741B5、9B40C467、F6DE8D08 同样如此。另外，Desktop 自动放行时**不会**结束 hook 进程，它会一直跑到 45s 过期。
+
+**新信号**：`~/Library/Logs/Claude-3p/main.log` 只在真实弹卡时写一行
+`Emitted tool permission request <rid> for <tool> in session local_<uuid>`，
+卡片处理后写 `Received permission response for <rid>: once|...` 或 `Permission request <rid> ... aborted`。自动放行的工具不写（00:33 run_in_terminal 可作对照）。hook 环境里的 `CLAUDE_CODE_HOST_SESSION_ID` 就是这个 `local_<uuid>`。会话深链：`claude://claude.ai/epitaxy/local_<uuid>`。
+
+**B 方案（Bill 已选定）**：
+1. Request 增加 `hostSessionID`（取自环境变量，校验 `local_`+UUID 格式）和原始工具名。
+2. Shared 新增 main.log 增量解析器，维护 open prompts，并处理日志轮转。TaskStore 中，Desktop 请求仅在同会话、同工具存在 open prompt 时可操作：卡片弹出约 0.3s 内亮按钮，卡片处理后收起。日志不可读时回退到 Notification。
+3. 岛上决定时，由注入到 TaskStore 的 HUD 闭包执行：再次确认该会话只有一张 open prompt，记下前台 App，打开深链，约 0.6s 后用 `CGEventPostToPid` 向 Claude 发送 ⌘⏎（允许）或 Esc（拒绝）。随后 3s 内在 main.log 等待 `Received permission response for <rid>`：收到即判定成功，否则提示"未生效，请回 App"。最后恢复原前台 App。
+4. 需要辅助功能权限（AXIsProcessTrustedWithOptions）。ad-hoc 签名每次重建都可能需要重新授权。
+5. 风险：没有卡片时发 ⌘⏎ 可能把输入框草稿发送出去，所以发送前必须用日志确认卡片仍打开。
+
+**当前已安装（ecf9843）的状态**：Desktop 卡片弹出约 6s 后岛上会亮按钮，但在 Desktop 下点击**无效**，仍需在 App 内确认。终端 CLI 不受影响。
+
+## 2026-10-16 10:41 最终根因与验收（005ce94）
+
+**更正**：前文"Desktop 不采纳 hook 决定"的结论有误，B 方案（AX 模拟点击）已删除。
+
+**根因**：Claude Code 要等**所有** PermissionRequest hook 都返回才应用决定。飞书桥 `notify.mjs` 的审批 hook 会一直挂着等手机答复，最长 25 分钟。岛上的决定其实已经输出了，但 Claude 仍在等飞书 hook，直到用户在 App 里手点。前面 8 次岛上批准，每次都有飞书 hook 同时在等。2026-10-14 晚上飞书改成"审批一直等手机"之后，这个问题才出现。
+
+**修复**：
+- Desktop 请求重新走普通 hook relay。
+- 按钮只在 main.log 出现 `Emitted tool permission request` 时才亮，所以 1 秒内出现，也不会因 Desktop 自行放行而误弹。
+- 任一 hook 先拿到答复，就 touch `decided/<session_id>`，另一方看到后放手（契约见 `SiblingDecision.swift`）。
+
+**真实事件验收**：
+- 10:41:25 卡片出现。
+- 10:41:26 岛上亮按钮。
+- 10:41:33 岛上允许，同一秒 Desktop 记录 `aborted`（hook 应用）、飞书 hook 放手，工具继续执行。
+
+已验证 1 次。按钮存在受 45 秒 relay 时限约束。

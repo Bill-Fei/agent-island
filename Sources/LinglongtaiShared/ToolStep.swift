@@ -44,4 +44,32 @@ extension AgentTask {
         toolSteps.filter { $0.state != .running }.sorted { $0.updatedAt > $1.updatedAt }
     }
     public var hasUnidentifiedToolSteps: Bool { toolSteps.contains { $0.id.hasPrefix("observation:") } }
+
+    /// One line a person can read at a glance, built only from classified
+    /// labels: "改文件 2 次 · 跑命令 1 次 · 读文件 6 次". Edits and commands
+    /// lead because they change things; reads and searches trail.
+    public var toolStepSummary: String? {
+        let counts = toolStepCounts
+        guard !counts.isEmpty else { return nil }
+        return counts.map { LF("%@ %lld 次", L($0.verb), $0.count) }.joined(separator: " · ")
+    }
+
+    /// The same tally as structured pairs, in display order, for count tiles.
+    public var toolStepCounts: [(verb: String, count: Int)] {
+        let steps = returnedToolSteps
+        let order: [(label: String, verb: String)] = [
+            ("编辑文件", "改文件"), ("执行命令", "跑命令"), ("读取文件", "读文件"),
+            ("检索文件", "搜文件"), ("读取网页", "看网页"), ("搜索资料", "搜资料"), ("工具调用", "其他工具"),
+        ]
+        var counts = order.compactMap { entry -> (verb: String, count: Int)? in
+            let count = steps.filter { $0.label == entry.label }.count
+            return count == 0 ? nil : (entry.verb, count)
+        }
+        let known = Set(order.map(\.label))
+        let other = steps.filter { !known.contains($0.label) }.count
+        if other > 0 { counts.append(("其他", other)) }
+        return counts
+    }
+
+    public var failedToolStepCount: Int { returnedToolSteps.filter { $0.state == .failed }.count }
 }

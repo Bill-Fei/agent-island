@@ -6,16 +6,31 @@ import Darwin
 public enum ApprovalRelay {
     /// Claude Code only; hook callers must explicitly opt in. Other providers
     /// remain observation-only, and no standing permissions are returned.
-    public static func supports(_ provider: AgentKind) -> Bool { provider == .claude }
+    public static func supports(_ provider: AgentKind) -> Bool { provider == .claude || provider == .codex }
 
-    /// Only the terminal CLI lets a PermissionRequest hook answer the prompt.
-    /// SDK hosts such as Claude Desktop (`claude-desktop*`) still decide in
-    /// their own UI: a relay there pops for auto-approved tools and its
-    /// decision is not applied. Unknown hosts stay observation-only.
-    public static func hostHonorsHookDecision(environment: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
-        guard let entrypoint = environment["CLAUDE_CODE_ENTRYPOINT"], !entrypoint.isEmpty else { return true }
-        return entrypoint == "cli"
+    /// Codex shows its own card only after every PermissionRequest hook has
+    /// returned, so an unanswered island request must hand over quickly.
+    public static func lifetime(for provider: AgentKind) -> TimeInterval { provider == .codex ? 20 : 45 }
+
+    /// SDK hosts such as Claude Desktop (`claude-desktop*`) run this hook for
+    /// every permission check, including tools they then approve themselves;
+    /// only their own card, recorded in their log (see ClaudePromptLog), shows
+    /// a decision is waiting. The hook's answer is applied like the CLI's, but
+    /// only once every PermissionRequest hook has returned (see SiblingDecision).
+    public static func hostShowsOwnPrompt(environment: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+        guard let entrypoint = environment["CLAUDE_CODE_ENTRYPOINT"], !entrypoint.isEmpty else { return false }
+        return entrypoint != "cli"
     }
+
+    /// Desktop's own session identity, e.g. `local_<uuid>`; nil when absent or malformed.
+    public static func hostSessionID(environment: [String: String] = ProcessInfo.processInfo.environment) -> String? {
+        guard let value = environment["CLAUDE_CODE_HOST_SESSION_ID"], value.hasPrefix("local_"),
+              UUID(uuidString: String(value.dropFirst(6))) != nil else { return nil }
+        return value
+    }
+
+    /// How long a logged Desktop card can count as open without its answer line.
+    static let hostPromptLifetime: TimeInterval = 600
 
     public struct Request: Codable, Identifiable, Equatable, Sendable {
         public var protocolVersion = 2
@@ -26,6 +41,13 @@ public enum ApprovalRelay {
         public var context: String
         public var expiresAt: Date
         public var processID: Int32
+        /// SDK host only: the card is matched in this host session's log. Nil for the CLI.
+        public var hostSessionID: String?
+        /// Raw provider tool name, matched against the host's own prompt record.
+        public var toolName: String?
+        public var createdAt: Date?
+        /// Hook session, shared with sibling PermissionRequest hooks (SiblingDecision).
+        public var sessionKey: String?
     }
     public enum Decision: String, Codable { case allow, deny }
     private struct Reply: Codable { var id: UUID; var decision: Decision }
@@ -49,12 +71,40 @@ public enum ApprovalRelay {
               !context.isEmpty else { return nil }
         // Do not move likely credentials into the secondary approval surface.
         // Unsupported/sensitive requests fall through to the provider UI.
-        let sensitive = "(?i)(api[_-]?key|authorization|bearer |password|secret|token|sk-[a-z0-9]|private.key|credential|\\.env)"
-        guard context.range(of: sensitive, options: .regularExpression) == nil else { return nil }
+        guard context.range(of: sensitivePattern, options: .regularExpression) == nil else { return nil }
+        var host: String?
+        if hostShowsOwnPrompt() {
+            // An SDK host without a verifiable session cannot be pressed safely.
+            guard let session = hostSessionID() else { return nil }
+            host = session
+        }
         return Request(id: UUID(), taskID: taskID, provider: provider,
                        tool: ToolStep.label(for: tool), context: context,
-                       expiresAt: now.addingTimeInterval(45), processID: getpid())
+                       expiresAt: now.addingTimeInterval(lifetime(for: provider)), processID: getpid(),
+                       hostSessionID: host, toolName: host == nil ? nil : tool, createdAt: now,
+                       sessionKey: SiblingDecision.key(input["session_id"] as? String))
     }
+
+    /// Credential-shaped content only. Plain words are not enough: code edits
+    /// routinely mention `HUDColorTokens`, `.environment(` or `set-secret.sh`,
+    /// and treating those as secrets silently kept the island from showing.
+    static let sensitivePattern = [
+        // A credential-named field being given a value (also inside escaped JSON).
+        #"(?i)(?<![a-z0-9])(api[_-]?key|access[_-]?key|secret[_-]?key|client[_-]?secret|(auth|access|refresh|api)?[_-]?token|password|passwd|secret|credentials?)\\?["']?\s*[:=]"#,
+        #"(?i)--(password|passwd|token|secret|api-key)\b"#,
+        // A credential-named JSON field holding any value, e.g. {"authorization": "..."}.
+        #"(?i)"(authorization|password|passwd|secret|token|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|credentials?|private[_-]?key)"\s*:\s*""#,
+        #"(?i)\bauthorization\s*:"#,
+        #"(?i)\bbearer\s+[a-z0-9._~+/=-]{6,}"#,
+        #"\bsk-[A-Za-z0-9_-]{16,}"#,
+        #"\bgh[pousr]_[A-Za-z0-9]{20,}"#,
+        #"\bxox[abprs]-[A-Za-z0-9-]{10,}"#,
+        #"\bAKIA[0-9A-Z]{16}\b"#,
+        #"-----BEGIN [A-Z ]*PRIVATE KEY-----"#,
+        #"(?i)private[._-]key"#,
+        // .env files, never `.environment(`.
+        #"(?i)(?<![a-z0-9_])\.env(\.[a-z0-9_-]+)?(?![a-z0-9_])"#,
+    ].joined(separator: "|")
 
     public static func publish(_ request: Request) -> Bool {
         guard supports(request.provider), request.protocolVersion == 2,
@@ -62,6 +112,7 @@ public enum ApprovalRelay {
               request.expiresAt.timeIntervalSinceNow <= 46 else { return false }
         guard prepareDirectory(), let data = try? JSONEncoder().encode(request) else { return false }
         cleanupExpired()
+        if let session = request.hostSessionID { cleanupHostSession(session) }
         let published = writeExclusive(data, to: requestURL(request.id))
         if published { ApprovalTrace.record(request.id, "published", heartbeatAge: hudStatus(stallTolerance: 4).age) }
         return published
@@ -106,6 +157,17 @@ public enum ApprovalRelay {
         }
     }
 
+    /// A host session asks one permission at a time; a newer check supersedes
+    /// its earlier (auto-approved or answered) requests.
+    public static func cleanupHostSession(_ session: String) {
+        guard directoryIsPrivate(), let urls = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else { return }
+        for url in urls {
+            guard url.pathExtension == "json", let id = UUID(uuidString: url.deletingPathExtension().lastPathComponent),
+                  let request = readRequest(id), request.hostSessionID == session else { continue }
+            cleanup(id)
+        }
+    }
+
     /// Explicit reset of our own relay files, not provider history.
     /// Normal startup must use cleanupExpired(), preserving live requests.
     public static func clearPendingRequests() {
@@ -141,6 +203,11 @@ public enum ApprovalRelay {
                let reply = try? JSONDecoder().decode(Reply.self, from: data), reply.id == request.id {
                 ApprovalTrace.record(request.id, "reply-consumed")
                 return reply.decision
+            }
+            // Answered first on another surface (Feishu card or the app itself).
+            if SiblingDecision.decided(request.sessionKey, since: request.createdAt) {
+                ApprovalTrace.record(request.id, "released-sibling-decided")
+                return nil
             }
             // A HUD quit, hide or prolonged stall must not hold the provider's normal prompt.
             let hud = hudStatus(stallTolerance: waitStallTolerance)

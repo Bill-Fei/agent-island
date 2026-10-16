@@ -7,10 +7,26 @@ func runClaudeApprovalStoreChecks(check: (String, Bool) -> Void, emit: (AgentEve
     let store = TaskStore(now: { date })
     store.clearAllTasks()
     let payload = try JSONSerialization.data(withJSONObject: ["hook_event_name": "PermissionRequest", "tool_name": "Bash", "cwd": "/tmp/approval-store-fixture", "tool_input": ["command": "printf harmless-fixture"]])
-    func publish() throws -> ApprovalRelay.Request? {
+    let hostSession = "local_" + UUID().uuidString.lowercased()
+    let hostLog = LinglongtaiPaths.applicationSupport.appendingPathComponent("fixture-claude-main.log")
+    func hostLine(_ text: String) {
+        let stamp = DateFormatter()
+        stamp.locale = Locale(identifier: "en_US_POSIX")
+        stamp.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        let line = Data((stamp.string(from: date) + " [info] " + text + "\n").utf8)
+        if let handle = try? FileHandle(forWritingTo: hostLog) { handle.seekToEndOfFile(); handle.write(line); try? handle.close() }
+        else { try? line.write(to: hostLog) }
+    }
+    func publish(desktopHost: Bool = false) throws -> ApprovalRelay.Request? {
         var event = AgentEvent(type: "upsert", id: UUID(), agent: "Claude", status: .waiting,
                                requiresApproval: true, createdAt: date, sourceEvent: "PermissionRequest")
-        guard let request = ApprovalRelay.makeRequest(payload: payload, event: event, now: date), ApprovalRelay.publish(request) else { return nil }
+        // Pin the host explicitly; the checks must not depend on the caller's environment.
+        guard var request = ApprovalRelay.makeRequest(payload: payload, event: event, now: date) else { return nil }
+        request.hostSessionID = desktopHost ? hostSession : nil
+        request.toolName = desktopHost ? "Bash" : nil
+        request.createdAt = desktopHost ? date : nil
+        request.expiresAt = date.addingTimeInterval(45)
+        guard ApprovalRelay.publish(request) else { return nil }
         event.approvalRequestID = request.id
         try emit(event)
         store.consumeEvents()
@@ -48,6 +64,84 @@ func runClaudeApprovalStoreChecks(check: (String, Bool) -> Void, emit: (AgentEve
     store.respondToApproval(expired, decision: .allow)
     check("expired review cannot submit", store.submittedApprovals[expired.id] == nil && store.failedApprovals.contains(expired.taskID))
     ApprovalRelay.cleanup(expired.id)
+    store.clearAllTasks()
+    date = Date()
+    guard let desktop = try publish(desktopHost: true), let desktopTask = store.tasks.first(where: { $0.id == desktop.taskID }) else {
+        check("Claude Desktop fixture publishes", false); return
+    }
+    store.pollHostPrompts()
+    check("Desktop permission check without a card never pops the island", store.approvalRequest(for: desktopTask) == nil && !store.needsUserAttention(desktopTask) && store.waitingCount == 0)
+    let cardID = UUID().uuidString.lowercased()
+    hostLine("Emitted tool permission request \(cardID) for Bash in session \(hostSession)")
+    store.pollHostPrompts()
+    check("Desktop card log line makes the request actionable at once", store.approvalRequest(for: desktopTask) == desktop && store.needsUserAttention(desktopTask) && store.approvalTask?.id == desktop.taskID)
+    let otherCard = UUID().uuidString.lowercased()
+    hostLine("Emitted tool permission request \(otherCard) for Bash in session \(hostSession)")
+    store.pollHostPrompts()
+    check("two open cards in one session are never pressed", store.approvalRequest(for: desktopTask) == nil)
+    hostLine("Permission request \(otherCard) for Bash aborted")
+    store.pollHostPrompts()
+    check("an aborted card no longer counts; the request keeps its first card", store.approvalRequest(for: desktopTask) == desktop && store.hostPrompt(for: desktop)?.id == cardID)
+    hostLine("Received permission response for \(cardID): once (tool: Bash)")
+    store.pollHostPrompts()
+    check("a card answered in the app withdraws the island button at once", store.approvalRequest(for: desktopTask) == nil)
+    ApprovalRelay.cleanup(desktop.id)
+    guard let stale = try publish(desktopHost: true), let staleTask = store.tasks.first(where: { $0.id == stale.taskID }) else {
+        check("Claude Desktop stale fixture publishes", false); return
+    }
+    date.addTimeInterval(8)
+    let lateCard = UUID().uuidString.lowercased()
+    hostLine("Emitted tool permission request \(lateCard) for Bash in session \(hostSession)")
+    store.pollHostPrompts()
+    check("an old unanswered check is never matched to a later card", store.approvalRequest(for: staleTask) == nil)
+    hostLine("Permission request \(lateCard) for Bash aborted")
+    store.pollHostPrompts()
+    ApprovalRelay.cleanup(stale.id)
+    date.addTimeInterval(-8) // publish() only accepts requests created at the real present
+    guard let unanswered = try publish(desktopHost: true), let unansweredTask = store.tasks.first(where: { $0.id == unanswered.taskID }) else {
+        check("Claude Desktop second fixture publishes", false); return
+    }
+    hostLine("Emitted tool permission request \(UUID().uuidString.lowercased()) for Bash in session \(hostSession)")
+    store.pollHostPrompts()
+    store.respondToApproval(unanswered, decision: .allow)
+    check("island decision on a Desktop card reaches the hook", store.submittedApprovals[unanswered.id] != nil && !store.failedApprovals.contains(unansweredTask.id) && ApprovalRelay.wait(for: unanswered) == .allow)
+    store.clearAllTasks()
+
+    // Codex: the island relay holds Codex's own card back, so it is short and
+    // hands over to Codex once it lapses.
+    func publishCodex() throws -> ApprovalRelay.Request? {
+        var event = AgentEvent(type: "upsert", id: UUID(), agent: "Codex", status: .waiting,
+                               requiresApproval: true, createdAt: date, sourceEvent: "PermissionRequest")
+        guard let request = ApprovalRelay.makeRequest(payload: payload, event: event, now: date),
+              ApprovalRelay.publish(request) else { return nil }
+        event.approvalRequestID = request.id
+        try emit(event)
+        store.consumeEvents()
+        return request
+    }
+    date = Date()
+    guard let codex = try publishCodex(), let codexTask = store.tasks.first(where: { $0.id == codex.taskID }) else {
+        check("Codex relay fixture publishes", false); return
+    }
+    check("Codex relay hands over within 20 seconds", codex.provider == .codex && codex.expiresAt.timeIntervalSince(date) <= 20.5)
+    date.addTimeInterval(1.2)
+    store.refreshPresentation()
+    check("Codex approval shows the island button", store.approvalRequest(for: codexTask) == codex && store.approvalTask?.id == codex.taskID)
+    store.respondToApproval(codex, decision: .allow)
+    let decided = store.tasks.first(where: { $0.id == codex.taskID })!
+    check("a Codex decision made on the island is not re-asked as a Codex card",
+          ApprovalRelay.wait(for: codex) == .allow && !store.codexPromptInApp(decided) && !store.needsUserAttention(decided))
+    store.clearAllTasks()
+    date = Date()
+    guard let lapsed = try publishCodex(), let lapsedTask = store.tasks.first(where: { $0.id == lapsed.taskID }) else {
+        check("Codex lapse fixture publishes", false); return
+    }
+    date = lapsed.expiresAt.addingTimeInterval(0.2)
+    store.refreshPresentation()
+    check("an unanswered Codex relay hands the prompt to Codex's own card",
+          store.approvalRequest(for: lapsedTask) == nil && store.codexPromptInApp(lapsedTask) &&
+          store.needsUserAttention(lapsedTask) && store.approvalSurfaceText(for: lapsedTask) == "在 Codex 里批准")
+    ApprovalRelay.cleanup(lapsed.id)
     store.clearAllTasks()
 
     let claudeNotification = UUID()

@@ -18,11 +18,12 @@ struct IslandLayout: Equatable {
     var activityWidth: Double = 228
     /// Wing width requested by the current content; nil keeps medium fixed.
     var mediumWingWidth: Double?
+    var approvalExpanded = false
 
     init() {}
 
     init(screen: NSScreen, heightAdjustment: CGFloat, widthAdjustment: CGFloat = 0,
-         activityWidth: Double = 228, mediumWingWidth: Double? = nil) {
+         activityWidth: Double = 228, mediumWingWidth: Double? = nil, approvalExpanded: Bool = false) {
         let left = screen.auxiliaryTopLeftArea ?? .zero
         let right = screen.auxiliaryTopRightArea ?? .zero
         hasPhysicalNotch = screen.safeAreaInsets.top > 0 && !left.isEmpty && !right.isEmpty
@@ -32,13 +33,16 @@ struct IslandLayout: Equatable {
         notchHeight = max(12, physicalHeight + heightAdjustment)
         self.activityWidth = IslandMetrics(activityWidth: activityWidth).activityWidth
         self.mediumWingWidth = mediumWingWidth
+        self.approvalExpanded = approvalExpanded
     }
 
     var metrics: IslandMetrics {
-        IslandMetrics(notchWidth: notchWidth, notchHeight: notchHeight,
-                      hasPhysicalNotch: hasPhysicalNotch, safeTop: safeTop, activityWidth: activityWidth,
-                      physicalWidth: physicalWidth, physicalHeight: physicalHeight,
-                      mediumWingWidth: mediumWingWidth)
+        var metrics = IslandMetrics(notchWidth: notchWidth, notchHeight: notchHeight,
+                                    hasPhysicalNotch: hasPhysicalNotch, safeTop: safeTop, activityWidth: activityWidth,
+                                    physicalWidth: physicalWidth, physicalHeight: physicalHeight,
+                                    mediumWingWidth: mediumWingWidth)
+        metrics.approvalExpanded = approvalExpanded
+        return metrics
     }
 
     var safeTop: CGFloat { max(physicalHeight, notchHeight) }

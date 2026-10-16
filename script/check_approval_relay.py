@@ -42,7 +42,7 @@ def payload(provider="codex", session="session", event="PermissionRequest", argu
     return {"hook_event_name": event, "session_id": session, "turn_id": "turn",
             "cwd": "/tmp/release-fixture", "tool_name": "Bash", "tool_input": arguments or {"command": "printf harmless-fixture"}}
 
-def start(root, data, provider="claude", relay=True, hud=True, entrypoint="cli"):
+def start(root, data, provider="claude", relay=True, hud=True, entrypoint="cli", host_session=None):
     if hud:
         with heartbeat_lock:
             heartbeat(root)
@@ -50,7 +50,9 @@ def start(root, data, provider="claude", relay=True, hud=True, entrypoint="cli")
     args = [str(ctl), "hook", "--provider", provider, "--data-dir", str(root)]
     if relay:
         args += ["--approval-relay"]
-    env = {k: v for k, v in os.environ.items() if k != "CLAUDE_CODE_ENTRYPOINT"}
+    env = {k: v for k, v in os.environ.items() if k not in ("CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_HOST_SESSION_ID")}
+    if host_session is not None:
+        env["CLAUDE_CODE_HOST_SESSION_ID"] = host_session
     if entrypoint is not None:
         env["CLAUDE_CODE_ENTRYPOINT"] = entrypoint
     process = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
@@ -95,14 +97,15 @@ with tempfile.TemporaryDirectory(prefix="island-approval-") as temporary:
         for flag in [False, True]:
             root = base / (provider + ("-legacy-flag" if flag else ""))
             proc = start(root, payload(provider=provider), provider=provider, relay=flag, hud=True)
-            if provider == "claude" and flag:
+            if provider in ("claude", "codex") and flag:
                 request = approve_pending(root)
             out = finish(proc)
-            if provider == "claude" and flag:
+            if provider in ("claude", "codex") and flag:
                 result = json.loads(out.decode())
-                check("Claude returns only one-shot allow, never updated permissions", result == {"hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision": {"behavior": "allow"}}})
+                check(provider + " returns only one-shot allow, never updated permissions", result == {"hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision": {"behavior": "allow"}}})
                 event = json.loads((root / "events.jsonl").read_text().splitlines()[-1])
-                check("request is bound to exact routed task and protocol", event.get("approvalRequestID") == request["id"] and event["id"] == request["taskID"] and request["provider"] == "claude" and request["protocolVersion"] == 2)
+                check(provider + " request is bound to exact routed task and protocol", event.get("approvalRequestID") == request["id"] and event["id"] == request["taskID"] and request["provider"] == provider and request["protocolVersion"] == 2)
+                check(provider + " relay lifetime leaves its own card time to appear", request["expiresAt"] - request["createdAt"] <= (20.5 if provider == "codex" else 45.5))
                 check("tool arguments never enter event journal", "harmless-fixture" not in (root / "events.jsonl").read_text())
             else:
                 check(provider + " PermissionRequest emits no approval decision", out == b"")
@@ -139,12 +142,41 @@ with tempfile.TemporaryDirectory(prefix="island-approval-") as temporary:
     check("prolonged HUD stall releases native flow", finish(proc, timeout=20) == b"" and not path.exists() and time.monotonic() - began < 16)
     check("trace explains a stall release", trace(root)[-1]["stage"] == "released-hud-unavailable" and trace(root)[-1]["heartbeatAge"] >= 12)
 
+    host_session = "local_0f0e0d0c-0b0a-4908-8706-050403020100"
     for label, entrypoint in [("desktop-host", "claude-desktop-3p"), ("vscode-host", "claude-vscode"), ("sdk-host", "sdk-ts")]:
         root = base / label
-        proc = start(root, payload(provider="claude"), entrypoint=entrypoint)
-        check(label + " never publishes an island approval", finish(proc) == b"" and not list((root / "pending-approvals").glob("*.json")))
-        event = json.loads((root / "events.jsonl").read_text().splitlines()[-1])
-        check(label + " still reports the permission check for observation", event.get("sourceEvent") == "PermissionRequest" and "approvalRequestID" not in event)
+        proc = start(root, payload(provider="claude"), entrypoint=entrypoint, host_session=host_session)
+        path, request = pending(root)
+        check(label + " request is bound to the host session, raw tool and hook session", request.get("hostSessionID") == host_session and request.get("toolName") == "Bash" and request.get("sessionKey") == "session")
+        check(label + " request keeps the 45-second relay lifetime", request["expiresAt"] - request["createdAt"] <= 45.5)
+        approve_pending(root, "deny")
+        check(label + " island decision is returned through the hook", json.loads(finish(proc))["hookSpecificOutput"]["decision"]["behavior"] == "deny")
+    root = base / "desktop-sibling"
+    proc = start(root, payload(provider="claude"), entrypoint="claude-desktop-3p", host_session=host_session)
+    path, request = pending(root)
+    marker = root / "decided" / "session"
+    marker.parent.mkdir(mode=0o700, exist_ok=True)
+    marker.touch()
+    check("a decision made on Feishu releases the island hook at once", finish(proc, timeout=3) == b"" and not path.exists())
+    proc = start(root, payload(provider="claude"), entrypoint="claude-desktop-3p", host_session=host_session)
+    approve_pending(root)
+    out = finish(proc)
+    check("an island decision on a Desktop card is returned through the hook", json.loads(out)["hookSpecificOutput"]["decision"]["behavior"] == "allow")
+    check("an island decision tells the Feishu hook to stop holding", marker.stat().st_mtime > time.time() - 5)
+    root = base / "desktop-host"
+    proc = start(root, payload(provider="claude", arguments={"token": "private-fixture"}), entrypoint="claude-desktop-3p", host_session=host_session)
+    finish(proc)
+    check("an unpublished Desktop check still retires the session's earlier request", not list((root / "pending-approvals").glob("*.json")))
+    for label, session in [("desktop-no-session", None), ("desktop-bad-session", "local_../../etc")]:
+        root = base / label
+        proc = start(root, payload(provider="claude"), entrypoint="claude-desktop-3p", host_session=session)
+        check(label + " stays observation-only", finish(proc) == b"" and not list((root / "pending-approvals").glob("*.json")))
+    root = base / "cli-host"
+    proc = start(root, payload(provider="claude"), entrypoint="cli")
+    _, request = pending(root)
+    check("terminal CLI request keeps the hook relay", "hostSessionID" not in request and request["expiresAt"] - time.time() + 978307200 < 46)
+    approve_pending(root)
+    finish(proc)
     root = base / "unset-entrypoint"
     proc = start(root, payload(provider="claude"), entrypoint=None)
     approve_pending(root)
@@ -166,6 +198,10 @@ with tempfile.TemporaryDirectory(prefix="island-approval-") as temporary:
     for label, data, hud in [
         ("no-hud", payload(provider="claude"), False),
         ("sensitive", payload(provider="claude", arguments={"token": "private-fixture"}), True),
+        ("sensitive-export", payload(provider="claude", arguments={"command": "export GITHUB_TOKEN=private-fixture"}), True),
+        ("sensitive-header", payload(provider="claude", arguments={"command": "curl -H 'Authorization: Bearer private-fixture-value'"}), True),
+        ("sensitive-envfile", payload(provider="claude", arguments={"command": "cat .env.local"}), True),
+        ("sensitive-key", payload(provider="claude", arguments={"command": "echo sk-abcdefghijklmnopqrstu"}), True),
         ("oversized", payload(provider="claude", arguments={"command": "x" * 9000}), True),
         ("subagent", dict(payload(provider="claude"), agent_id="child"), True),
         ("missing-input", {k:v for k,v in payload(provider="claude").items() if k != "tool_input"}, True),
@@ -174,6 +210,14 @@ with tempfile.TemporaryDirectory(prefix="island-approval-") as temporary:
         proc = start(root, data, hud=hud)
         check(label + " falls back without decision", finish(proc) == b"")
         check(label + " stores no approval context", not list((root / "pending-approvals").glob("*.json")))
+
+    for label, command in [("code-mentions-tokens", "sed -n 1,5p Sources/HUDColorTokens.swift"),
+                           ("code-mentions-environment", "grep -n '.environment(' HUDView.swift"),
+                           ("script-named-secret", "sh set-secret.sh doubao")]:
+        root = base / label
+        proc = start(root, payload(provider="claude", arguments={"command": command}))
+        approve_pending(root)
+        check(label + " is not mistaken for a credential", json.loads(finish(proc))["hookSpecificOutput"]["decision"]["behavior"] == "allow")
 
     root = base / "hud-disappears"
     proc = start(root, payload(provider="claude"))

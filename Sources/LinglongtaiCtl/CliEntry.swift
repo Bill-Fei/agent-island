@@ -222,6 +222,14 @@ struct LinglongtaiCtl {
         }
         var publishedEvent = false
         var approval: ApprovalRelay.Request?
+        // Every new Desktop permission check, published or not (sensitive,
+        // subagent, HUD away), retires the session's earlier request so it can
+        // never be matched to this check's card.
+        if args.contains("--approval-relay"), ApprovalRelay.hostShowsOwnPrompt(),
+           let session = ApprovalRelay.hostSessionID(),
+           (try? JSONSerialization.jsonObject(with: input) as? [String: Any])?["hook_event_name"] as? String == "PermissionRequest" {
+            ApprovalRelay.cleanupHostSession(session)
+        }
         // Explicit opt-in applies ONLY to Claude Code's documented contract.
         withEventLock { fd in
             let kind = AgentKind.resolve(provider)
@@ -242,7 +250,6 @@ struct LinglongtaiCtl {
             }
             HookHealth.record(provider: kind, parsed: mapped != nil, directory: LinglongtaiPaths.applicationSupport)
             if args.contains("--approval-relay"), ApprovalRelay.supports(AgentKind.resolve(provider)),
-               ApprovalRelay.hostHonorsHookDecision(),
                ApprovalRelay.hasActiveHUD, events.count == 1,
                let request = ApprovalRelay.makeRequest(payload: input, event: events[0]),
                ApprovalRelay.publish(request) {
@@ -260,6 +267,7 @@ struct LinglongtaiCtl {
             ApprovalRelay.cleanup(request.id)
             approval = nil
         }
+
         // Wait outside the journal lock. No decision falls back to the provider.
         if let request = approval, let decision = ApprovalRelay.wait(for: request) {
             let result: [String: Any] = ["hookSpecificOutput": [
@@ -269,6 +277,8 @@ struct LinglongtaiCtl {
                let json = String(data: data, encoding: .utf8) {
                 print(json)
                 let flushed = fflush(stdout) == 0
+                // Tell sibling PermissionRequest hooks (Feishu) to stop holding.
+                SiblingDecision.mark(request.sessionKey)
                 ApprovalTrace.record(request.id, flushed ? "decision-output" : "decision-output-failed")
             }
         }

@@ -264,3 +264,69 @@
 "0 分钟" = "0 min";
 "%lld 分钟" = "%lld min";
 "%lld 小时 %lld 分钟" = "%lld hr %lld min";
+
+/* ---------- 0.3.5: plain status words (TaskStore.plainStatus, TaskVisualState) ---------- */
+"等你批准" = "Needs you";
+"正在执行" = "Working";
+"在 App 里处理" = "Handle in the app";
+"出错了" = "Error";
+"已发送，等 App 确认" = "Sent, waiting for the app";
+"等 App 确认" = "Waiting for app";
+"%lld 项等你批准" = "%lld need you";
+"%lld 项正在执行" = "%lld working";
+
+/* ---------- 0.3.5: detail pane (HUDView.swift) ---------- */
+"原应用" = "the app";
+"回复和改动在 %@ 里" = "Replies and changes are in %@";
+"出错了 · 去 %@ 看原因" = "Something went wrong · See %@ for why";
+"这一轮被中断了" = "This turn was interrupted";
+"打开 %@" = "Open %@";
+"做了什么" = "What it did";
+"已完成的步骤" = "Finished steps";
+"没有收到工具记录" = "No tool activity received";
+"还没有完成的步骤" = "No finished steps yet";
+"查看明细" = "Show details";
+"收起明细" = "Hide details";
+"查看" = "View";
+" · 出错" = " · error";
+"出错" = "Error";
+"只列出最近 30 条，上面的次数包含全部" = "Showing the latest 30; the counts above include all";
+"部分步骤没有编号，次数可能偏多" = "Some steps had no ID, so counts may run high";
+"%@ %lld 次" = "%1$@ ×%2$lld";
+"改文件" = "Edits";
+"跑命令" = "Commands";
+"读文件" = "Reads";
+"搜文件" = "Searches";
+"看网页" = "Web pages";
+"搜资料" = "Web searches";
+"其他工具" = "Other tools";
+"其他" = "Other";
+
+/* ---------- 0.3.5: island approval card (ApprovalReviewView.swift, HUDView.swift) ---------- */
+"%@ 请求批准" = "%@ asks for approval";
+"要在终端运行命令" = "Wants to run a terminal command";
+"要修改文件" = "Wants to edit a file";
+"要读取文件" = "Wants to read a file";
+"要搜索文件" = "Wants to search files";
+"要打开网页" = "Wants to open a web page";
+"要上网搜索" = "Wants to search the web";
+"要使用一个工具" = "Wants to use a tool";
+"高风险：%@" = "High risk: %@";
+"展开全文" = "Show all";
+"收起" = "Collapse";
+"拒绝" = "Deny";
+"允许" = "Allow";
+"只允许这一次，不授予长期权限" = "Allows this once only; grants no standing permission";
+"长按允许" = "Hold to allow";
+"继续按住…" = "Keep holding…";
+"长按允许高风险操作" = "Hold to allow a high-risk action";
+"高风险操作：按住 0.6 秒才会允许，松开即取消" = "High-risk action: hold for 0.6 s to allow; release to cancel";
+"请求已过期或已处理，请回原应用核实" = "This request expired or was handled. Check the app.";
+"还剩 %@ 秒，超时后回 App 处理" = "%@ s left; after that, handle it in the app";
+"已允许" = "Allowed";
+"已拒绝" = "Denied";
+"已超时 · 回 App 处理" = "Timed out · Use the app";
+"已在别处处理" = "Handled elsewhere";
+"回 App 处理" = "Use the app";
+"没有自动批准；点这里打开对应的对话处理" = "Nothing was approved. Click to open that conversation.";
+"有请求等你批准，移到岛上即可展开" = "A request needs you. Point at the island to open it.";

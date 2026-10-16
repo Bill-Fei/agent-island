@@ -36,7 +36,7 @@
 <script>
   // Same release links as the Chinese page. dmgUrl is injected by the publish scripts.
   window.SITE = {
-    version: '0.3.4',
+    version: '0.3.5',
     dmgUrl: '',     // injected by publish_site.sh: ../download/<version>.dmg
     mirrorUrl: '',  // optional domestic mirror of the same file
     sourceUrl: 'https://github.com/Bill-Fei/agent-island',
@@ -130,18 +130,18 @@
       </span>
       <span class="p-card" style="--d:5;top:364px">
         <img src="../media/icons/claude.png" alt=""><b>Claude</b><span>Refactor login</span><small>C93B07&ensp;20:41</small>
-        <em style="color:#87c7ab">Turn done</em>
+        <em style="color:#87c7ab">Done</em>
       </span>
 
       <span class="p-detail" style="--d:5">
         <img src="../media/icons/codex.png" alt=""><b>Codex</b><span class="p-open">Open app</span>
-        <span class="p-desc">Database migration script: compare the old<br>and new schemas, then add rollback steps</span>
-        <span class="p-thread"><span>Thread · A41C02&ensp;21:04</span><span>Copy thread ID</span></span>
       </span>
-      <span class="p-step" style="--d:6;top:296px"><span>Read file · returned</span><time>21:02</time></span>
-      <span class="p-step" style="--d:7;top:324px"><span>Ran command · returned</span><time>21:03</time></span>
-      <span class="p-step" style="--d:8;top:352px"><span>Edited file · returned</span><time>21:03</time></span>
-      <span class="p-step is-attn" style="--d:9;top:380px"><span>Permission request · needs you</span><time>21:04</time></span>
+      <span class="p-heading" style="--d:5">Database migration script</span>
+      <span class="p-status" style="--d:6"><em>Needs you</em><time>21:04</time></span>
+      <span class="p-hair" style="--d:6"></span>
+      <span class="p-outcome" style="--d:7"><span>Codex needs you · answer it in Codex</span><b>View</b></span>
+      <span class="p-tiles-head" style="--d:8">Steps done</span>
+      <span class="p-tiles" style="--d:9"><span><b>1</b>edits</span><span><b>2</b>commands</span><span><b>3</b>reads</span></span>
       <span class="p-foot" style="--d:10">Web demo, not live data</span>
     </div>
   </div>
@@ -216,7 +216,7 @@
       <div class="state">
         <div class="state-text">
           <h3>Overview</h3>
-          <p>Rest your pointer at the top for 0.2 seconds to see the last 24 hours: who's waiting on you, who's still running, who's done, and the steps that have come back. Click "Open app" to jump to that agent; move the pointer away and it closes.</p>
+          <p>Rest your pointer at the top for 0.2 seconds to see the last 24 hours: who's waiting on you, who's still running, who's done, and how many steps each turn took and whether any failed. Click "Open app" to jump to that agent; move the pointer away and it closes.</p>
         </div>
         <div class="demo" data-demo="panel" role="img" aria-label="Task overview: 12 turns today, three tasks, and the step details for Codex"></div>
       </div>
@@ -238,7 +238,7 @@
             <li>Which agent is working</li>
             <li>When a turn starts, waits, finishes or fails</li>
             <li>The kind of step, such as reading a file or running a command</li>
-            <li>The task title and a thread ID, so you can tell tasks apart</li>
+            <li>The task title, so you can tell tasks apart</li>
           </ul>
         </div>
         <div>
@@ -253,7 +253,7 @@
       </div>
       <div class="privacy-notes">
         <p>Before connecting each agent, it tells you which config file it's going to change. It only writes after you confirm, keeps a backup of the original, and you can disconnect at any time.</p>
-        <p>By default it only observes and never decides for you. The one exception is Claude Code: you can turn on one-time approval, which lets through a single request at a time. Confirmations for every other agent stay in that agent's own app.</p>
+        <p>By default it only observes and never decides for you. The one exception is Claude Code: you can turn on one-time approval. Each request then grows out of the notch as a card showing what will run and how long is left; Allow lets through that one request, and risky ones such as deletes or pushes need a 0.6-second press and hold. Confirmations for every other agent stay in that agent's own app.</p>
       </div>
     </div>
   </section>
@@ -304,7 +304,7 @@
     <div class="wrap">
       <img class="download-icon" src="../media/app-icon.png" width="128" height="128" alt="">
       <h2 id="download-h">Download Agent Island</h2>
-      <p class="download-meta">Alpha <span data-version>0.3.4</span> for Macs with Apple silicon, macOS 13 or later. The app's interface is in Chinese for now.</p>
+      <p class="download-meta">Alpha <span data-version>0.3.5</span> for Macs with Apple silicon, macOS 13 or later. The app's interface is in Chinese for now.</p>
       <div class="download-actions">
         <a class="btn btn-primary btn-lg" id="dmgLink" href="#download" data-download>Download the Alpha</a>
         <a class="btn btn-glass btn-lg" id="mirrorLink" href="#download" hidden>Mirror in China</a>
