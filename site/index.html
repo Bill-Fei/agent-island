@@ -132,11 +132,11 @@
       <span class="p-list-head" style="--d:2"><span>最近 24 小时</span><span>进行中优先</span></span>
       <span class="p-card is-current" style="--d:3;top:196px">
         <img src="media/icons/codex.png" alt=""><b>Codex</b><span>数据库迁移脚本</span><small>A41C02&ensp;21:04</small>
-        <em style="color:#e8b080">待你确认</em>
+        <em style="color:#e8b080">等你批准</em>
       </span>
       <span class="p-card" style="--d:4;top:280px">
         <img src="media/icons/workbuddy.png" alt=""><b>Work Buddy</b><span>整理本周周报素材</span><small>7F2E91&ensp;20:58</small>
-        <em style="color:#8aaee8">进行中</em>
+        <em style="color:#8aaee8">正在执行</em>
       </span>
       <span class="p-card" style="--d:5;top:364px">
         <img src="media/icons/claude.png" alt=""><b>Claude</b><span>重构登录模块</span><small>C93B07&ensp;20:41</small>
@@ -145,13 +145,13 @@
 
       <span class="p-detail" style="--d:5">
         <img src="media/icons/codex.png" alt=""><b>Codex</b><span class="p-open">打开应用</span>
-        <span class="p-desc">数据库迁移脚本：对比新旧表结构，<br>并补充回滚步骤</span>
-        <span class="p-thread"><span>会话线索 · A41C02&ensp;21:04</span><span>复制会话线索</span></span>
       </span>
-      <span class="p-step" style="--d:6;top:296px"><span>读取文件 · 已返回</span><time>21:02</time></span>
-      <span class="p-step" style="--d:7;top:324px"><span>执行命令 · 已返回</span><time>21:03</time></span>
-      <span class="p-step" style="--d:8;top:352px"><span>修改文件 · 已返回</span><time>21:03</time></span>
-      <span class="p-step is-attn" style="--d:9;top:380px"><span>请求权限 · 待你确认</span><time>21:04</time></span>
+      <span class="p-heading" style="--d:5">数据库迁移脚本</span>
+      <span class="p-status" style="--d:6"><em>等你批准</em><time>21:04</time></span>
+      <span class="p-hair" style="--d:6"></span>
+      <span class="p-outcome" style="--d:7"><span>Codex 等你批准 · 请在 Codex 里处理</span><b>查看</b></span>
+      <span class="p-tiles-head" style="--d:8">已完成的步骤</span>
+      <span class="p-tiles" style="--d:9"><span><b>1</b>改文件</span><span><b>2</b>跑命令</span><span><b>3</b>读文件</span></span>
       <span class="p-foot" style="--d:10">网页演示，非实时数据</span>
     </div>
   </div>
@@ -220,13 +220,13 @@
           <h3>提醒</h3>
           <p>任务开始、需要你确认、或者一轮结束时，它横向展开约 10 秒，告诉你是哪件事、现在是什么状态，然后自己收回去。</p>
         </div>
-        <div class="demo" data-demo="med" role="img" aria-label="横向展开的灵动岛：数据库迁移，待你确认"></div>
+        <div class="demo" data-demo="med" role="img" aria-label="横向展开的灵动岛：数据库迁移，1 项待确认"></div>
       </div>
 
       <div class="state">
         <div class="state-text">
           <h3>总览</h3>
-          <p>鼠标在顶部停 0.2 秒，就能看到最近 24 小时的任务：谁在等你、谁还在跑、谁已经结束，以及已经返回的步骤。点“打开应用”回到对应的 Agent 处理，移开鼠标就收起。</p>
+          <p>鼠标在顶部停 0.2 秒，就能看到最近 24 小时的任务：谁在等你、谁还在跑、谁已经结束，以及每一轮做了几步、有没有出错。点“打开应用”回到对应的 Agent 处理，移开鼠标就收起。</p>
         </div>
         <div class="demo" data-demo="panel" role="img" aria-label="任务总览面板：今日活跃 12 轮，三条任务记录和 Codex 的步骤详情"></div>
       </div>
@@ -248,7 +248,7 @@
             <li>哪个 Agent 在工作</li>
             <li>一轮任务什么时候开始、等待、结束或失败</li>
             <li>步骤的类别，比如读取文件、执行命令</li>
-            <li>任务标题和会话线索，用来帮你认出是哪件事</li>
+            <li>任务标题，用来帮你认出是哪件事</li>
           </ul>
         </div>
         <div>
@@ -263,7 +263,7 @@
       </div>
       <div class="privacy-notes">
         <p>接入每个 Agent 之前，它会先告诉你要改哪个配置文件。你确认后才写入，并且留一份原文件备份；随时可以卸载接入。</p>
-        <p>默认只观察，不替你做决定。唯一的例外是 Claude Code：你可以手动开启单次审批，每次只放行这一次，其他 Agent 的确认都回到原应用处理。</p>
+        <p>默认只观察，不替你做决定。唯一的例外是 Claude Code：你可以手动开启单次审批。开启后，请求会从刘海长出一张卡片，显示要做什么和剩余时间，点“允许”只放行这一次；删除、推送这类高风险操作要按住 0.6 秒才会放行。其他 Agent 的确认都回到原应用处理。</p>
       </div>
     </div>
   </section>
