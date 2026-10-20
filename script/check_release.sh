@@ -8,6 +8,7 @@ test -x "$ISLAND_APP/Contents/MacOS/LinglongtaiHUD"
 test -x "$ISLAND_APP/Contents/Helpers/linglongtaictl"
 test -f "$ISLAND_APP/Contents/Resources/Integration/install_hooks.py"
 test -f "$ISLAND_APP/Contents/Resources/AppIcon.icns"
+for agent in codex claude doubao work-buddy; do test -f "$ISLAND_APP/Contents/Resources/AgentIcons/$agent.png"; done
 plutil -lint "$ISLAND_PLIST"
 for key in CFBundleIdentifier CFBundleShortVersionString CFBundleVersion IslandSourceRevision IslandSourceSHA256 IslandBuildConfiguration; do
   /usr/libexec/PlistBuddy -c "Print :$key" "$ISLAND_PLIST"

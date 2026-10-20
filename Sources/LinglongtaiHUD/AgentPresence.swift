@@ -292,6 +292,15 @@ final class AgentPresence: ObservableObject {
         return NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
     }
 
+    private static let bundledIconTag = "bundled"
+
+    /// Icons shipped in Contents/Resources/AgentIcons, named after AgentKind's raw value.
+    static func bundledIcon(for kind: AgentKind) -> NSImage? {
+        guard let url = Bundle.main.resourceURL?
+            .appendingPathComponent("AgentIcons/\(kind.rawValue).png") else { return nil }
+        return NSImage(contentsOf: url)
+    }
+
     private func refresh() {
         for (kind, bundleID) in Self.bundleIDs {
             if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
@@ -299,9 +308,11 @@ final class AgentPresence: ObservableObject {
                     icons[kind] = NSWorkspace.shared.icon(forFile: url.path)
                     iconPaths[kind] = url.path
                 }
-            } else if icons[kind] != nil {
-                icons[kind] = nil
-                iconPaths[kind] = nil
+            } else if iconPaths[kind] != Self.bundledIconTag {
+                // Launch Services can't find the app (not installed, or installed
+                // somewhere it never indexed), so fall back to the icon we ship.
+                icons[kind] = Self.bundledIcon(for: kind)
+                iconPaths[kind] = Self.bundledIconTag
             }
         }
         let ids = Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))

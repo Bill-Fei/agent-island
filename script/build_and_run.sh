@@ -50,7 +50,7 @@ fi
 SIGNING_FLAG="${SIGNING_IDENTITY:--}"
 ISLAND_SOURCE_HASH="$(cd "$ROOT_DIR" && shasum -a 256 Package.swift VERSION Sources/*/*.swift | shasum -a 256 | awk '{print $1}')"
 input_hash() {
-  shasum -a 256 Package.swift VERSION Sources/*/*.swift Resources/AppIcon.icns Resources/Localization/*.lproj/* script/install_hooks.py script/build_and_run.sh | shasum -a 256 | awk '{print $1}'
+  shasum -a 256 Package.swift VERSION Sources/*/*.swift Resources/AppIcon.icns Resources/AgentIcons/*.png Resources/Localization/*.lproj/* script/install_hooks.py script/build_and_run.sh | shasum -a 256 | awk '{print $1}'
 }
 ISLAND_INPUT_HASH="$(cd "$ROOT_DIR" && input_hash)"
 ISLAND_CONFIGURATION=debug
@@ -134,6 +134,9 @@ mkdir -p "$APP_MACOS" "$APP_CONTENTS/Resources"
 cp "$BUILD_BINARY" "$APP_BINARY"
 chmod +x "$APP_BINARY"
 cp "$ROOT_DIR/Resources/AppIcon.icns" "$APP_CONTENTS/Resources/AppIcon.icns"
+# Fallback agent icons, used when the agent app is not found on this Mac.
+rm -rf "$APP_CONTENTS/Resources/AgentIcons"
+cp -R "$ROOT_DIR/Resources/AgentIcons" "$APP_CONTENTS/Resources/AgentIcons"
 mkdir -p "$APP_CONTENTS/Helpers" "$APP_CONTENTS/Resources/Integration"
 cp "$BUILD_HELPER" "$APP_CONTENTS/Helpers/linglongtaictl"
 cp "$ROOT_DIR/script/install_hooks.py" "$APP_CONTENTS/Resources/Integration/install_hooks.py"

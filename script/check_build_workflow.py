@@ -17,6 +17,8 @@ class BuildWorkflowChecks(unittest.TestCase):
         (self.root / "VERSION").write_text("0.3.1\n")
         (self.root / "Sources/Fixture/main.swift").write_text("// Fixture only\n")
         (self.root / "Resources/AppIcon.icns").write_bytes(b"fixture-icon")
+        (self.root / "Resources/AgentIcons").mkdir()
+        (self.root / "Resources/AgentIcons/codex.png").write_bytes(b"fixture-agent-icon")
         for lang in ["en", "zh-Hans"]:
             (self.root / f"Resources/Localization/{lang}.lproj").mkdir(parents=True)
             (self.root / f"Resources/Localization/{lang}.lproj/Localizable.strings").write_text("/* Fixture */\n")
