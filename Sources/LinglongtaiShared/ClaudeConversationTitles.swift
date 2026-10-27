@@ -37,7 +37,8 @@ public struct ClaudeConversationTitles: Sendable {
         }
         files.sort { $0.1 == $1.1 ? $0.0.path < $1.0.path : $0.1 > $1.1 }
         let selected = files.prefix(4096).map(\.0)
-        entries = entries.filter { selected.contains($0.key) }
+        let selectedSet = Set(selected)
+        entries = entries.filter { selectedSet.contains($0.key) }
         var titles: [String: String] = [:]
         for file in selected {
             let rawID = file.deletingPathExtension().lastPathComponent

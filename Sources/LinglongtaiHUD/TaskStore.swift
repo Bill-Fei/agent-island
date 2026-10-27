@@ -63,6 +63,10 @@ final class TaskStore: ObservableObject {
 
     func approvalRequest(for task: AgentTask) -> ApprovalRelay.Request? {
         guard ApprovalRelay.supports(task.profile.kind) else { return nil }
+        // The match below requires an equal, non-nil request id. Checking the
+        // snapshot first keeps this O(1) for the thousands of history rows that
+        // never had a request; it runs for every row on every refresh.
+        guard task.approvalRequestID != nil else { return nil }
         guard let current = tasks.first(where: { $0.id == task.id }),
               current.approvalRequestID == task.approvalRequestID,
               current.updatedAt == task.updatedAt,
