@@ -31,7 +31,9 @@ if [[ ! "$ISLAND_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   exit 2
 fi
 ISLAND_SOURCE_REVISION="$(git -C "$ROOT_DIR" rev-parse --short HEAD)"
-if [[ -n "$(git -C "$ROOT_DIR" status --porcelain --untracked-files=normal)" ]]; then
+# Untracked user folders (for example local backups) do not change the source
+# that was compiled. Only tracked edits should mark a package as dirty.
+if [[ -n "$(git -C "$ROOT_DIR" status --porcelain --untracked-files=no)" ]]; then
   ISLAND_SOURCE_REVISION="$ISLAND_SOURCE_REVISION-dirty"
 fi
 # Pin a certificate fingerprint rather than an ambiguous certificate name.
