@@ -9,7 +9,7 @@ import Foundation
 ///
 /// Hard limits, deliberately not worked around:
 ///   - Only entry `kind`, `role`, `message.type`, `timestampMs`, `isStreaming`
-///     and the presence of widget/secret answers are read. Message text, rich
+///     and the presence of reactions and widget/secret answers are read. Message text, rich
 ///     text, attachments, file names and automation names are never stored,
 ///     compared or logged.
 ///   - Nothing can be written back: the island can *show* Grok Bot but can
@@ -49,6 +49,7 @@ public enum GrokBotActivity {
         public let streaming: Bool
         /// The bot asked a question (widget / secret request) still unanswered.
         public let awaitingUser: Bool
+        public var acknowledged: Bool = false
     }
 
     public enum Phase: Sendable, Equatable {
@@ -139,6 +140,10 @@ public enum GrokBotActivity {
         var replied = false
         var streaming = false
         var awaiting = false
+        // The bot often answers a short "OK" with only an emoji reaction on the
+        // user's message. That is the end of the turn, not work in progress.
+        let reactions = entries[userIndex]["reactions"]
+        let reacted = (reactions as? [Any])?.isEmpty == false || (reactions as? [String: Any])?.isEmpty == false
         for entry in entries[userIndex...] {
             if let ms = entry["timestampMs"] as? Double { lastMs = max(lastMs, ms) }
             if entry["isStreaming"] as? Bool == true { streaming = true }
@@ -153,15 +158,19 @@ public enum GrokBotActivity {
                 break
             }
         }
+        // A reaction with no text after it is the bot's whole answer.
+        let acknowledged = reacted && !replied
         return Observation(sessionKey: sessionKey, turnKey: turnKey,
                            userAt: Date(timeIntervalSince1970: userMs / 1000),
                            lastActivityAt: Date(timeIntervalSince1970: lastMs / 1000),
-                           replied: replied, streaming: streaming, awaitingUser: awaiting)
+                           replied: replied || acknowledged, streaming: streaming, awaitingUser: awaiting,
+                           acknowledged: acknowledged)
     }
 
     public static func phase(of observation: Observation, now: Date) -> Phase {
         let quiet = max(0, now.timeIntervalSince(observation.lastActivityAt))
         if observation.awaitingUser { return .finished(awaitingUser: true) }
+        if observation.acknowledged { return .finished(awaitingUser: false) }
         if observation.streaming || !observation.replied {
             return quiet >= staleAfter ? .unknown(quiet: quiet) : .running(replying: observation.streaming)
         }

@@ -31,6 +31,9 @@ func runGrokBotRevisionChecks(check: (String, Bool) -> Void) {
           phase([user("u1", age: 120), reply(age: 100, type: "widget", extra: ["respondedValue": "ok"])]) == .finished(awaitingUser: false))
     if case .unknown = phase([user("u1", age: 600)]) { check("grok: silence without reply is unknown, never completed", true) }
     else { check("grok: silence without reply is unknown, never completed", false) }
+    var reacted = user("u1", age: 3)
+    reacted["reactions"] = [["emoji": "👍"]]
+    check("grok: an emoji reaction to the user's message ends the turn", phase([reacted]) == .finished(awaitingUser: false))
     check("grok: no user message is not a turn", phase([reply(age: 5)]) == nil)
     check("grok: older reply belongs to the previous turn",
           phase([user("u0", age: 300), reply(age: 290), user("u1", age: 5)]) == .running(replying: false))
