@@ -72,7 +72,11 @@
 "豆包" = "Doubao";
 "豆包 Agent" = "Doubao Agent";
 "Grok Bot" = "Grok Bot";
-"桌面应用已识别；事件桥待接入" = "Desktop app detected; event bridge pending";
+"只读本地状态，需在 Grok Bot 里回复" = "Read-only local status; reply in Grok Bot";
+"读本地状态" = "Reads local status";
+"Grok Bot 会话" = "Grok Bot session";
+"正在回复" = "Replying";
+"等你在 Grok Bot 里回复" = "Waiting for your reply in Grok Bot";
 "排队中" = "Queued";
 "运行中" = "Running";
 "待确认" = "Needs you";

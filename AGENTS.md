@@ -40,6 +40,16 @@ Agent 灵动岛（LinglongtaiHUD）——跑在 macOS 刘海区的本地 Agent �
 - 阈值是实测经验值（收养 10 分钟 / 未知 4 分钟 / 放弃 20 分钟），改之前先看真实轮次的静默时长。
 - 单向只读：**不能在岛上批准豆包的请求**，这条限制不要试图绕过。
 
+## Grok Bot 数据源（已接入，不要重复实现）
+
+Grok Bot（bundle id 确实是 `com.anysphere.sand`）同样没有 Hook、没有审批通道，走和豆包一样的只读轮询。
+
+- 实现在 `Sources/LinglongtaiShared/GrokBotActivity.swift`，与豆包共用 `consumeDoubaoTrajectories()` 的 3 秒轮询。
+- 数据：`~/Library/Application Support/Grok Bot/sand-client-persistence/` 下文件名是存储键的 base32，键含 `.transcript.replicas.<agentId>` 的是对话副本。
+- 只读 `kind`、`role`、`message.type`、`timestampMs`、`isStreaming` 以及 widget/secret 是否已作答。消息正文一律不读、不存、不落日志。
+- 没有结束信号：机器人回复后静默 45 秒才算已完成；只有用户消息、4 分钟没回复报**未知**。
+- 不能在岛上回复 Grok Bot。
+
 ## 协作边界
 
 本目录同时可能有另一个 Agent 会话（WorkBuddy）在改动同一棵树。

@@ -278,6 +278,7 @@ struct LinglongtaiAcceptance {
         runWingLayoutRevisionChecks { name, condition in check(name, condition) }
         runContentWidthRevisionChecks { name, condition in check(name, condition) }
         runDoubaoRevisionChecks { name, condition in check(name, condition) }
+        runGrokBotRevisionChecks { name, condition in check(name, condition) }
         runLabelMotionChecks { name, condition in check(name, condition) }
         runJournalRevisionChecks { name, condition in check(name, condition) }
         runWorkBuddyTitleRevisionChecks { name, condition in check(name, condition) }

@@ -9,6 +9,9 @@ public enum AgentKind: String, Codable, CaseIterable, Hashable, Sendable {
     case grokBot = "grok-bot"
     case custom
 
+    /// No hook channel: state is read from the app's own local records.
+    public var isPolledLocally: Bool { self == .doubao || self == .grokBot }
+
     public var displayName: String {
         switch self {
         case .codex: return "Codex"

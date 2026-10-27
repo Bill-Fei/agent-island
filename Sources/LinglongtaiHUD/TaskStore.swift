@@ -327,6 +327,7 @@ final class TaskStore: ObservableObject {
     private var checkpointGeneration: UInt64 = 0
     private let checkpointQueue = DispatchQueue(label: "com.billfei.linglongtai.checkpoint", qos: .utility)
     private var doubaoTracker = DoubaoTracker()
+    private var grokBotTracker = GrokBotTracker()
     private var claudeChatObserver: ClaudeChatObserver?
     private var claudeChatTaskIDs: [String: UUID] = [:]
     private var lastDoubaoPoll = Date.distantPast
@@ -391,9 +392,9 @@ final class TaskStore: ObservableObject {
             }
         }
         let latestDoubao = Dictionary(grouping: tasks.filter {
-            $0.source.isLive && $0.profile.kind == .doubao && $0.sessionID != nil
+            $0.source.isLive && $0.profile.kind.isPolledLocally && $0.sessionID != nil
         }, by: { $0.sessionID! }).compactMapValues { $0.max { $0.updatedAt < $1.updatedAt }?.id }
-        for index in tasks.indices where tasks[index].profile.kind == .doubao {
+        for index in tasks.indices where tasks[index].profile.kind.isPolledLocally {
             guard let session = tasks[index].sessionID, latestDoubao[session] != tasks[index].id,
                   [.queued, .running, .waiting].contains(tasks[index].status) else { continue }
             ongoingTaskIDs.remove(tasks[index].id)
@@ -735,6 +736,7 @@ final class TaskStore: ObservableObject {
     func connectionLabel(for kind: AgentKind) -> String {
         // Doubao has no hook to call back from; its state arrives by trajectory.
         if kind == .doubao { return "读本地轨迹" }
+        if kind == .grokBot { return "读本地状态" }
         return connections[kind.rawValue] == nil ? "未收到回调" : "收到过回调"
     }
 
@@ -1012,7 +1014,7 @@ final class TaskStore: ObservableObject {
         selectedTaskID = task.id
         consumeEvents()
         reconcileOngoingTasks(terminalStates: Self.hookTerminalStates())
-        if task.profile.kind == .doubao {
+        if task.profile.kind.isPolledLocally {
             consumeDoubaoTrajectories(force: true)
         }
         if task.sourceEvent?.hasPrefix("ClaudeChat") == true {
@@ -1271,8 +1273,8 @@ final class TaskStore: ObservableObject {
         }
     }
 
-    /// Doubao exposes no hook, so its Agent-mode trajectory is polled instead.
-    /// Acceptance runs are in-memory only and never read the personal directory.
+    /// Doubao and Grok Bot expose no hook, so their local records are polled
+    /// instead. Acceptance runs are in-memory only and never read the personal directory.
     private func consumeDoubaoTrajectories(force: Bool = false) {
         guard !isIsolatedRun, !demoPreviewActive, !doubaoPollInFlight else { return }
         let current = now()
@@ -1280,18 +1282,21 @@ final class TaskStore: ObservableObject {
         lastDoubaoPoll = current
         doubaoPollInFlight = true
         let tracker = doubaoTracker
+        let grokTracker = grokBotTracker
         Task { @MainActor [weak self] in
             let result = await Task.detached(priority: .utility) {
                 var tracker = tracker
-                let events = tracker.poll(now: current)
-                return (tracker, events)
+                var grokTracker = grokTracker
+                let events = tracker.poll(now: current) + grokTracker.poll(now: current)
+                return (tracker, grokTracker, events)
             }.value
             guard let self else { return }
             self.doubaoTracker = result.0
+            self.grokBotTracker = result.1
             self.doubaoPollInFlight = false
-            guard !result.1.isEmpty else { return }
+            guard !result.2.isEmpty else { return }
             var didChange = false
-            for event in result.1 { didChange = self.apply(event, observedOngoing: true) || didChange }
+            for event in result.2 { didChange = self.apply(event, observedOngoing: true) || didChange }
             if didChange {
                 self.saveTasksInBackground()
                 self.refreshPresentation()
@@ -1488,9 +1493,9 @@ final class TaskStore: ObservableObject {
                 // Doubao's trajectory represents one current turn per session.
                 // A newer boundary supersedes old unresolved rows, but is NOT
                 // proof that those old rows completed or were cancelled.
-                if current.profile.kind == .doubao, let session = current.sessionID {
+                if current.profile.kind.isPolledLocally, let session = current.sessionID {
                     for index in tasks.indices where tasks[index].id != id &&
-                        tasks[index].profile.kind == .doubao && tasks[index].sessionID == session &&
+                        tasks[index].profile.kind == current.profile.kind && tasks[index].sessionID == session &&
                         tasks[index].updatedAt < current.updatedAt &&
                         [.queued, .running, .waiting].contains(tasks[index].status) {
                         ongoingTaskIDs.remove(tasks[index].id)
@@ -1662,7 +1667,7 @@ final class TaskStore: ObservableObject {
     }
 
     /// Sources that report they cannot resolve a turn; shown as 结果未知.
-    private static let unknownResultEvents: Set<String> = ["DoubaoSilent", "DoubaoAbandoned", "AmbiguousTurn", "ClaudeChatUnknown"]
+    private static let unknownResultEvents: Set<String> = ["DoubaoSilent", "DoubaoAbandoned", "GrokBotSilent", "AmbiguousTurn", "ClaudeChatUnknown"]
 
     /// Started, without terminal evidence, and not reported unknown. Hook
     /// providers stay quiet during long tool runs, so silence alone does not
@@ -1673,14 +1678,14 @@ final class TaskStore: ObservableObject {
               !Self.unknownResultEvents.contains(task.sourceEvent ?? ""),
               !["SupersededTrajectory", "HookTrackingEnded"].contains(task.sourceEvent ?? "") else { return false }
         let age = now().timeIntervalSince(task.updatedAt)
-        let limit = task.profile.kind == .doubao ? DoubaoTrajectory.staleAfter : AgentActivityMotion.unresolvedLimit
+        let limit = task.profile.kind.isPolledLocally ? DoubaoTrajectory.staleAfter : AgentActivityMotion.unresolvedLimit
         return age >= -5 && age <= limit
     }
 
     private func isFresh(_ task: AgentTask) -> Bool {
         let age = now().timeIntervalSince(task.updatedAt)
-        guard !["DoubaoSilent", "DoubaoAbandoned", "AmbiguousTurn", "ClaudeChatUnknown", "SupersededTrajectory", "HookTrackingEnded"].contains(task.sourceEvent ?? "") else { return false }
-        let limit = task.profile.kind == .doubao ? DoubaoTrajectory.staleAfter : 120
+        guard !["DoubaoSilent", "DoubaoAbandoned", "GrokBotSilent", "AmbiguousTurn", "ClaudeChatUnknown", "SupersededTrajectory", "HookTrackingEnded"].contains(task.sourceEvent ?? "") else { return false }
+        let limit = task.profile.kind.isPolledLocally ? DoubaoTrajectory.staleAfter : 120
         return age >= -5 && age <= limit
     }
 

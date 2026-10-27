@@ -188,7 +188,7 @@ struct AppSettingsView: View {
                                     .font(.system(size: 11)).foregroundStyle(.secondary)
                             }
                             if kind == .grokBot {
-                                Text("桌面应用已识别；事件桥待接入")
+                                Text("只读本地状态，需在 Grok Bot 里回复")
                                     .font(.system(size: 11)).foregroundStyle(.secondary)
                             }
                         }
