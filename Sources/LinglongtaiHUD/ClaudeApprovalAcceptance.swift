@@ -85,6 +85,8 @@ func runClaudeApprovalStoreChecks(check: (String, Bool) -> Void, emit: (AgentEve
     hostLine("Received permission response for \(cardID): once (tool: Bash)")
     store.pollHostPrompts()
     check("a card answered in the app withdraws the island button at once", store.approvalRequest(for: desktopTask) == nil)
+    check("a card answered in the app resumes running without waiting for the next hook",
+          store.tasks.first { $0.id == desktop.taskID }.map { $0.status == .running && $0.sourceEvent == "ClaudeApprovalAnswered" } == true)
     ApprovalRelay.cleanup(desktop.id)
     guard let stale = try publish(desktopHost: true), let staleTask = store.tasks.first(where: { $0.id == stale.taskID }) else {
         check("Claude Desktop stale fixture publishes", false); return

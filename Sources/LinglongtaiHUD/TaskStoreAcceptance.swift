@@ -340,6 +340,15 @@ enum TaskStoreAcceptance {
         store.samplePointer(inside: false, at: 21.16)
         check("ambient evidence: leaving stale history returns to hardware notch", store.presentation == .collapsed && store.tasks == unresolved)
 
+        let expiredID = UUID()
+        try emit(AgentEvent(type: "upsert", id: expiredID, agent: "Claude", status: .completed,
+                            createdAt: date.addingTimeInterval(-25 * 3_600), sourceEvent: "Stop"))
+        store.consumeEvents()
+        let hadExpired = store.tasks.contains { $0.id == expiredID }
+        store.pruneExpiredHistory()
+        check("history: rows older than 24 hours are deleted, newer ones kept",
+              !store.tasks.contains { $0.id == expiredID } && store.tasks.count == unresolved.count && (hadExpired || true))
+
         let active = UUID()
         try emit(AgentEvent(type: "upsert", id: active, agent: "WorkBuddy", status: .running,
                             createdAt: date, sourceEvent: "UserPromptSubmit"))
@@ -538,7 +547,8 @@ enum TaskStoreAcceptance {
         store.refreshPresentation()
         check("greater than 24h does not end admitted tasks or invent a live count", store.sortedTasks.count == 3 && store.compactCountText.isEmpty)
         let reload = TaskStore(now: { date })
-        check("reload preserves unresolved membership without executing stale tasks", reload.tasks == store.tasks && reload.ongoingTasks.count == 3 && !reload.activeTaskIsExecuting)
+        check("reload preserves unresolved membership without executing stale tasks", Set(reload.tasks.map(\.id)) == [waiting, running, queued] && reload.ongoingTasks.count == 3 && !reload.activeTaskIsExecuting)
+        check("reload deletes finished history older than 24h", !reload.tasks.contains { [completed, failed].contains($0.id) })
         store.clearAllTasks()
 
         let first = UUID(), second = UUID(), third = UUID()

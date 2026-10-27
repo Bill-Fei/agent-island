@@ -291,6 +291,26 @@ final class TaskStore: ObservableObject {
     func pollHostPrompts() {
         guard promptLog.poll(now: now()) else { return }
         invalidateTaskCache()
+        // A card answered in Claude Desktop sends no hook until the tool
+        // finishes, which can take minutes. Its log records the answer, so the
+        // task is running again (and animates) as soon as that line appears.
+        var answeredInApp = false
+        for index in tasks.indices where tasks[index].status == .waiting && tasks[index].profile.kind == .claude {
+            guard let id = tasks[index].approvalRequestID, submittedApprovals[id] == nil,
+                  let card = hostBindings[id], let resolution = promptLog.resolved[card],
+                  resolution.decision != "aborted" else { continue }
+            tasks[index].status = .running
+            tasks[index].requiresApproval = false
+            tasks[index].sourceEvent = "ClaudeApprovalAnswered"
+            tasks[index].detail = resolution.decision == "deny" ? "已在 Claude 里拒绝，继续本轮" : "已在 Claude 里批准，继续执行"
+            tasks[index].updatedAt = max(tasks[index].updatedAt, resolution.at)
+            ongoingTaskIDs.insert(tasks[index].id)
+            answeredInApp = true
+        }
+        if answeredInApp {
+            invalidateTaskCache()
+            saveTasksInBackground()
+        }
         for task in tasks {
             guard let id = task.approvalRequestID, !tracedHostActionable.contains(id),
                   let request = approvalRequest(for: task), request.hostSessionID != nil else { continue }
@@ -466,6 +486,7 @@ final class TaskStore: ObservableObject {
                 self?.pollHostPrompts()
                 self?.resolveCodexApprovalsAnsweredInApp()
                 self?.consumeDoubaoTrajectories()
+                self?.pruneExpiredHistoryIfDue()
                 self?.refreshPresentation()
             }
         }
@@ -1132,6 +1153,7 @@ final class TaskStore: ObservableObject {
             eventOffset = snapshot.eventOffset
             connections = snapshot.connections ?? [:]
             reconcileOngoingTasks(terminalStates: Self.hookTerminalStates())
+            pruneExpiredHistory()
             if snapshot.version != 2 {
                 recoverHookMetadata()
                 saveTasks()
@@ -1162,6 +1184,39 @@ final class TaskStore: ObservableObject {
             $0.source.isLive && [.queued, .running, .waiting].contains($0.status) && isFresh($0)
         }.map(\.id))
         reconcileOngoingTasks(terminalStates: Self.hookTerminalStates())
+    }
+
+    /// The island only ever shows the last 24 hours, so older rows are deleted
+    /// rather than kept invisibly. Without this the history grew without bound
+    /// (1 400+ rows) and every refresh and checkpoint paid for all of them.
+    static let historyRetention: TimeInterval = 86_400
+    private static let pruneInterval: TimeInterval = 60
+    private var lastHistoryPrune = Date.distantPast
+
+    @discardableResult
+    func pruneExpiredHistory() -> Bool {
+        let current = now()
+        lastHistoryPrune = current
+        // Admitted long tasks stay until a real Stop; only rows no longer
+        // tracked (finished, superseded, unresolved history) are removed.
+        let expired = Set(tasks.filter {
+            current.timeIntervalSince($0.updatedAt) > Self.historyRetention && !ongoingTaskIDs.contains($0.id)
+        }.map(\.id))
+        guard !expired.isEmpty else { return false }
+        tasks.removeAll { expired.contains($0.id) }
+        ongoingTaskIDs.subtract(expired)
+        if let selected = selectedTaskID, expired.contains(selected) { selectedTaskID = nil }
+        if let highlighted = highlightedTaskID, expired.contains(highlighted) { highlightedTaskID = nil }
+        invalidateTaskCache()
+        return true
+    }
+
+    private func pruneExpiredHistoryIfDue() {
+        guard !demoPreviewActive, now().timeIntervalSince(lastHistoryPrune) >= Self.pruneInterval else { return }
+        if pruneExpiredHistory() {
+            saveTasksInBackground()
+            refreshPresentation()
+        }
     }
 
     /// Earlier builds consumed live hooks but did not persist their origin.
