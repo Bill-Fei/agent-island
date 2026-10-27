@@ -92,8 +92,16 @@ if [[ "$MODE" == "--package-validated" ]]; then
     fi
   done
 else
-swift build --build-system "$BUILD_SYSTEM" -c "$ISLAND_CONFIGURATION"
-ISLAND_BIN_DIR="$(swift build --build-system "$BUILD_SYSTEM" -c "$ISLAND_CONFIGURATION" --show-bin-path)"
+SWIFT_BUILD_ARGS=(--build-system "$BUILD_SYSTEM" -c "$ISLAND_CONFIGURATION")
+if [[ "${ISLAND_DISABLE_SANDBOX:-}" == "1" ]]; then
+  SWIFT_BUILD_ARGS+=(--disable-sandbox)
+fi
+swift build "${SWIFT_BUILD_ARGS[@]}"
+ISLAND_BIN_ARGS=(--build-system "$BUILD_SYSTEM" -c "$ISLAND_CONFIGURATION" --show-bin-path)
+if [[ "${ISLAND_DISABLE_SANDBOX:-}" == "1" ]]; then
+  ISLAND_BIN_ARGS+=(--disable-sandbox)
+fi
+ISLAND_BIN_DIR="$(swift build "${ISLAND_BIN_ARGS[@]}")"
 BUILD_BINARY="$ISLAND_BIN_DIR/$APP_NAME"
 BUILD_HELPER="$ISLAND_BIN_DIR/linglongtaictl"
 fi
