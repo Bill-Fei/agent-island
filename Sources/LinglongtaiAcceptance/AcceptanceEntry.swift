@@ -94,7 +94,8 @@ struct LinglongtaiAcceptance {
         reduced.target = 32
         reduced.advance(by: 1.0 / 120, reduceMotion: true)
         check("reduce motion snaps without rebound", reduced.value == 32 && reduced.velocity == 0)
-        check("product has four user-facing agents", AgentCatalog.supportedKinds == [.codex, .claude, .doubao, .workBuddy])
+        check("product has five user-facing agents", AgentCatalog.supportedKinds == [.codex, .claude, .doubao, .workBuddy, .grokBot])
+        check("grok aliases resolve to the desktop bot", AgentKind.resolve("Grok") == .grokBot && AgentKind.resolve("xAI Bot") == .grokBot)
 
         let metrics = IslandMetrics(notchWidth: 184, notchHeight: 32)
         check("status expands horizontally only", metrics.size(for: .medium).height == 32 && metrics.size(for: .medium).width > 184)

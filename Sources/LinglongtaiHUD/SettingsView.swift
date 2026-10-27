@@ -187,6 +187,10 @@ struct AppSettingsView: View {
                                 Text("仅支持 Agent 模式")
                                     .font(.system(size: 11)).foregroundStyle(.secondary)
                             }
+                            if kind == .grokBot {
+                                Text("桌面应用已识别；事件桥待接入")
+                                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                            }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         Spacer()

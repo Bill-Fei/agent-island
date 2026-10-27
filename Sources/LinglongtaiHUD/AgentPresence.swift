@@ -24,7 +24,11 @@ final class AgentPresence: ObservableObject {
         // WorkBuddy's macOS app identifies itself as Tencent WorkBuddy.
         // The old `com.workbuddy.workbuddy` value never resolved on installed
         // builds, so the island silently fell back to the generic SF Symbol.
-        .workBuddy: "com.tencent.workbuddy.mac"
+        .workBuddy: "com.tencent.workbuddy.mac",
+        // Grok Bot is an Electron desktop app. We only use Launch Services
+        // metadata here; the app's private stores and chat contents stay out
+        // of the island's observer boundary.
+        .grokBot: "com.anysphere.sand"
     ]
 
     init() {

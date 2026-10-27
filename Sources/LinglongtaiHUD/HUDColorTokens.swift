@@ -15,12 +15,14 @@ enum HUDColorTokens {
     static let claude = Color(red: 0.68, green: 0.49, blue: 1.00)
     static let doubao = Color(red: 1.00, green: 0.43, blue: 0.28)
     static let workBuddy = Color(red: 0.20, green: 0.84, blue: 0.62)
+    static let grokBot = Color(red: 0.78, green: 0.85, blue: 0.93)
     static let custom = Color(red: 0.64, green: 0.68, blue: 0.76)
 
     static let codexSurface = Color(red: 0.06, green: 0.12, blue: 0.24)
     static let claudeSurface = Color(red: 0.13, green: 0.07, blue: 0.25)
     static let doubaoSurface = Color(red: 0.25, green: 0.08, blue: 0.04)
     static let workBuddySurface = Color(red: 0.03, green: 0.19, blue: 0.15)
+    static let grokBotSurface = Color(red: 0.10, green: 0.13, blue: 0.17)
 
     static func agent(_ kind: AgentKind) -> Color {
         switch kind {
@@ -28,6 +30,7 @@ enum HUDColorTokens {
         case .claude: return claude
         case .doubao: return doubao
         case .workBuddy: return workBuddy
+        case .grokBot: return grokBot
         case .custom: return custom
         }
     }
@@ -38,6 +41,7 @@ enum HUDColorTokens {
         case .claude: return claudeSurface
         case .doubao: return doubaoSurface
         case .workBuddy: return workBuddySurface
+        case .grokBot: return grokBotSurface
         case .custom: return Color.black.opacity(0.22)
         }
     }

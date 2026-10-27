@@ -71,6 +71,8 @@
 /* ---------- Agent names and task status (Models.swift) ---------- */
 "豆包" = "Doubao";
 "豆包 Agent" = "Doubao Agent";
+"Grok Bot" = "Grok Bot";
+"桌面应用已识别；事件桥待接入" = "Desktop app detected; event bridge pending";
 "排队中" = "Queued";
 "运行中" = "Running";
 "待确认" = "Needs you";

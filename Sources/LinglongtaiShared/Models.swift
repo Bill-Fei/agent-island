@@ -6,6 +6,7 @@ public enum AgentKind: String, Codable, CaseIterable, Hashable, Sendable {
     case claude
     case doubao
     case workBuddy = "work-buddy"
+    case grokBot = "grok-bot"
     case custom
 
     public var displayName: String {
@@ -14,6 +15,7 @@ public enum AgentKind: String, Codable, CaseIterable, Hashable, Sendable {
         case .claude: return "Claude"
         case .doubao: return "豆包"
         case .workBuddy: return "WorkBuddy"
+        case .grokBot: return "Grok Bot"
         case .custom: return "Agent"
         }
     }
@@ -24,6 +26,7 @@ public enum AgentKind: String, Codable, CaseIterable, Hashable, Sendable {
         case .claude: return "Claude Code"
         case .doubao: return "豆包 Agent"
         case .workBuddy: return "Work Buddy Agent"
+        case .grokBot: return "Grok Bot"
         case .custom: return "Local Agent"
         }
     }
@@ -34,6 +37,7 @@ public enum AgentKind: String, Codable, CaseIterable, Hashable, Sendable {
         case .claude: return "#AD7DFF"
         case .doubao: return "#FF6E47"
         case .workBuddy: return "#33D69F"
+        case .grokBot: return "#D9E4F2"
         case .custom: return "#9EA8B9"
         }
     }
@@ -44,6 +48,7 @@ public enum AgentKind: String, Codable, CaseIterable, Hashable, Sendable {
         case .claude: return "sparkles"
         case .doubao: return "bubble.left.and.bubble.right.fill"
         case .workBuddy: return "person.2.fill"
+        case .grokBot: return "bolt.horizontal.circle.fill"
         case .custom: return "circle.dashed"
         }
     }
@@ -61,6 +66,7 @@ public enum AgentKind: String, Codable, CaseIterable, Hashable, Sendable {
         case "claude", "claudecode", "anthropicclaude": return .claude
         case "豆包", "doubao", "bytedancedoubao", "volcenginedoubao": return .doubao
         case "workbuddy", "wb": return .workBuddy
+        case "grok", "grokbot", "xai", "xaibot", "anyspheresand": return .grokBot
         default: return .custom
         }
     }
@@ -89,7 +95,7 @@ public struct AgentProfile: Equatable, Sendable {
 }
 
 public enum AgentCatalog {
-    public static let supportedKinds: [AgentKind] = [.codex, .claude, .doubao, .workBuddy]
+    public static let supportedKinds: [AgentKind] = [.codex, .claude, .doubao, .workBuddy, .grokBot]
 
     public static func profile(for rawName: String) -> AgentProfile {
         let kind = AgentKind.resolve(rawName)

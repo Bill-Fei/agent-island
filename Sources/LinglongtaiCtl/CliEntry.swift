@@ -299,7 +299,7 @@ struct LinglongtaiCtl {
 
     private static func printUsage() {
         print("灵动岛本地事件总线")
-        print("  start --agent codex|claude|doubao|work-buddy --title \"任务\"")
+        print("  start --agent codex|claude|doubao|work-buddy|grok-bot --title \"任务\"")
         print("  update --id <UUID> [--status running|waiting|completed|failed] [--progress 0.6]")
         print("  finish|wait|fail|stop|delete --id <UUID>")
         print("  clear | list | emit '<AgentEvent JSON>'")
