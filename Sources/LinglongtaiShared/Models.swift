@@ -66,7 +66,7 @@ public enum AgentKind: String, Codable, CaseIterable, Hashable, Sendable {
         case "claude", "claudecode", "anthropicclaude": return .claude
         case "豆包", "doubao", "bytedancedoubao", "volcenginedoubao": return .doubao
         case "workbuddy", "wb": return .workBuddy
-        case "grok", "grokbot", "xai", "xaibot", "anyspheresand": return .grokBot
+        case "grok", "grokbot", "xai", "xaibot", "anyspheresand", "com.anysphere.sand": return .grokBot
         default: return .custom
         }
     }
