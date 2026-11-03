@@ -368,7 +368,16 @@ ul, ol { padding: 0; list-style: none; }
   font-size: clamp(15.5px, 1.25vw, 17.5px); line-height: 1.8; color: var(--on3);
   text-wrap: balance;
 }
-.hero-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 34px; }
+/* Author credit: a quiet glass pill between the lede and the buttons. */
+.hero-credit {
+  display: inline-flex; align-items: center; gap: 10px; margin: 22px auto 0;
+  padding: 6px 16px 6px 7px; border-radius: 999px;
+  font-size: 13px; line-height: 1.4; color: var(--on2);
+  background: rgba(255, 255, 255, .06); box-shadow: inset 0 0 0 1px var(--line-on);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+}
+.hero-credit img { width: 22px; height: 22px; border-radius: 6px; flex: none; }
+.hero-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 30px; }
 .hero-actions .btn { height: 44px; padding: 0 22px; font-size: 15px; }
 .nw { white-space: nowrap; }
 
