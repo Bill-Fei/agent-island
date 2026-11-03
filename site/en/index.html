@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Agent Island — your AI agents, right in the notch</title>
-<meta name="description" content="Agent Island puts the status of Codex, Claude Code, Doubao and Work Buddy at the top of your Mac screen. It sees status, never content, and never goes online.">
+<meta name="description" content="Agent Island puts the status of Codex, Claude Code, Doubao, Grok Bot and Work Buddy at the top of your Mac screen. It sees status, never content, and never goes online.">
 <meta name="theme-color" content="#000000">
 <link rel="canonical" href="https://agent-island.pages.dev/en/">
 <link rel="alternate" hreflang="zh-CN" href="https://agent-island.pages.dev/">
@@ -20,7 +20,7 @@
 <meta property="og:locale" content="en_US">
 <meta property="og:locale:alternate" content="zh_CN">
 <meta property="og:title" content="Agent Island — your AI agents, right in the notch">
-<meta property="og:description" content="See what Codex, Claude Code, Doubao and Work Buddy are running, and what's waiting on you, with one glance at the top of your Mac. Status only, never content, never online.">
+<meta property="og:description" content="See what Codex, Claude Code, Doubao, Grok Bot and Work Buddy are running, and what's waiting on you, with one glance at the top of your Mac. Status only, never content, never online.">
 <meta property="og:image" content="https://agent-island.pages.dev/media/og-card-en.jpg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -36,7 +36,7 @@
 <script>
   // Same release links as the Chinese page. dmgUrl is injected by the publish scripts.
   window.SITE = {
-    version: '0.3.7',
+    version: '0.3.8',
     dmgUrl: '',     // injected by publish_site.sh: ../download/<version>.dmg
     mirrorUrl: '',  // optional domestic mirror of the same file
     sourceUrl: 'https://github.com/Bill-Fei/agent-island',
@@ -157,7 +157,7 @@
 
     <div class="hero-copy wrap">
       <h1><span class="nw h1-thin">Your AI agents,</span> <span class="nw h1-bold">right in the notch.</span></h1>
-      <p class="hero-lede">What Codex, Claude Code, Doubao and Work Buddy are running, and what's waiting on you. One glance at the top of your screen.</p>
+      <p class="hero-lede">What Codex, Claude Code, Doubao, Grok Bot and Work Buddy are running, and what's waiting on you. One glance at the top of your screen.</p>
       <p class="hero-credit"><img src="../media/app-icon.png" alt="" width="22" height="22" />macOS app · Designed by Pengfei Wang, AI-native experience designer</p>
       <div class="hero-actions">
         <a class="btn btn-primary" href="#download" data-download>Download the Alpha</a>
@@ -182,7 +182,7 @@
         <p>From juggling windows to a single glance. The film's on-screen text is in Chinese.</p>
       </div>
       <div class="film-frame">
-        <video id="filmVideo" src="../media/film.mp4" poster="../media/film-poster.jpg?v=2" preload="metadata" playsinline></video>
+        <video id="filmVideo" src="../media/film.mp4?v=3" poster="../media/film-poster.jpg?v=3" preload="metadata" playsinline></video>
         <button class="film-play" id="filmPlay" type="button">
           <span class="film-play-disc" aria-hidden="true"></span>
           <span class="film-play-label">Play the film · 30 s · with sound</span>
@@ -291,6 +291,12 @@
           <span class="agent-tag is-soft">Read-only</span>
         </li>
         <li>
+          <img src="../media/icons/grok-bot.png" alt="" width="48" height="48">
+          <span class="agent-name">Grok Bot</span>
+          <span class="agent-how">Reads only its local conversation record, for progress, never the content</span>
+          <span class="agent-tag is-soft">Read-only</span>
+        </li>
+        <li>
           <img src="../media/icons/claude.png" alt="" width="48" height="48">
           <span class="agent-name">Claude desktop app</span>
           <span class="agent-how">Needs Accessibility permission; not covered by the Alpha yet</span>
@@ -305,7 +311,7 @@
     <div class="wrap">
       <img class="download-icon" src="../media/app-icon.png" width="128" height="128" alt="">
       <h2 id="download-h">Download Agent Island</h2>
-      <p class="download-meta">Alpha <span data-version>0.3.7</span> for Macs with Apple silicon, macOS 13 or later.</p>
+      <p class="download-meta">Alpha <span data-version>0.3.8</span> for Macs with Apple silicon, macOS 13 or later.</p>
       <div class="download-actions">
         <a class="btn btn-primary btn-lg" id="dmgLink" href="#download" data-download>Download the Alpha</a>
         <a class="btn btn-glass btn-lg" id="mirrorLink" href="#download" hidden>Mirror in China</a>
@@ -331,7 +337,7 @@
       <svg class="foot-mark" aria-hidden="true"><use href="#mark"/></svg>
       <span>Agent Island</span>
     </div>
-    <p>Interfaces on this site and in the film use demo data. Codex, Claude, Doubao and Work Buddy are trademarks of their respective owners; this project isn't affiliated with any of them.</p>
+    <p>Interfaces on this site and in the film use demo data. Codex, Claude, Doubao, Grok Bot and Work Buddy are trademarks of their respective owners; this project isn't affiliated with any of them.</p>
   </div>
 </footer>
 

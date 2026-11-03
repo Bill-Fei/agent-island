@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Agent 灵动岛：你的 Agent，都在灵动岛里</title>
-<meta name="description" content="Agent 灵动岛把 Codex、Claude、豆包、Work Buddy 的任务状态放在 Mac 屏幕顶部。只看状态，不碰内容，不联网。">
+<meta name="description" content="Agent 灵动岛把 Codex、Claude、豆包、Grok Bot、Work Buddy 的任务状态放在 Mac 屏幕顶部。只看状态，不碰内容，不联网。">
 <meta name="theme-color" content="#000000">
 <link rel="canonical" href="https://agent-island.pages.dev/">
 <link rel="alternate" hreflang="zh-CN" href="https://agent-island.pages.dev/">
@@ -20,7 +20,7 @@
 <meta property="og:url" content="https://agent-island.pages.dev/">
 <meta property="og:locale" content="zh_CN">
 <meta property="og:title" content="Agent 灵动岛：你的 Agent，都在灵动岛里">
-<meta property="og:description" content="Codex、Claude、豆包、Work Buddy 在跑什么、在等你确认什么，抬眼看一下 Mac 屏幕顶部就知道。只看状态，不碰内容，不联网。">
+<meta property="og:description" content="Codex、Claude、豆包、Grok Bot、Work Buddy 在跑什么、在等你确认什么，抬眼看一下 Mac 屏幕顶部就知道。只看状态，不碰内容，不联网。">
 <meta property="og:image" content="https://agent-island.pages.dev/media/og-card.jpg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -28,7 +28,7 @@
 <meta property="og:image:alt" content="Mac 屏幕顶部展开的任务总览：Codex 的数据库迁移正在等待确认。">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Agent 灵动岛：你的 Agent，都在灵动岛里">
-<meta name="twitter:description" content="Codex、Claude、豆包、Work Buddy 在跑什么、在等你确认什么，抬眼看一下 Mac 屏幕顶部就知道。">
+<meta name="twitter:description" content="Codex、Claude、豆包、Grok Bot、Work Buddy 在跑什么、在等你确认什么，抬眼看一下 Mac 屏幕顶部就知道。">
 <meta name="twitter:image" content="https://agent-island.pages.dev/media/og-card.jpg">
 <meta name="twitter:image:alt" content="Mac 屏幕顶部展开的任务总览：Codex 的数据库迁移正在等待确认。">
 
@@ -37,7 +37,7 @@
   // Release links. The download button points at the dmg shipped next to this page
   // (injected by script/publish_site.sh); sourceUrl links back to the public repo.
   window.SITE = {
-    version: '0.3.7',
+    version: '0.3.8',
     dmgUrl: '',     // injected by publish_site.sh: download/<version>.dmg
     mirrorUrl: '',  // optional domestic mirror of the same file
     sourceUrl: 'https://github.com/Bill-Fei/agent-island'
@@ -167,7 +167,7 @@
 
     <div class="hero-copy wrap">
       <h1><span class="nw h1-thin">你的 Agent，</span><span class="nw h1-bold">都在灵动岛里。</span></h1>
-      <p class="hero-lede">Codex、Claude、豆包、<span class="nw">Work Buddy</span> <span class="nw">在跑什么、</span><span class="nw">在等你确认什么，</span><wbr>抬眼看一下屏幕顶部就知道。</p>
+      <p class="hero-lede">Codex、Claude、豆包、<span class="nw">Grok Bot</span>、<span class="nw">Work Buddy</span> <span class="nw">在跑什么、</span><span class="nw">在等你确认什么，</span><wbr>抬眼看一下屏幕顶部就知道。</p>
       <p class="hero-credit"><img src="media/app-icon.png" alt="" width="22" height="22" />macOS 工具 · AI NATIVE 体验设计师王鹏飞设计</p>
       <div class="hero-actions">
         <a class="btn btn-primary" href="#download" data-download>下载 Alpha 版</a>
@@ -192,7 +192,7 @@
         <p>从多个窗口来回切，到只抬眼看一下。</p>
       </div>
       <div class="film-frame">
-        <video id="filmVideo" src="media/film.mp4" poster="media/film-poster.jpg?v=2" preload="metadata" playsinline></video>
+        <video id="filmVideo" src="media/film.mp4?v=3" poster="media/film-poster.jpg?v=3" preload="metadata" playsinline></video>
         <button class="film-play" id="filmPlay" type="button">
           <span class="film-play-disc" aria-hidden="true"></span>
           <span class="film-play-label">播放短片，30 秒，有声音</span>
@@ -301,6 +301,12 @@
           <span class="agent-tag is-soft">只读</span>
         </li>
         <li>
+          <img src="media/icons/grok-bot.png" alt="" width="48" height="48">
+          <span class="agent-name">Grok Bot</span>
+          <span class="agent-how">只读本机的对话记录，只看进行到哪一步，不看内容</span>
+          <span class="agent-tag is-soft">只读</span>
+        </li>
+        <li>
           <img src="media/icons/claude.png" alt="" width="48" height="48">
           <span class="agent-name">Claude 聊天应用</span>
           <span class="agent-how">需要辅助功能权限，暂不在 Alpha 的保证范围内</span>
@@ -315,7 +321,7 @@
     <div class="wrap">
       <img class="download-icon" src="media/app-icon.png" width="128" height="128" alt="">
       <h2 id="download-h">下载 Agent 灵动岛</h2>
-      <p class="download-meta">Alpha <span data-version>0.3.7</span>，适用于 Apple 芯片的 Mac，需要 macOS 13 或更高版本。</p>
+      <p class="download-meta">Alpha <span data-version>0.3.8</span>，适用于 Apple 芯片的 Mac，需要 macOS 13 或更高版本。</p>
       <div class="download-actions">
         <a class="btn btn-primary btn-lg" id="dmgLink" href="#download" data-download>下载 Alpha 版</a>
         <a class="btn btn-glass btn-lg" id="mirrorLink" href="#download" hidden>国内镜像下载</a>
@@ -341,7 +347,7 @@
       <svg class="foot-mark" aria-hidden="true"><use href="#mark"/></svg>
       <span>Agent 灵动岛</span>
     </div>
-    <p>网页和宣传片中的界面使用演示数据。Codex、Claude、豆包、Work Buddy 是各自所有者的商标，本项目与它们没有隶属关系。</p>
+    <p>网页和宣传片中的界面使用演示数据。Codex、Claude、豆包、Grok Bot、Work Buddy 是各自所有者的商标，本项目与它们没有隶属关系。</p>
   </div>
 </footer>
 

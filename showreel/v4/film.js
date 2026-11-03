@@ -21,7 +21,7 @@ const FONT='system-ui, -apple-system, "PingFang SC", sans-serif';
 const MONO='"SF Mono", Menlo, monospace';
 const C={ink:'#16201c',ink2:'#5d6763',stage:'#eeeeea',obs:'#090c0e',porc:'#f7f7f4',mint:'#79f2b5',ice:'#84dbf3',muted:'#7f9292',
   info:'#8aaee8',attn:'#e8b080',ok:'#87c7ab',danger:'#e08f97',
-  codex:'#7aa8ff',claude:'#ad7dff',doubao:'#ff6e47',workbuddy:'#33d69e'};
+  codex:'#7aa8ff',claude:'#ad7dff',doubao:'#ff6e47',workbuddy:'#33d69e',grokbot:'#c9ced6'};
 
 const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x)),mix=(a,b,p)=>a+(b-a)*p;
 const seg=(t,a,b)=>clamp((t-a)/(b-a));
@@ -34,9 +34,9 @@ const spring=x=>{x=clamp(x);return x>=1?1:1-Math.exp(-6.5*x)*Math.cos(10*x)};
 const lerpRect=(a,b,p)=>({x:mix(a.x,b.x,p),y:mix(a.y,b.y,p),w:mix(a.w,b.w,p),h:mix(a.h,b.h,p)});
 
 const IMG={};
-const NAMES=['codex','claude','doubao','workbuddy','finder','safari','messages','notes','photos','settings','trash'];
+const NAMES=['codex','claude','doubao','workbuddy','grokbot','finder','safari','messages','notes','photos','settings','trash'];
 const AGENTS={codex:{name:'Codex',color:C.codex},claude:{name:'Claude',color:C.claude},
-  doubao:{name:'豆包',color:C.doubao},workbuddy:{name:'Work Buddy',color:C.workbuddy}};
+  doubao:{name:'豆包',color:C.doubao},workbuddy:{name:'Work Buddy',color:C.workbuddy},grokbot:{name:'Grok Bot',color:C.grokbot}};
 
 function T(g,s,x,y,size,color,weight=400,align='left',font=FONT){
   g.font=`${weight} ${size}px ${font}`;g.fillStyle=color;g.textAlign=align;g.textBaseline='alphabetic';g.fillText(s,x,y);
@@ -101,7 +101,7 @@ const toScreen=(cam,x,y)=>({x:W/2+(x-cam.x)*cam.s,y:H/2+(y-cam.y)*cam.s});
 
 /* ---------------- desktop ---------------- */
 const SW=1512,SH=982,NX=756;
-const DOCK=['finder','safari','messages','notes','photos','settings','|','codex','claude','doubao','workbuddy','|','trash'];
+const DOCK=['finder','safari','messages','notes','photos','settings','|','codex','claude','doubao','workbuddy','grokbot','|','trash'];
 const DOCK_POS=(()=>{const size=46,gap=10,sep=21;let wsum=0;DOCK.forEach((n,i)=>{wsum+=n==='|'?sep:size;if(i<DOCK.length-1)wsum+=gap});
   let x=NX-wsum/2;const pos={};DOCK.forEach(n=>{if(n==='|'){x+=sep+gap;return}pos[n]={x:x+size/2,y:940};x+=size+gap});
   pos._w=wsum;return pos})();
@@ -162,10 +162,11 @@ const WINS={
   codex:{x:140,y:120,w:620,h:420,user:'把数据库脚本迁移到新表结构',reply:['正在读取 schema.sql 与迁移记录','对比 12 张表的字段差异…'],status:'执行命令中'},
   claude:{x:540,y:170,w:620,h:420,user:'重构登录模块，拆分 session 逻辑',reply:['已修改 auth/session.ts 等 3 个文件','继续补充单元测试…'],status:'正在生成'},
   doubao:{x:290,y:380,w:560,h:390,user:'帮我找 5 个竞品的定价页',reply:['已找到 3 个，继续检索中','稍后整理成对比表格…'],status:'处理中'},
+  grokbot:{x:650,y:250,w:560,h:390,user:'帮我把这周的会议纪要整理成要点',reply:['已读完 4 份纪要','正在提炼待办事项…'],status:'处理中'},
   workbuddy:{x:830,y:330,w:560,h:400,user:'整理本周周报素材',reply:['已汇总 12 条更新','正在按项目分组…'],status:'处理中'}
 };
-const ORDER=['codex','claude','doubao','workbuddy'];
-const CLICKS=[[3.5,'codex'],[4.0,'claude'],[4.5,'doubao'],[5.0,'workbuddy'],[5.5,'codex']];
+const ORDER=['codex','claude','doubao','workbuddy','grokbot'];
+const CLICKS=[[3.5,'codex'],[4.0,'claude'],[4.5,'doubao'],[5.0,'workbuddy'],[5.25,'grokbot'],[5.5,'codex']];
 const openAt=k=>2.45+ORDER.indexOf(k)*.15;
 function lastFront(k,t){let v=openAt(k);for(const [ct,n] of CLICKS)if(n===k&&t>=ct)v=ct;return v}
 function topAgentWindow(t){let best=null,bv=-1;for(const k of ORDER){if(t<openAt(k))continue;const v=lastFront(k,t);if(v>bv){bv=v;best=k}}return best}
@@ -399,10 +400,10 @@ function panel(g,t,x0,a){
     g.fillStyle='rgba(255,255,255,.08)';g.fillRect(x0,100,640,1);
   });
   alpha(g,A(15.3),()=>{
-    T(g,'今日活跃 · 12 轮',x0+22,124,11,'#dfe2de',600);
-    const bx=x0+128,bw=490,f=ease(seg(t,15.4,16.2));const parts=[['codex',5],['claude',4],['workbuddy',2],['doubao',1]];
+    T(g,'今日活跃 · 13 轮',x0+22,124,11,'#dfe2de',600);
+    const bx=x0+128,bw=490,f=ease(seg(t,15.4,16.2));const parts=[['codex',5],['claude',4],['workbuddy',2],['doubao',1],['grokbot',1]];
     g.save();g.beginPath();g.rect(bx,112,bw*f,14);g.clip();
-    let x=bx;parts.forEach(([k,v])=>{const w=(bw-12)*v/12;rr(g,x,116,w,7,3.5,AGENTS[k].color);x+=w+4});g.restore();
+    let x=bx;parts.forEach(([k,v])=>{const w=(bw-4*parts.length)*v/13;rr(g,x,116,w,7,3.5,AGENTS[k].color);x+=w+4});g.restore();
     x=x0+22;parts.forEach(([k,v])=>{circle(g,x+3,142.5,3,AGENTS[k].color);T(g,AGENTS[k].name,x+11,146,10.5,'#c7ccc9');
       const nw=tw(g,AGENTS[k].name,10.5);T(g,String(v),x+17+nw,146,10.5,hi,700);x+=17+nw+tw(g,String(v),10.5,700)+20});
     g.fillStyle='rgba(255,255,255,.08)';g.fillRect(x0,160,640,1);g.fillRect(x0+275,160,1,292);
@@ -519,7 +520,7 @@ function caption(g,t,c){
 }
 
 /* ---------------- intro / silence / end ---------------- */
-const INTRO=ORDER.map((k,i)=>({k,x:W/2+(i-1.5)*156,y:612,pop:.55+i*.25}));
+const INTRO=ORDER.map((k,i)=>({k,x:W/2+(i-(ORDER.length-1)/2)*156,y:612,pop:.55+i*.2}));
 function introOverlay(g,t){
   const ob=1-ease(seg(t,1.75,2.3));
   g.setTransform(1,0,0,1,0,0);
