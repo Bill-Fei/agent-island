@@ -230,10 +230,18 @@ struct LinglongtaiCtl {
            (try? JSONSerialization.jsonObject(with: input) as? [String: Any])?["hook_event_name"] as? String == "PermissionRequest" {
             ApprovalRelay.cleanupHostSession(session)
         }
+        let kind = AgentKind.resolve(provider)
+        var mapped = HookEventMapper.map(provider: kind, payload: input)
+        // "帮我批准": Codex reviews this itself and never shows a card, so the
+        // island shows the turn as running instead of asking for approval.
+        if kind == .codex, mapped?.sourceEvent == "PermissionRequest", mapped?.status == .waiting,
+           CodexRollout.reviewsApprovalsItself(hookInput: input) {
+            mapped?.status = .running
+            mapped?.requiresApproval = false
+            mapped?.detail = "Codex 正在自动审批"
+        }
         // Explicit opt-in applies ONLY to Claude Code's documented contract.
         withEventLock { fd in
-            let kind = AgentKind.resolve(provider)
-            let mapped = HookEventMapper.map(provider: kind, payload: input)
             guard var state = loadBridgeState(), recoverPending(&state, descriptor: fd) else { return }
             var events: [AgentEvent]
             if let mapped { events = state.tracker.route(mapped) }

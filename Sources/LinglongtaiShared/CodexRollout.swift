@@ -51,6 +51,66 @@ public struct CodexRollout {
         return files[session]
     }
 
+    /// True when the session's latest turn lets Codex review approvals itself
+    /// (the app's "帮我批准", `approvals_reviewer = auto_review`). Codex still
+    /// runs PermissionRequest hooks then, but never asks the user, so the
+    /// island must not ask either. Only that one setting is read.
+    public static func reviewsApprovalsItself(hookInput payload: Data, root: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex/sessions"), now: Date = Date()) -> Bool {
+        guard let input = try? JSONSerialization.jsonObject(with: payload) as? [String: Any] else { return false }
+        let base = root.standardizedFileURL.resolvingSymlinksInPath().path + "/"
+        if let path = input["transcript_path"] as? String {
+            let url = URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath()
+            if url.path.hasPrefix(base), url.lastPathComponent.hasPrefix("rollout-"), url.pathExtension == "jsonl" {
+                return reviewer(in: url) == "auto_review"
+            }
+        }
+        guard let session = (input["session_id"] as? String)?.lowercased(), UUID(uuidString: session) != nil else { return false }
+        let calendar = Calendar(identifier: .gregorian)
+        for offset in 0...1 {
+            guard let day = calendar.date(byAdding: .day, value: -offset, to: now) else { continue }
+            let parts = calendar.dateComponents([.year, .month, .day], from: day)
+            guard let year = parts.year, let month = parts.month, let date = parts.day else { continue }
+            let folder = root.appendingPathComponent(String(format: "%04d/%02d/%02d", year, month, date))
+            let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+            if let name = names.first(where: { $0.hasPrefix("rollout-") && $0.lowercased().hasSuffix(session + ".jsonl") }) {
+                return reviewer(in: folder.appendingPathComponent(name)) == "auto_review"
+            }
+        }
+        return false
+    }
+
+    /// `approvals_reviewer` of the last `turn_context`, read backwards in 1 MB
+    /// chunks (a long turn's output can push it many MB back; capped at 64 MB).
+    /// Lines without the marker are never parsed.
+    static func reviewer(in url: URL) -> String? {
+        let fd = Darwin.open(url.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
+        guard fd >= 0 else { return nil }
+        defer { Darwin.close(fd) }
+        var info = stat()
+        guard fstat(fd, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG, info.st_uid == getuid() else { return nil }
+        let marker = Data(#""type":"turn_context""#.utf8)
+        let chunk: off_t = 1_048_576
+        var end = info.st_size
+        var tail = Data() // partial first line of the chunk read before
+        while end > 0, info.st_size - end < 67_108_864 {
+            let start = max(0, end - chunk)
+            var data = Data(count: Int(end - start))
+            let count = data.count
+            guard data.withUnsafeMutableBytes({ pread(fd, $0.baseAddress, count, start) }) == count else { return nil }
+            data.append(tail)
+            var lines = data.split(separator: 0x0A, omittingEmptySubsequences: false)
+            // The first piece may continue in the previous chunk; keep it for the next round.
+            tail = start > 0 ? Data(lines.removeFirst()) : Data()
+            for line in lines.reversed() where line.range(of: marker) != nil {
+                guard let object = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any],
+                      object["type"] as? String == "turn_context" else { continue }
+                return (object["payload"] as? [String: Any])?["approvals_reviewer"] as? String
+            }
+            end = start
+        }
+        return nil
+    }
+
     /// A new script only. While an approval blocks, Codex keeps polling the
     /// blocked cell (`function_call` "wait" and its outputs), so those prove nothing.
     private static let progressTypes: Set<String> = ["custom_tool_call"]

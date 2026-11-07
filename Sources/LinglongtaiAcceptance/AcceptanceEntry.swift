@@ -273,6 +273,7 @@ struct LinglongtaiAcceptance {
 
         runMotionRevisionChecks { name, condition in check(name, condition) }
         runHookRevisionChecks { name, condition in check(name, condition) }
+        runCodexAutoReviewChecks { name, condition in check(name, condition) }
         runButlerRevisionChecks { name, condition in check(name, condition) }
         runReleaseRevisionChecks { name, condition in check(name, condition) }
         runWingLayoutRevisionChecks { name, condition in check(name, condition) }
