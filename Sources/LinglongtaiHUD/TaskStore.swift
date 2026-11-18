@@ -369,6 +369,10 @@ final class TaskStore: ObservableObject {
     /// Codex answers approvals in its own card without any hook; its rollout shows it.
     private var codexRollout = CodexRollout(root: LinglongtaiPaths.applicationSupport.appendingPathComponent("fixture-codex-sessions"))
     private var lastCodexRolloutPoll = Date.distantPast
+    private var codexActivityReader = CodexRollout(root: LinglongtaiPaths.applicationSupport.appendingPathComponent("fixture-codex-sessions"))
+    private var lastCodexActivityPoll = Date.distantPast
+    private var codexActivityPollInFlight = false
+    static let codexPromptGrace: TimeInterval = 20
     private var codexAppLog = CodexAppLog(root: LinglongtaiPaths.applicationSupport.appendingPathComponent("fixture-codex-logs"))
     /// Codex shows its own card for a PermissionRequest; a brief settle keeps a
     /// check it resolves on its own from popping the island.
@@ -411,7 +415,7 @@ final class TaskStore: ObservableObject {
                 // The tracker has no terminal reason; do not invent completion.
                 tasks[index].sourceEvent = "HookTrackingEnded"
             } else if terminalStates[tasks[index].id] == false,
-                      tasks[index].sourceEvent != "HookTrackingEnded" {
+                      !["HookTrackingEnded", "CodexUnconfirmed"].contains(tasks[index].sourceEvent ?? "") {
                 ongoingTaskIDs.insert(tasks[index].id)
             }
         }
@@ -474,7 +478,7 @@ final class TaskStore: ObservableObject {
             ? [LinglongtaiPaths.applicationSupport.appendingPathComponent("fixture-claude-main.log")]
             : ClaudePromptLog.defaultURLs)
         _ = promptLog.poll(now: now())
-        if !isIsolatedRun { codexRollout = CodexRollout(); codexAppLog = CodexAppLog() }
+        if !isIsolatedRun { codexRollout = CodexRollout(); codexActivityReader = CodexRollout(); codexAppLog = CodexAppLog() }
         loadTasks()
         selectedTaskID = sortedTasks.first?.id
         consumeEvents()
@@ -488,10 +492,74 @@ final class TaskStore: ObservableObject {
                 self?.consumeDoubaoTrajectories()
                 self?.pruneExpiredHistoryIfDue()
                 self?.refreshPresentation()
+                await self?.reconcileCodexActivity()
             }
         }
         RunLoop.main.add(timer, forMode: .common)
         eventTimer = timer
+    }
+
+    func reconcileCodexActivity() async {
+        let date = now()
+        guard !isAcceptancePreview, !demoPreviewActive, !codexActivityPollInFlight,
+              date.timeIntervalSince(lastCodexActivityPoll) >= 2 || date < lastCodexActivityPoll else { return }
+        lastCodexActivityPoll = date
+        let candidates = tasks.filter { task in
+            let age = date.timeIntervalSince(task.updatedAt)
+            return task.profile.kind == .codex && task.source.isLive &&
+            (ongoingTaskIDs.contains(task.id) || task.sourceEvent == "CodexUnconfirmed") &&
+            [.queued, .running, .waiting].contains(task.status) &&
+            task.sessionID != nil && task.turnID?.hasPrefix("t_") == true &&
+            !["HookTrackingEnded", "AmbiguousTurn"].contains(task.sourceEvent ?? "") &&
+            age >= 2 && (age <= AgentActivityMotion.unresolvedLimit ||
+                task.sourceEvent == "UserPromptSubmit" && age <= Self.historyRetention)
+        }
+        guard !candidates.isEmpty else { return }
+        codexActivityPollInFlight = true
+        let reader = codexActivityReader
+        let (updatedReader, results) = await Task.detached(priority: .utility) {
+            var reader = reader
+            let results = candidates.map { task in
+                reader.activity(session: task.sessionID!, turn: task.turnID!, now: date)
+            }
+            return (reader, results)
+        }.value
+        codexActivityReader = updatedReader
+        codexActivityPollInFlight = false
+        applyCodexEvidence(candidates, results: results)
+    }
+
+    func applyCodexEvidence(_ candidates: [AgentTask], results: [ActivityEvidence]) {
+        var changed = false
+        for (snapshot, evidence) in zip(candidates, results) {
+            guard let index = tasks.firstIndex(where: { $0.id == snapshot.id }), tasks[index] == snapshot else { continue }
+            switch evidence {
+            case .completed, .cancelled, .failed:
+                let status: AgentTaskStatus = evidence == .completed ? .completed : evidence == .failed ? .failed : .cancelled
+                tasks[index].status = status
+                tasks[index].sourceEvent = "CodexRolloutEnded"
+                tasks[index].detail = tasks[index].statusLabel
+                tasks[index].requiresApproval = false
+                tasks[index].approvalRequestID = nil
+                ongoingTaskIDs.remove(snapshot.id)
+            case .unavailable:
+                continue
+            case .missingSession:
+                guard snapshot.status == .running, snapshot.sourceEvent == "UserPromptSubmit", snapshot.toolSteps.isEmpty,
+                      now().timeIntervalSince(snapshot.updatedAt) >= Self.codexPromptGrace else { continue }
+                tasks[index].sourceEvent = "CodexUnconfirmed"
+                ongoingTaskIDs.remove(snapshot.id)
+            case .observed:
+                guard snapshot.sourceEvent == "CodexUnconfirmed" else { continue }
+                tasks[index].sourceEvent = "UserPromptSubmit"
+                ongoingTaskIDs.insert(snapshot.id)
+            }
+            changed = true
+        }
+        if changed {
+            refreshPresentation()
+            saveTasksInBackground()
+        }
     }
 
     private func configureClaudeChatObserver() {
@@ -1446,6 +1514,8 @@ final class TaskStore: ObservableObject {
             let eventDate = event.createdAt ?? .distantPast
             if let index = tasks.firstIndex(where: { $0.id == id }) {
                 var task = tasks[index]
+                if task.sourceEvent == "CodexRolloutEnded",
+                   ![AgentTaskStatus.completed, .cancelled, .failed].contains(event.status ?? .running) { return false }
                 guard eventDate >= task.updatedAt || !task.source.isLive else { return false }
                 if let value = event.agent {
                     let profile = AgentCatalog.profile(for: value)
@@ -1726,7 +1796,7 @@ final class TaskStore: ObservableObject {
     }
 
     /// Sources that report they cannot resolve a turn; shown as 结果未知.
-    private static let unknownResultEvents: Set<String> = ["DoubaoSilent", "DoubaoAbandoned", "GrokBotSilent", "AmbiguousTurn", "ClaudeChatUnknown"]
+    private static let unknownResultEvents: Set<String> = ["DoubaoSilent", "DoubaoAbandoned", "GrokBotSilent", "AmbiguousTurn", "ClaudeChatUnknown", "CodexUnconfirmed"]
 
     /// Started, without terminal evidence, and not reported unknown. Hook
     /// providers stay quiet during long tool runs, so silence alone does not
@@ -1743,7 +1813,8 @@ final class TaskStore: ObservableObject {
 
     private func isFresh(_ task: AgentTask) -> Bool {
         let age = now().timeIntervalSince(task.updatedAt)
-        guard !["DoubaoSilent", "DoubaoAbandoned", "GrokBotSilent", "AmbiguousTurn", "ClaudeChatUnknown", "SupersededTrajectory", "HookTrackingEnded"].contains(task.sourceEvent ?? "") else { return false }
+        guard !Self.unknownResultEvents.contains(task.sourceEvent ?? ""),
+              !["SupersededTrajectory", "HookTrackingEnded"].contains(task.sourceEvent ?? "") else { return false }
         let limit = task.profile.kind.isPolledLocally ? DoubaoTrajectory.staleAfter : 120
         return age >= -5 && age <= limit
     }

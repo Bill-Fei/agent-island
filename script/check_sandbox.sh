@@ -13,7 +13,7 @@ COMPILER=(swiftc -target "$(uname -m)-apple-macosx13.0")
   -I "$VALIDATION_DIR" Sources/LinglongtaiAcceptance/*.swift \
   "$VALIDATION_DIR/LinglongtaiShared.o" -o "$VALIDATION_DIR/linglongtai-acceptance"
 "${COMPILER[@]}" -parse-as-library -module-cache-path "$VALIDATION_DIR/module-cache" \
-  -I "$VALIDATION_DIR" Sources/LinglongtaiCtl/main.swift \
+  -I "$VALIDATION_DIR" Sources/LinglongtaiCtl/CliEntry.swift \
   "$VALIDATION_DIR/LinglongtaiShared.o" -o "$VALIDATION_DIR/linglongtaictl"
 "${COMPILER[@]}" -parse-as-library -module-cache-path "$VALIDATION_DIR/module-cache" \
   -I "$VALIDATION_DIR" Sources/LinglongtaiHUD/*.swift \

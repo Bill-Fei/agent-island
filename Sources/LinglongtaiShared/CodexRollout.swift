@@ -1,5 +1,15 @@
 import Foundation
 import Darwin
+import SQLite3
+
+public enum ActivityEvidence: Equatable {
+    case completed
+    case cancelled
+    case failed
+    case observed
+    case unavailable
+    case missingSession
+}
 
 /// Backup signal for an approval answered in the Codex app (CodexAppLog is primary).
 /// Codex sends no hook when the user approves in its own card; the turn just
@@ -12,7 +22,35 @@ import Darwin
 public struct CodexRollout {
     private var files: [String: URL] = [:] // session digest -> rollout
     private var lastScan = Date.distantPast
+    private var indexedSessions: (ids: Set<String>, paths: [String: URL])?
+    private var lastIndexScan = Date.distantPast
+    private var activityCache: [String: (url: URL, size: off_t, modified: timespec, evidence: ActivityEvidence)] = [:]
     private let root: URL
+
+    private struct RolloutEntry: Decodable {
+        let type: String
+        let payload: Payload
+
+        struct Payload: Decodable {
+            let type: String?
+            let id: String?
+            let turnID: String?
+            let hasError: Bool
+
+            enum CodingKeys: String, CodingKey {
+                case type, id, error
+                case turnID = "turn_id"
+            }
+
+            init(from decoder: Decoder) throws {
+                let values = try decoder.container(keyedBy: CodingKeys.self)
+                type = try values.decodeIfPresent(String.self, forKey: .type)
+                id = try values.decodeIfPresent(String.self, forKey: .id)
+                turnID = try values.decodeIfPresent(String.self, forKey: .turnID)
+                hasError = values.contains(.error) && ((try? values.decodeNil(forKey: .error)) == false)
+            }
+        }
+    }
 
     public init(root: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex/sessions")) {
         self.root = root
@@ -30,25 +68,135 @@ public struct CodexRollout {
         return Self.progressed(in: url, since: since.addingTimeInterval(2))
     }
 
-    private mutating func rollout(for session: String, now: Date) -> URL? {
+    /// Lifecycle evidence for exactly one hook turn. Missing or truncated evidence
+    /// is unknown, never a completion signal.
+    public mutating func activity(session: String, turn: String, now: Date) -> ActivityEvidence {
+        guard session.hasPrefix("s_"), turn.hasPrefix("t_") else { return .unavailable }
+        guard let url = rollout(for: session, now: now, includeIndex: true) else {
+            guard let indexedSessions else { return .unavailable }
+            return indexedSessions.ids.contains(session) ? .unavailable : .missingSession
+        }
+        let base = root.standardizedFileURL.resolvingSymlinksInPath().path + "/"
+        guard url.standardizedFileURL.resolvingSymlinksInPath().path.hasPrefix(base) else { return .unavailable }
+        let fd = Darwin.open(url.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
+        guard fd >= 0 else { return .unavailable }
+        defer { Darwin.close(fd) }
+        var info = stat()
+        guard fstat(fd, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG,
+              info.st_uid == getuid(), info.st_size > 0 else { return .unavailable }
+        let key = session + ":" + turn
+        if let cached = activityCache[key], cached.url == url, cached.size == info.st_size,
+           cached.modified.tv_sec == info.st_mtimespec.tv_sec,
+           cached.modified.tv_nsec == info.st_mtimespec.tv_nsec {
+            return cached.evidence
+        }
+        let evidence = Self.activity(in: fd, size: info.st_size, session: session, turn: turn, url: url)
+        if activityCache.count >= 32 { activityCache.removeAll() }
+        activityCache[key] = (url, info.st_size, info.st_mtimespec, evidence)
+        return evidence
+    }
+
+    private mutating func rollout(for session: String, now: Date, includeIndex: Bool = false) -> URL? {
         if let url = files[session] { return url }
         // A new session's file appears with its first turn; rescan sparingly.
-        guard now.timeIntervalSince(lastScan) > 10 else { return nil }
-        lastScan = now
-        let calendar = Calendar(identifier: .gregorian)
-        for offset in 0...1 {
-            guard let day = calendar.date(byAdding: .day, value: -offset, to: now) else { continue }
-            let parts = calendar.dateComponents([.year, .month, .day], from: day)
-            guard let year = parts.year, let month = parts.month, let date = parts.day else { continue }
-            let folder = root.appendingPathComponent(String(format: "%04d/%02d/%02d", year, month, date))
-            let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
-            for name in names where name.hasPrefix("rollout-") && name.hasSuffix(".jsonl") {
-                let stem = name.dropLast(6)
-                guard stem.count >= 36, UUID(uuidString: String(stem.suffix(36))) != nil else { continue }
-                files[Self.sessionDigest(rawSessionID: String(stem.suffix(36)).lowercased())] = folder.appendingPathComponent(name)
+        if now.timeIntervalSince(lastScan) > 10 || now < lastScan {
+            lastScan = now
+            let calendar = Calendar(identifier: .gregorian)
+            for offset in 0...1 {
+                guard let day = calendar.date(byAdding: .day, value: -offset, to: now) else { continue }
+                let parts = calendar.dateComponents([.year, .month, .day], from: day)
+                guard let year = parts.year, let month = parts.month, let date = parts.day else { continue }
+                let folder = root.appendingPathComponent(String(format: "%04d/%02d/%02d", year, month, date))
+                let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+                for name in names where name.hasPrefix("rollout-") && name.hasSuffix(".jsonl") {
+                    let stem = name.dropLast(6)
+                    guard stem.count >= 36, UUID(uuidString: String(stem.suffix(36))) != nil else { continue }
+                    files[Self.sessionDigest(rawSessionID: String(stem.suffix(36)).lowercased())] = folder.appendingPathComponent(name)
+                }
             }
         }
-        return files[session]
+        if let url = files[session] { return url }
+        guard includeIndex else { return nil }
+        if indexedSessions == nil || now.timeIntervalSince(lastIndexScan) > 10 || now < lastIndexScan {
+            lastIndexScan = now
+            indexedSessions = Self.indexedRollouts(database: root.deletingLastPathComponent().appendingPathComponent("state_5.sqlite"))
+        }
+        return indexedSessions?.paths[session]
+    }
+
+    private static func indexedRollouts(database: URL) -> (ids: Set<String>, paths: [String: URL])? {
+        var connection: OpaquePointer?
+        guard sqlite3_open_v2(database.path, &connection, SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX, nil) == SQLITE_OK else {
+            if let connection { sqlite3_close(connection) }
+            return nil
+        }
+        defer { sqlite3_close(connection) }
+        sqlite3_busy_timeout(connection, 100)
+        var query: OpaquePointer?
+        guard sqlite3_prepare_v2(connection, "SELECT id, rollout_path FROM threads", -1, &query, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(query) }
+        var ids: Set<String> = []
+        var paths: [String: URL] = [:]
+        let base = database.deletingLastPathComponent().appendingPathComponent("sessions").standardizedFileURL.path + "/"
+        var count = 0
+        var result = sqlite3_step(query)
+        while result == SQLITE_ROW && count < 65_536 {
+            count += 1
+            if let id = sqlite3_column_text(query, 0) {
+                let raw = String(cString: id).lowercased()
+                if UUID(uuidString: raw) != nil {
+                    let digest = sessionDigest(rawSessionID: raw)
+                    ids.insert(digest)
+                    if let path = sqlite3_column_text(query, 1) {
+                        let url = URL(fileURLWithPath: String(cString: path)).standardizedFileURL
+                        if url.path.hasPrefix(base), url.lastPathComponent.hasPrefix("rollout-"),
+                           url.lastPathComponent.lowercased().hasSuffix(raw + ".jsonl") {
+                            paths[digest] = url
+                        }
+                    }
+                }
+            }
+            result = sqlite3_step(query)
+        }
+        return result == SQLITE_DONE ? (ids, paths) : nil
+    }
+
+    private static func activity(in fd: Int32, size: off_t, session: String, turn: String, url: URL) -> ActivityEvidence {
+        let stem = url.deletingPathExtension().lastPathComponent
+        guard stem.count >= 36 else { return .unavailable }
+        let rawSession = String(stem.suffix(36)).lowercased()
+        guard UUID(uuidString: rawSession) != nil, sessionDigest(rawSessionID: rawSession) == session else { return .unavailable }
+        let headerLength = Int(min(size, 131_072))
+        var header = Data(count: headerLength)
+        guard header.withUnsafeMutableBytes({ pread(fd, $0.baseAddress, headerLength, 0) }) == headerLength,
+              header.split(separator: 0x0A).contains(where: { line in
+                  guard line.count <= 131_072,
+                        let entry = try? JSONDecoder().decode(RolloutEntry.self, from: Data(line)) else { return false }
+                  return entry.type == "session_meta" && entry.payload.id?.lowercased() == rawSession
+              }) else { return .unavailable }
+
+        let length = Int(min(size, 8_388_608))
+        var data = Data(count: length)
+        guard data.withUnsafeMutableBytes({ pread(fd, $0.baseAddress, length, size - off_t(length)) }) == length else { return .unavailable }
+        var lines = data.split(separator: 0x0A, omittingEmptySubsequences: false)
+        if size > off_t(length) { lines.removeFirst() }
+        if data.last != 0x0A { lines.removeLast() }
+        for line in lines.reversed() {
+            let prefix = line.prefix(512)
+            guard prefix.range(of: Data(#""type":"event_msg","payload":{"type":"# .utf8)) != nil,
+                  let event = try? JSONDecoder().decode(RolloutEntry.self, from: Data(line)),
+                  event.type == "event_msg", let rawTurn = event.payload.turnID,
+                  UUID(uuidString: rawTurn) != nil,
+                  let kind = event.payload.type,
+                  "t_" + IdentityDigest.digest(namespace: "turn-v2", components: [session, rawTurn]) == turn else { continue }
+            switch kind {
+            case "task_complete": return event.payload.hasError ? .failed : .completed
+            case "turn_aborted": return .cancelled
+            case "task_started": return .observed
+            default: continue
+            }
+        }
+        return .unavailable
     }
 
     /// True when the session's latest turn lets Codex review approvals itself
